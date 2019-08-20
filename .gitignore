@@ -1,0 +1,77 @@
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# Builds
+Release
+Debug
+
+# Other project files
+*.exe
+*.dll
+*.lib
+*.cbp
+*.depend
+*.layout
+*.a
+*.o
+*.obj
+*.ilk
+*.pdb
+*.sdf
+*.log
+*.tlog
+*.enc
+*.idb
+*.user
+*.suo
+*.iobj
+*.ipdb
+*.opensdf
+
+# Visual Studio files
+*.ipch
+*.db
+*.opendb
+*.asm
+*.CopyComplete
+
+# =========================
+# Operating System Files
+# =========================
+
+# OSX
+# =========================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear on external disk
+.Spotlight-V100
+.Trashes
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
