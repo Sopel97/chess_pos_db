@@ -258,7 +258,7 @@ struct Coord
 
     constexpr friend bool operator<(const Coord& c1, const Coord& c2)
     {
-        return c1.m_r < c2.m_i;
+        return c1.m_i < c2.m_i;
     }
 
     constexpr friend bool operator<=(const Coord& c1, const Coord& c2)
@@ -367,6 +367,38 @@ struct Offset
     }
 };
 
+struct SquareCoords
+{
+    File file;
+    Rank rank;
+
+    constexpr SquareCoords(File f, Rank r) :
+        file(f),
+        rank(r)
+    {
+    }
+
+    constexpr friend SquareCoords& operator+=(SquareCoords& c, Offset offset)
+    {
+        c.file += offset.file;
+        c.rank += offset.rank;
+        return c;
+    }
+
+    constexpr friend SquareCoords operator+(const SquareCoords& c, Offset offset)
+    {
+        SquareCoords cpy(c);
+        cpy.file += offset.file;
+        cpy.rank += offset.rank;
+        return cpy;
+    }
+
+    constexpr bool isOk() const
+    {
+        return file >= fileA && file <= fileH && rank >= rank1 && rank <= rank8;
+    }
+};
+
 struct Square
 {
     static constexpr Square none()
@@ -385,6 +417,21 @@ struct Square
 
     }
 
+    constexpr explicit Square(SquareCoords coords) :
+        Square(coords.file, coords.rank)
+    {
+    }
+
+    constexpr friend bool operator<=(Square lhs, Square rhs)
+    {
+        return lhs.m_id <= rhs.m_id;
+    }
+
+    constexpr friend bool operator>=(Square lhs, Square rhs)
+    {
+        return lhs.m_id >= rhs.m_id;
+    }
+
     constexpr friend bool operator==(Square lhs, Square rhs)
     {
         return lhs.m_id == rhs.m_id;
@@ -398,6 +445,12 @@ struct Square
     constexpr friend Square& operator++(Square& sq)
     {
         ++sq.m_id;
+        return sq;
+    }
+
+    constexpr friend Square& operator--(Square& sq)
+    {
+        --sq.m_id;
         return sq;
     }
 
@@ -431,12 +484,17 @@ struct Square
 
     constexpr File file() const
     {
-        return File(m_id % cardinality<Rank>() + 1);
+        return File(m_id % cardinality<Rank>());
     }
 
     constexpr Rank rank() const
     {
-        return Rank(m_id / cardinality<Rank>() + 1);
+        return Rank(m_id / cardinality<Rank>());
+    }
+
+    constexpr SquareCoords coords() const
+    {
+        return { file(), rank() };
     }
 
     constexpr Color color() const

@@ -180,7 +180,7 @@ namespace detail::san
         const int sanLen = len(san);
 
         const Square toSq = parseSquare(san + sanLen - 2);
-        const Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove())) & pseudoAttacksBB(PieceTypeV, toSq);
+        const Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove())) & bb::pseudoAttacks(PieceTypeV, toSq);
         const Square fromSq = Square::none();
 
         if (sanLen == 2)
