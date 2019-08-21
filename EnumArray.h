@@ -29,31 +29,6 @@ struct EnumArray
     using KeyType = EnumT;
     using ValueType = ValueT;
 
-    // these are required to have easier creation of nested EnumArrays
-    // unfortunately it requieres default constructibility
-
-    constexpr EnumArray() :
-        elements{}
-    {
-    }
-
-    constexpr EnumArray(const ValueType& init) :
-        elements{}
-    {
-        fill(init);
-    }
-
-    constexpr EnumArray(std::initializer_list<ValueType> il) :
-        elements{}
-    {
-        auto iter = il.begin();
-        for (int i = 0; i < SizeV && iter != il.end(); ++i)
-        {
-            elements[i] = *iter;
-            ++iter;
-        }
-    }
-
     constexpr void fill(const ValueType& init)
     {
         for (auto& v : elements)

@@ -404,12 +404,7 @@ struct Square
 {
     static constexpr Square none()
     {
-        return Square{};
-    }
-
-    constexpr Square() :
-        m_id(cardinality<Rank>()* cardinality<File>())
-    {
+        return Square(cardinality<Rank>() * cardinality<File>());
     }
 
     constexpr explicit Square(int idx) :
@@ -662,8 +657,8 @@ struct EnumTraits<CastleType>
 // ep is encoded as a normal pawn capture (move.to is empty on the board)
 struct Move
 {
-    Square from = Square::none();
-    Square to = Square::none();
+    Square from;
+    Square to;
     MoveType type = MoveType::Normal;
     Piece promotedPiece = Piece::none();
 
@@ -674,11 +669,10 @@ struct Move
 
     constexpr static Move castle(CastleType ct, Color c)
     {
-        // [ct][c]
-        constexpr EnumArray2<Move, CastleType, Color> moves = {
-            { { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } },
-            { { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }
-        };
+        constexpr EnumArray2<Move, CastleType, Color> moves = {{
+            {{ { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } }},
+            {{ { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }}
+        }};
 
         return moves[ct][c];
     }

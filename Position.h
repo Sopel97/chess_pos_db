@@ -12,15 +12,15 @@
 struct Board
 {
 private:
-    static constexpr EnumArray2<Square, Color, bool> m_rookCastleDestinations = { { F1, D1 }, { F8, D8 } };
-    static constexpr EnumArray2<Square, Color, bool> m_kingCastleDestinations = { { G1, C1 }, { G8, C8 } };
+    static constexpr EnumArray2<Square, Color, bool> m_rookCastleDestinations = { { {{ F1, D1 }}, {{ F8, D8 }} } };
+    static constexpr EnumArray2<Square, Color, bool> m_kingCastleDestinations = { { {{ G1, C1 }}, {{ G8, C8 }} } };
 
 public:
 
-    constexpr Board() :
-        m_pieces(Piece::none()),
-        m_pieceBB(Bitboard::none())
+    constexpr Board()
     {
+        m_pieces.fill(Piece::none());
+        m_pieceBB.fill(Bitboard::none());
         m_pieceBB[Piece::none()] = Bitboard::all();
     }
 
