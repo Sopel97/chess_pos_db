@@ -112,70 +112,103 @@ namespace detail::san
         return static_cast<int>(cur - san);
     }
 
+    inline PieceType parsePromotedPieceType(char c)
+    {
+        switch (c)
+        {
+        case 'N':
+            return PieceType::Knight;
+        case 'B':
+            return PieceType::Bishop;
+        case 'R':
+            return PieceType::Rook;
+        case 'Q':
+            return PieceType::Queen;
+        }
+
+        return PieceType::None;
+    }
+
     inline Move sanToMove_Pawn(const Position& pos, const char* san)
     {
         // since we remove capture information it's either
         // 012345 idx
         // a1
         // aa1
-        // a1=_
-        // aa1=_
+        // a1=Q
+        // aa1=Q
 
-        // TODO: handle promotions
+        const int sanLen = len(san);
+        const Color color = pos.sideToMove();
 
-        if (san[2] == '\0')
+        Move move{ Square::none(), Square::none(), MoveType::Normal, Piece::none() };
+
+        if (sanLen == 2 || sanLen == 4)
         {
             // a1
-            const Square toSq = parseSquare(san);
-            Square fromSq = Square::none();
+            // a1=Q
 
-            if (pos.sideToMove() == Color::White)
+            move.to = parseSquare(san);
+
+            if (color == Color::White)
             {
-                if (pos.pieceAt(toSq + Offset{ 0, -1 }).type() == PieceType::Pawn)
+                if (pos.pieceAt(move.to + Offset{ 0, -1 }).type() == PieceType::Pawn)
                 {
-                    fromSq = toSq + Offset{ 0, -1 };
+                    move.from = move.to + Offset{ 0, -1 };
                 }
-                else if (pos.pieceAt(toSq + Offset{ 0, -2 }).type() == PieceType::Pawn)
+                else if (pos.pieceAt(move.to + Offset{ 0, -2 }).type() == PieceType::Pawn)
                 {
-                    fromSq = toSq + Offset{ 0, -2 };
+                    move.from = move.to + Offset{ 0, -2 };
                 }
             }
             else
             {
-                if (pos.pieceAt(toSq + Offset{ 0, 1 }).type() == PieceType::Pawn)
+                if (pos.pieceAt(move.to + Offset{ 0, 1 }).type() == PieceType::Pawn)
                 {
-                    fromSq = toSq + Offset{ 0, 1 };
+                    move.from = move.to + Offset{ 0, 1 };
                 }
-                else if (pos.pieceAt(toSq + Offset{ 0, 2 }).type() == PieceType::Pawn)
+                else if (pos.pieceAt(move.to + Offset{ 0, 2 }).type() == PieceType::Pawn)
                 {
-                    fromSq = toSq + Offset{ 0, 2 };
+                    move.from = move.to + Offset{ 0, 2 };
                 }
             }
-
-            return Move{ fromSq, toSq };
         }
-        else if (san[3] == '\0')
+        else if (sanLen == 3 || sanLen == 5)
         {
             // aa1
+            // aa1=Q
 
             const File fromFile = parseFile(san[0]);
             const File toFile = parseFile(san[1]);
             const Rank toRank = parseRank(san[2]);
-            const Square toSq(toFile, toRank);
-            const MoveType mt = pos.pieceAt(toSq) == Piece::none() ? MoveType::EnPassant : MoveType::Normal;
+
+            move.to = Square(toFile, toRank);
+            if (pos.pieceAt(move.to) == Piece::none())
+            {
+                move.type = MoveType::EnPassant;
+            }
 
             if (pos.sideToMove() == Color::White)
             {
-                const Square fromSq(fromFile, toRank - 1);
-                return Move{ fromSq, toSq, mt };
+                move.from = Square(fromFile, toRank - 1);
             }
             else
             {
-                const Square fromSq(fromFile, toRank + 1);
-                return Move{ fromSq, toSq, mt };
+                move.from = Square(fromFile, toRank + 1);
             }
         }
-        // else if () // TODO: promotions
+
+        if (sanLen >= 4)
+        {
+            // promotion
+
+            const PieceType promotedPieceType = parsePromotedPieceType(san[sanLen - 1]);
+
+            move.type = MoveType::Promotion;
+            move.promotedPiece = Piece(promotedPieceType, color);
+        }
+
+        return move;
     }
 
     template <PieceType PieceTypeV>
@@ -249,8 +282,20 @@ namespace detail::san
             }
         }
 
-        // we have to exclude illegal moves - the last thing we can do
-        // TODO: this
+        // if we are here then there are (should be) many pseudo-legal moves
+        // but only one of them is legal
+
+        for (Square sq : candidates)
+        {
+            const Move move{ sq, toSq };
+            if (!pos.leavesKingInCheck(move))
+            {
+                return move;
+            }
+        }
+
+        // shouldn't happen
+        return Move::null();
     }
 
     inline Move sanToMove_King(const Position& pos, const char* san)
@@ -265,7 +310,15 @@ namespace detail::san
 
     inline Move sanToMove_Castle(const Position& pos, const char* san)
     {
-        // TODO: castling moves
+        // either:
+        // 012345 - idx
+        // O-O-O
+        // O-O
+
+        const CastleType ct = san[3] == '\0' ? CastleType::Short : CastleType::Long;
+        const Color c = pos.sideToMove();
+
+        return Move::castle(ct, c);
     }
 }
 

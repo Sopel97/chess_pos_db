@@ -35,9 +35,9 @@ struct EnumTraits<Color>
     }
 };
 
-constexpr Color opposite(Color c)
+constexpr Color operator!(Color c)
 {
-    return c == Color::White ? Color::Black : Color::White;
+    return fromOrdinal<Color>(!ordinal(c));
 }
 
 enum struct PieceType : std::uint8_t
@@ -621,6 +621,37 @@ enum struct MoveType : std::uint8_t
     EnPassant
 };
 
+enum struct CastleType : std::uint8_t
+{
+    Short,
+    Long
+};
+
+template <>
+struct EnumTraits<CastleType>
+{
+    using IdType = int;
+    using EnumType = CastleType;
+
+    static constexpr int cardinality = 2;
+    static constexpr bool isNaturalIndex = true;
+
+    static constexpr std::array<EnumType, cardinality> values{
+        CastleType::Short,
+        CastleType::Long
+    };
+
+    [[nodiscard]] static constexpr int ordinal(EnumType c) noexcept
+    {
+        return static_cast<IdType>(c);
+    }
+
+    [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
+    {
+        return static_cast<EnumType>(id);
+    }
+};
+
 // castling is encoded as a king capturing rook
 // ep is encoded as a normal pawn capture (move.to is empty on the board)
 struct Move
@@ -629,4 +660,20 @@ struct Move
     Square to;
     MoveType type = MoveType::Normal;
     Piece promotedPiece = Piece::none();
+
+    constexpr static Move null()
+    {
+        return Move{ Square::none(), Square::none() };
+    }
+
+    constexpr static Move castle(CastleType ct, Color c)
+    {
+        // [ct][c]
+        constexpr Move moves[2][2] = {
+            { { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } },
+            { { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }
+        };
+
+        return moves[ordinal(ct)][ordinal(c)];
+    }
 };

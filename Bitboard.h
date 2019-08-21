@@ -4,6 +4,66 @@
 #include "Enum.h"
 #include "Intrinsics.h"
 
+struct BitboardIterator
+{
+    using value_type = Square;
+    using difference_type = std::ptrdiff_t;
+    using reference = Square;
+    using iterator_category = std::forward_iterator_tag;
+    using pointer = const Square*;
+
+    constexpr BitboardIterator() :
+        m_squares(0)
+    {
+    }
+
+    constexpr BitboardIterator(std::uint64_t v) :
+        m_squares(v)
+    {
+    }
+
+    constexpr BitboardIterator(const BitboardIterator&) = default;
+    constexpr BitboardIterator(BitboardIterator&&) = default;
+    constexpr BitboardIterator& operator=(const BitboardIterator&) = default;
+    constexpr BitboardIterator& operator=(BitboardIterator&&) = default;
+
+    constexpr bool friend operator==(BitboardIterator lhs, BitboardIterator rhs) noexcept
+    {
+        return lhs.m_squares == rhs.m_squares;
+    }
+
+    constexpr bool friend operator!=(BitboardIterator lhs, BitboardIterator rhs) noexcept
+    {
+        return lhs.m_squares != rhs.m_squares;
+    }
+
+    constexpr Square operator*() const
+    {
+        return first();
+    }
+
+    constexpr BitboardIterator& operator++()
+    {
+        popFirst();
+        return *this;
+    }
+
+private:
+    std::uint64_t m_squares;
+
+    constexpr Square popFirst()
+    {
+        Square sq = fromOrdinal<Square>(intrin::lsb(m_squares));
+        m_squares &= m_squares - 1;
+        return sq;
+    }
+
+    constexpr Square first() const
+    {
+        return fromOrdinal<Square>(intrin::lsb(m_squares));
+    }
+};
+
 struct Bitboard
 {
     // bits counted from the LSB
@@ -120,6 +180,26 @@ public:
     constexpr void toggle(Square sq)
     {
         *this ^= Bitboard(sq);
+    }
+
+    constexpr BitboardIterator begin() const
+    {
+        return BitboardIterator(m_squares);
+    }
+
+    constexpr BitboardIterator end() const
+    {
+        return BitboardIterator{};
+    }
+
+    constexpr BitboardIterator cbegin() const
+    {
+        return BitboardIterator(m_squares);
+    }
+
+    constexpr BitboardIterator cend() const
+    {
+        return BitboardIterator{};
     }
 
     constexpr bool friend operator==(Bitboard lhs, Bitboard rhs) noexcept
@@ -304,7 +384,7 @@ public:
     }
 
     // assumes the bitboard is not empty
-    Square popFirst()
+    constexpr Square popFirst()
     {
         Square sq = fromOrdinal<Square>(intrin::lsb(m_squares));
         m_squares &= m_squares - 1;

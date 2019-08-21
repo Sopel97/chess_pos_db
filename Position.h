@@ -153,7 +153,7 @@ struct Board
         else if (move.type == MoveType::EnPassant)
         {
             const Piece movedPiece = m_pieces[ordinal(move.from)];
-            const Piece capturedPiece(PieceType::Pawn, opposite(movedPiece.color()));
+            const Piece capturedPiece(PieceType::Pawn, !movedPiece.color());
             const Square capturedPieceSq(move.to.file(), move.from.rank());
 
             // on ep move there are 3 squares involved
@@ -230,7 +230,7 @@ struct Board
         else if (move.type == MoveType::EnPassant)
         {
             const Piece movedPiece = m_pieces[ordinal(move.to)];
-            const Piece capturedPiece(PieceType::Pawn, opposite(movedPiece.color()));
+            const Piece capturedPiece(PieceType::Pawn, !movedPiece.color());
             const Square capturedPieceSq(move.to.file(), move.from.rank());
 
             m_pieces[ordinal(move.to)] = Piece::none();
@@ -283,6 +283,37 @@ struct Board
             m_pieceBB[ordinal(Piece::none())] ^= kingFromSq;
             m_pieceBB[ordinal(Piece::none())] ^= kingToSq;
         }
+    }
+
+    bool leavesKingInCheck(Move move, Color color) const
+    {
+        // checks whether by doing a move we uncover our king to a check
+        // assumes that before the move the king was not in check
+        // doesn't verify castlings as it is supposed to only cover undiscovered checks
+
+        if (move.type == MoveType::Castle)
+        {
+            return false;
+        }
+
+        Bitboard occupied = (piecesBB() ^ move.from) | move.to;
+
+        if (move.type == MoveType::EnPassant)
+        {
+            const Square capturedPieceSq(move.to.file(), move.from.rank());
+            occupied ^= capturedPieceSq;
+        }
+
+        const Square ksq = kingSquare(color);
+
+        const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(ksq, occupied);
+        const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
+
+        const Bitboard opponentQueens = piecesBB(Piece(PieceType::Queen, !color));
+        const Bitboard opponentBishopLikePieces = piecesBB(Piece(PieceType::Bishop, !color)) | opponentQueens;
+        const Bitboard opponentRookLikePieces = piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens;
+        
+        return (bishopAttacks & opponentBishopLikePieces).any() || (rookAttacks & opponentRookLikePieces).any();
     }
 
     Piece pieceAt(Square sq) const
@@ -363,19 +394,24 @@ struct Position : public Board
     Piece undoMove(Move move)
     {
         const Piece captured = BaseType::doMove(move);
-        m_sideToMove = opposite(m_sideToMove);
+        m_sideToMove = !m_sideToMove;
         return captured;
     }
 
     void undoMove(Move move, Piece capturedPiece)
     {
         BaseType::undoMove(move, capturedPiece);
-        m_sideToMove = opposite(m_sideToMove);
+        m_sideToMove = !m_sideToMove;
     }
 
     Color sideToMove() const
     {
         return m_sideToMove;
+    }
+
+    bool leavesKingInCheck(Move move) const
+    {
+        return BaseType::leavesKingInCheck(move, m_sideToMove);
     }
 
 private:
