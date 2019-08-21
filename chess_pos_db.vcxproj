@@ -163,7 +163,6 @@
     <ClInclude Include="Chess.h" />
     <ClInclude Include="Enum.h" />
     <ClInclude Include="EnumArray.h" />
-    <ClInclude Include="EnumDict.h" />
     <ClInclude Include="Intrinsics.h" />
     <ClInclude Include="Pgn.h" />
     <ClInclude Include="Position.h" />

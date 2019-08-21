@@ -3,6 +3,7 @@
 #include "Assert.h"
 #include "Chess.h"
 #include "Enum.h"
+#include "EnumArray.h"
 #include "Intrinsics.h"
 
 struct BitboardIterator
@@ -105,7 +106,7 @@ private:
     }
 
     // files A..file inclusive
-    static constexpr std::uint64_t m_filesUpToBB[8]{
+    static constexpr EnumArray<std::uint64_t, File> m_filesUpToBB{
         0x0101010101010101ULL,
         0x0303030303030303ULL,
         0x0707070707070707ULL,
@@ -158,7 +159,7 @@ public:
     {
         ASSERT(left <= right);
 
-        return Bitboard::fromBits(m_filesUpToBB[ordinal(right) - ordinal(left)] << ordinal(left));
+        return Bitboard::fromBits(m_filesUpToBB[right - ordinal(left)] << ordinal(left));
     }
 
     constexpr bool isEmpty() const
@@ -213,24 +214,24 @@ public:
 
     constexpr Bitboard& operator+=(Offset offset)
     {
-        if (offset.rank > 0)
+        if (offset.ranks > 0)
         {
-            m_squares <<= 8 * offset.rank;
+            m_squares <<= 8 * offset.ranks;
         }
-        else if (offset.rank < 0)
+        else if (offset.ranks < 0)
         {
-            m_squares >>= 8 * offset.rank;
+            m_squares >>= 8 * offset.ranks;
         }
 
-        if (offset.file > 0)
+        if (offset.files > 0)
         {
-            const Bitboard mask = Bitboard::betweenFiles(fileA, fromOrdinal<File>(8 - offset.file));
-            m_squares = (m_squares & mask.m_squares) << offset.file;
+            const Bitboard mask = Bitboard::betweenFiles(fileA, fromOrdinal<File>(8 - offset.files));
+            m_squares = (m_squares & mask.m_squares) << offset.files;
         }
-        else if (offset.file < 0)
+        else if (offset.files < 0)
         {
-            const Bitboard mask = Bitboard::betweenFiles(fromOrdinal<File>(-offset.file), fileH);
-            m_squares = (m_squares & mask.m_squares) >> offset.file;
+            const Bitboard mask = Bitboard::betweenFiles(fromOrdinal<File>(-offset.files), fileH);
+            m_squares = (m_squares & mask.m_squares) >> offset.files;
         }
 
         return *this;
@@ -519,15 +520,15 @@ namespace bb
             offsets[West]
         };
 
-        static constexpr std::array<Bitboard, cardinality<Square>()> generatePseudoAttacks_Pawn()
+        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Pawn()
         {
             // pseudo attacks don't make sense for pawns
             return {};
         }
 
-        static constexpr std::array<Bitboard, cardinality<Square>()> generatePseudoAttacks_Knight()
+        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Knight()
         {
-            std::array<Bitboard, cardinality<Square>()> bbs{};
+            EnumArray<Bitboard, Square> bbs{};
 
             for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
             {
@@ -542,7 +543,7 @@ namespace bb
                     }
                 }
 
-                bbs[ordinal(fromSq)] = bb;
+                bbs[fromSq] = bb;
             }
 
             return bbs;
@@ -574,37 +575,37 @@ namespace bb
             return bb;
         }
 
-        static constexpr std::array<Bitboard, cardinality<Square>()> generatePseudoAttacks_Bishop()
+        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Bishop()
         {
-            std::array<Bitboard, cardinality<Square>()> bbs{};
+            EnumArray<Bitboard, Square> bbs{};
 
             for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
             {
-                bbs[ordinal(fromSq)] = generateSliderPseudoAttacks(bishopOffsets, fromSq);
+                bbs[fromSq] = generateSliderPseudoAttacks(bishopOffsets, fromSq);
             }
 
             return bbs;
         }
 
-        static constexpr std::array<Bitboard, cardinality<Square>()> generatePseudoAttacks_Rook()
+        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Rook()
         {
-            std::array<Bitboard, cardinality<Square>()> bbs{};
+            EnumArray<Bitboard, Square> bbs{};
 
             for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
             {
-                bbs[ordinal(fromSq)] = generateSliderPseudoAttacks(rookOffsets, fromSq);
+                bbs[fromSq] = generateSliderPseudoAttacks(rookOffsets, fromSq);
             }
 
             return bbs;
         }
 
-        static constexpr std::array<Bitboard, cardinality<Square>()> generatePseudoAttacks_Queen()
+        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Queen()
         {
-            std::array<Bitboard, cardinality<Square>()> bbs{};
+            EnumArray<Bitboard, Square> bbs{};
 
             for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
             {
-                bbs[ordinal(fromSq)] =
+                bbs[fromSq] =
                     generateSliderPseudoAttacks(bishopOffsets, fromSq)
                     | generateSliderPseudoAttacks(rookOffsets, fromSq);
             }
@@ -612,16 +613,16 @@ namespace bb
             return bbs;
         }
 
-        static constexpr std::array<Bitboard, cardinality<Square>()> generatePseudoAttacks_King()
+        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_King()
         {
-            std::array<Bitboard, cardinality<Square>()> bbs{};
+            EnumArray<Bitboard, Square> bbs{};
 
             for (Square sq = A1; sq != Square::none(); ++sq)
             {
                 const Bitboard bbsq = square(sq);
                 const Bitboard bbh = bbsq | (bbsq + Offset{ 1, 0 }) | (bbsq + Offset{ -1, 0 }); // smear horizontally
                 const Bitboard bb = bbh | (bbh + Offset{ 0, 1 }) | (bbh + Offset{ 0, -1 }); // smear vertically
-                bbs[ordinal(sq)] = bb & ~bbsq; // don't include the king square
+                bbs[sq] = bb & ~bbsq; // don't include the king square
             }
 
             return bbs;
@@ -629,7 +630,7 @@ namespace bb
 
         static constexpr auto generatePseudoAttacks()
         {
-            return std::array<std::array<Bitboard, cardinality<Square>()>, cardinality<PieceType>()>{
+            return EnumArray2<Bitboard, PieceType, Square>{
                 generatePseudoAttacks_Pawn(),
                 generatePseudoAttacks_Knight(),
                 generatePseudoAttacks_Bishop(),
@@ -667,13 +668,13 @@ namespace bb
 
         // classical slider move generation approach https://www.chessprogramming.org/Classical_Approach
 
-        static constexpr std::array<Bitboard, cardinality<Square>()> generatePositiveRayAttacks(Direction dir)
+        static constexpr EnumArray<Bitboard, Square> generatePositiveRayAttacks(Direction dir)
         {
-            std::array<Bitboard, cardinality<Square>()> bbs{};
+            EnumArray<Bitboard, Square> bbs{};
 
             for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
             {
-                bbs[ordinal(fromSq)] = generatePositiveRayAttacks(dir, fromSq);
+                bbs[fromSq] = generatePositiveRayAttacks(dir, fromSq);
             }
 
             return bbs;
@@ -681,7 +682,7 @@ namespace bb
 
         static constexpr auto generatePositiveRayAttacks()
         {
-            std::array<std::array<Bitboard, cardinality<Square>()>, 8> bbs{};
+            std::array<EnumArray<Bitboard, Square>, 8> bbs{};
 
             bbs[North] = generatePositiveRayAttacks(North);
             bbs[NorthEast] = generatePositiveRayAttacks(NorthEast);
@@ -700,17 +701,17 @@ namespace bb
         template <Direction DirV>
         constexpr Bitboard slidingAttacks(Square sq, Bitboard occupied)
         {
-            Bitboard attacks = detail::positiveRayAttacks[DirV][ordinal(sq)];
+            Bitboard attacks = detail::positiveRayAttacks[DirV][sq];
 
             if constexpr (DirV == NorthWest || DirV == North || DirV == NorthEast || DirV == East)
             {
                 Bitboard blocker = (attacks & occupied) | H8; // set highest bit (H8) so msb never fails
-                return attacks ^ positiveRayAttacks[DirV][ordinal(blocker.first())];
+                return attacks ^ positiveRayAttacks[DirV][blocker.first()];
             }
             else
             {
                 Bitboard blocker = (attacks & occupied) | A1;
-                return attacks ^ positiveRayAttacks[DirV][ordinal(blocker.last())];
+                return attacks ^ positiveRayAttacks[DirV][blocker.last()];
             }
         }
     }
@@ -722,14 +723,14 @@ namespace bb
 
         ASSERT(sq.isOk());
 
-        return detail::pseudoAttacks[ordinal(PieceTypeV)][ordinal(sq)];
+        return detail::pseudoAttacks[PieceTypeV][sq];
     }
 
     constexpr Bitboard pseudoAttacks(PieceType pt, Square sq)
     {
         ASSERT(sq.isOk());
 
-        return detail::pseudoAttacks[ordinal(pt)][ordinal(sq)];
+        return detail::pseudoAttacks[pt][sq];
     }
 
     template <PieceType PieceTypeV>

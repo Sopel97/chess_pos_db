@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Enum.h"
+#include "EnumArray.h"
 
 #include <cstdint>
 
@@ -177,17 +178,17 @@ struct EnumTraits<Piece>
 
 constexpr char toChar(Piece piece)
 {
-    constexpr char chars[] = {
+    constexpr EnumArray<char, Piece> chars = {
         'P', 'p',
         'N', 'n',
         'B', 'b',
         'R', 'r',
         'Q', 'q',
         'K', 'k',
-        '.', '.',
+        '.'
     };
 
-    return chars[ordinal(piece)];
+    return chars[piece];
 }
 
 template <typename TagT>
@@ -358,12 +359,12 @@ struct FlatSquareOffset
 
 struct Offset
 {
-    int file;
-    int rank;
+    std::int8_t files;
+    std::int8_t ranks;
 
     constexpr FlatSquareOffset flat() const
     {
-        return { file, rank };
+        return { files, ranks };
     }
 };
 
@@ -380,16 +381,16 @@ struct SquareCoords
 
     constexpr friend SquareCoords& operator+=(SquareCoords& c, Offset offset)
     {
-        c.file += offset.file;
-        c.rank += offset.rank;
+        c.file += offset.files;
+        c.rank += offset.ranks;
         return c;
     }
 
     constexpr friend SquareCoords operator+(const SquareCoords& c, Offset offset)
     {
         SquareCoords cpy(c);
-        cpy.file += offset.file;
-        cpy.rank += offset.rank;
+        cpy.file += offset.files;
+        cpy.rank += offset.ranks;
         return cpy;
     }
 
@@ -403,7 +404,12 @@ struct Square
 {
     static constexpr Square none()
     {
-        return Square(cardinality<Rank>() * cardinality<File>());
+        return Square{};
+    }
+
+    constexpr Square() :
+        m_id(cardinality<Rank>()* cardinality<File>())
+    {
     }
 
     constexpr explicit Square(int idx) :
@@ -656,8 +662,8 @@ struct EnumTraits<CastleType>
 // ep is encoded as a normal pawn capture (move.to is empty on the board)
 struct Move
 {
-    Square from;
-    Square to;
+    Square from = Square::none();
+    Square to = Square::none();
     MoveType type = MoveType::Normal;
     Piece promotedPiece = Piece::none();
 
@@ -669,11 +675,11 @@ struct Move
     constexpr static Move castle(CastleType ct, Color c)
     {
         // [ct][c]
-        constexpr Move moves[2][2] = {
+        constexpr EnumArray2<Move, CastleType, Color> moves = {
             { { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } },
             { { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }
         };
 
-        return moves[ordinal(ct)][ordinal(c)];
+        return moves[ct][c];
     }
 };

@@ -32,9 +32,6 @@
     <ClInclude Include="EnumArray.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="EnumDict.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Intrinsics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
