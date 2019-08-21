@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Assert.h"
 #include "Chess.h"
 #include "Enum.h"
 #include "Intrinsics.h"
@@ -51,15 +52,15 @@ struct BitboardIterator
 private:
     std::uint64_t m_squares;
 
-    constexpr Square popFirst()
+    constexpr void popFirst()
     {
-        Square sq = fromOrdinal<Square>(intrin::lsb(m_squares));
         m_squares &= m_squares - 1;
-        return sq;
     }
 
     constexpr Square first() const
     {
+        ASSERT(m_squares != 0);
+
         return fromOrdinal<Square>(intrin::lsb(m_squares));
     }
 };
@@ -80,6 +81,7 @@ private:
     constexpr explicit Bitboard(Square sq) :
         m_squares(static_cast<std::uint64_t>(1ULL) << ordinal(sq))
     {
+        ASSERT(sq.isOk());
     }
 
     constexpr explicit Bitboard(Rank r) :
@@ -154,6 +156,8 @@ public:
     // inclusive
     static constexpr Bitboard betweenFiles(File left, File right)
     {
+        ASSERT(left <= right);
+
         return Bitboard::fromBits(m_filesUpToBB[ordinal(right) - ordinal(left)] << ordinal(left));
     }
 
@@ -383,27 +387,31 @@ public:
         return !!m_squares;
     }
 
-    // assumes the bitboard is not empty
-    constexpr Square popFirst()
-    {
-        Square sq = fromOrdinal<Square>(intrin::lsb(m_squares));
-        m_squares &= m_squares - 1;
-        return sq;
-    }
-
     constexpr Square first() const
     {
+        ASSERT(m_squares != 0);
+
         return fromOrdinal<Square>(intrin::lsb(m_squares));
     }
 
     constexpr Square last() const
     {
+        ASSERT(m_squares != 0);
+
         return fromOrdinal<Square>(intrin::msb(m_squares));
     }
 
     constexpr std::uint64_t bits() const
     {
         return m_squares;
+    }
+
+    // assumes the bitboard is not empty
+    constexpr Square popFirst()
+    {
+        Square sq = first();
+        m_squares &= m_squares - 1;
+        return sq;
     }
 
     template <typename FuncT>
@@ -542,6 +550,8 @@ namespace bb
 
         static constexpr Bitboard generateSliderPseudoAttacks(const std::array<Offset, 4>& offsets, Square fromSq)
         {
+            ASSERT(fromSq.isOk());
+
             Bitboard bb{};
 
             for (auto&& offset : offsets)
@@ -634,6 +644,8 @@ namespace bb
 
         static constexpr Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
         {
+            ASSERT(fromSq.isOk());
+
             Bitboard bb{};
 
             const auto offset = offsets[dir];
@@ -708,11 +720,15 @@ namespace bb
     {
         static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
 
+        ASSERT(sq.isOk());
+
         return detail::pseudoAttacks[ordinal(PieceTypeV)][ordinal(sq)];
     }
 
     constexpr Bitboard pseudoAttacks(PieceType pt, Square sq)
     {
+        ASSERT(sq.isOk());
+
         return detail::pseudoAttacks[ordinal(pt)][ordinal(sq)];
     }
 
@@ -720,6 +736,8 @@ namespace bb
     constexpr Bitboard attacks(Square sq, Bitboard occupied)
     {
         static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
+
+        ASSERT(sq.isOk());
 
         if constexpr (PieceTypeV == PieceType::Bishop)
         {
@@ -757,6 +775,8 @@ namespace bb
 
     constexpr Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
     {
+        ASSERT(sq.isOk());
+
         switch (pt)
         {
         case PieceType::Bishop:

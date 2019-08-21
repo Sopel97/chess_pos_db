@@ -158,6 +158,7 @@
     <ClCompile Include="chess_pos_db.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Assert.h" />
     <ClInclude Include="Bitboard.h" />
     <ClInclude Include="Chess.h" />
     <ClInclude Include="Enum.h" />

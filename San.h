@@ -1,20 +1,11 @@
 #pragma once
 
+#include "Assert.h"
 #include "Chess.h"
 #include "Position.h"
 
 namespace detail::san
 {
-    inline Rank parseRank(const char s)
-    {
-        return fromOrdinal<Rank>(s - '1');
-    }
-
-    inline File parseFile(const char s)
-    {
-        return fromOrdinal<File>(s - 'a');
-    }
-
     inline bool isFile(const char s)
     {
         return s >= 'a' && s <= 'h';
@@ -23,6 +14,20 @@ namespace detail::san
     inline bool isRank(const char s)
     {
         return s >= '1' && s <= '8';
+    }
+
+    inline Rank parseRank(const char s)
+    {
+        ASSERT(isRank(s));
+
+        return fromOrdinal<Rank>(s - '1');
+    }
+
+    inline File parseFile(const char s)
+    {
+        ASSERT(isFile(s));
+
+        return fromOrdinal<File>(s - 'a');
     }
 
     inline Square parseSquare(const char* s)
@@ -64,6 +69,8 @@ namespace detail::san
             *san = *(san + 1);
             ++san;
         }
+
+        ASSERT(!contains(san, 'x'));
     }
 
     inline void removeSanDecorations(char* san)
@@ -124,9 +131,9 @@ namespace detail::san
             return PieceType::Rook;
         case 'Q':
             return PieceType::Queen;
+        default:
+            ASSERT(false);
         }
-
-        return PieceType::None;
     }
 
     inline Move sanToMove_Pawn(const Position& pos, const char* san)
@@ -139,6 +146,9 @@ namespace detail::san
         // aa1=Q
 
         const int sanLen = len(san);
+
+        ASSERT(sanLen >= 2 && sanLen <= 5);
+
         const Color color = pos.sideToMove();
 
         Move move{ Square::none(), Square::none(), MoveType::Normal, Piece::none() };
@@ -152,6 +162,8 @@ namespace detail::san
 
             if (color == Color::White)
             {
+                ASSERT(move.to.rank() >= rank3);
+
                 if (pos.pieceAt(move.to + Offset{ 0, -1 }).type() == PieceType::Pawn)
                 {
                     move.from = move.to + Offset{ 0, -1 };
@@ -163,6 +175,8 @@ namespace detail::san
             }
             else
             {
+                ASSERT(move.to.rank() <= rank6);
+
                 if (pos.pieceAt(move.to + Offset{ 0, 1 }).type() == PieceType::Pawn)
                 {
                     move.from = move.to + Offset{ 0, 1 };
@@ -172,6 +186,8 @@ namespace detail::san
                     move.from = move.to + Offset{ 0, 2 };
                 }
             }
+
+            ASSERT(pos.pieceAt(move.to) == Piece::none());
         }
         else if (sanLen == 3 || sanLen == 5)
         {
@@ -186,6 +202,10 @@ namespace detail::san
             if (pos.pieceAt(move.to) == Piece::none())
             {
                 move.type = MoveType::EnPassant;
+            }
+            else
+            {
+                ASSERT(pos.pieceAt(move.to).type() == PieceType::Pawn);
             }
 
             if (pos.sideToMove() == Color::White)
@@ -208,6 +228,8 @@ namespace detail::san
             move.promotedPiece = Piece(promotedPieceType, color);
         }
 
+        ASSERT(pos.pieceAt(move.from).type() == PieceType::Pawn);
+
         return move;
     }
 
@@ -229,11 +251,17 @@ namespace detail::san
 
         const int sanLen = len(san); 
 
+        ASSERT(sanLen >= 2 && sanLen <= 4);
+
         const Square toSq = parseSquare(san + sanLen - 2);
         if (sanLen == 4)
         {
             // we have everything we need already in the san
-            return Move{ parseSquare(san), toSq };
+            const Square fromSq = parseSquare(san);
+
+            ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
+
+            return Move{ fromSq, toSq };
         }
 
         // first consider all candidates with ray attacks to the toSq
@@ -243,6 +271,9 @@ namespace detail::san
         if (candidates.exactlyOne())
         {
             const Square fromSq = candidates.first();
+
+            ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
+
             return Move{ fromSq, toSq };
         }
 
@@ -254,6 +285,9 @@ namespace detail::san
             if (candidates.exactlyOne())
             {
                 const Square fromSq = candidates.first();
+
+                ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
+
                 return Move{ fromSq, toSq };
             }
         }
@@ -278,6 +312,9 @@ namespace detail::san
             if (candidates.exactlyOne())
             {
                 const Square fromSq = candidates.first();
+
+                ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
+
                 return Move{ fromSq, toSq };
             }
         }
@@ -285,17 +322,19 @@ namespace detail::san
         // if we are here then there are (should be) many pseudo-legal moves
         // but only one of them is legal
 
-        for (Square sq : candidates)
+        for (Square fromSq : candidates)
         {
-            const Move move{ sq, toSq };
+            const Move move{ fromSq, toSq };
             if (!pos.leavesKingInCheck(move))
             {
+                ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
+
                 return move;
             }
         }
 
         // shouldn't happen
-        return Move::null();
+        ASSERT(false);
     }
 
     inline Move sanToMove_King(const Position& pos, const char* san)
@@ -305,6 +344,9 @@ namespace detail::san
 
         const Square fromSq = pos.kingSquare(pos.sideToMove());
         const Square toSq = parseSquare(san);
+
+        ASSERT(pos.pieceAt(fromSq).type() == PieceType::King);
+
         return Move{ fromSq, toSq };
     }
 
@@ -318,7 +360,12 @@ namespace detail::san
         const CastleType ct = san[3] == '\0' ? CastleType::Short : CastleType::Long;
         const Color c = pos.sideToMove();
 
-        return Move::castle(ct, c);
+        const Move move = Move::castle(ct, c);
+
+        ASSERT(pos.pieceAt(move.from).type() == PieceType::King);
+        ASSERT(pos.pieceAt(move.to).type() == PieceType::Rook);
+
+        return move;
     }
 }
 

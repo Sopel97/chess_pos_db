@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Assert.h"
 #include "Bitboard.h"
 #include "Chess.h"
 
@@ -19,6 +20,8 @@ struct Board
     // returns side to move
     constexpr Color set(const char* fen)
     {
+        ASSERT(fen != nullptr);
+
         File f = fileA;
         Rank r = rank8;
         auto current = fen;
@@ -112,6 +115,8 @@ struct Board
 
     void place(Piece piece, Square sq)
     {
+        ASSERT(sq.isOk());
+
         m_pieceBB[ordinal(m_pieces[ordinal(sq)])] ^= sq;
         m_pieces[ordinal(sq)] = piece;
         m_pieceBB[ordinal(piece)] |= sq;
@@ -291,6 +296,8 @@ struct Board
         // assumes that before the move the king was not in check
         // doesn't verify castlings as it is supposed to only cover undiscovered checks
 
+        ASSERT(move.from.isOk() && move.to.isOk());
+
         if (move.type == MoveType::Castle)
         {
             return false;
@@ -318,6 +325,8 @@ struct Board
 
     Piece pieceAt(Square sq) const
     {
+        ASSERT(sq.isOk());
+
         return m_pieces[ordinal(sq)];
     }
 
@@ -357,6 +366,8 @@ struct Board
 
     bool isPromotion(Square from, Square to) const
     {
+        ASSERT(from.isOk() && to.isOk());
+
         return m_pieces[ordinal(from)].type() == PieceType::Pawn && (to.rank() == rank1 || to.rank() == rank8);
     }
 
@@ -391,8 +402,10 @@ struct Position : public Board
         m_sideToMove = BaseType::set(fen);
     }
 
-    Piece undoMove(Move move)
+    Piece doMove(Move move)
     {
+        ASSERT(move.from.isOk() && move.to.isOk());
+
         const Piece captured = BaseType::doMove(move);
         m_sideToMove = !m_sideToMove;
         return captured;
