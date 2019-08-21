@@ -613,9 +613,20 @@ struct EnumTraits<Square>
     }
 };
 
+enum struct MoveType : std::uint8_t
+{
+    Normal,
+    Promotion,
+    Castle,
+    EnPassant
+};
+
+// castling is encoded as a king capturing rook
+// ep is encoded as a normal pawn capture (move.to is empty on the board)
 struct Move
 {
     Square from;
     Square to;
+    MoveType type = MoveType::Normal;
     Piece promotedPiece = Piece::none();
 };

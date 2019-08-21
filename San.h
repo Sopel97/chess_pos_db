@@ -162,16 +162,17 @@ namespace detail::san
             const File toFile = parseFile(san[1]);
             const Rank toRank = parseRank(san[2]);
             const Square toSq(toFile, toRank);
+            const MoveType mt = pos.pieceAt(toSq) == Piece::none() ? MoveType::EnPassant : MoveType::Normal;
 
             if (pos.sideToMove() == Color::White)
             {
                 const Square fromSq(fromFile, toRank - 1);
-                return Move{ fromSq, toSq };
+                return Move{ fromSq, toSq, mt };
             }
             else
             {
                 const Square fromSq(fromFile, toRank + 1);
-                return Move{ fromSq, toSq };
+                return Move{ fromSq, toSq, mt };
             }
         }
         // else if () // TODO: promotions

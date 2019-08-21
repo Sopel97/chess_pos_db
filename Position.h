@@ -130,37 +130,159 @@ struct Board
     }
 
     // returns captured piece
+    // doesn't check validity
     Piece doMove(Move move)
     {
-        const Piece capturedPiece = m_pieces[ordinal(move.to)];
-        const Piece fromPiece = m_pieces[ordinal(move.from)];
-        const Piece toPiece = move.promotedPiece == Piece::none() ? fromPiece : move.promotedPiece;
+        if (move.type == MoveType::Normal || move.type == MoveType::Promotion)
+        {
+            const Piece capturedPiece = m_pieces[ordinal(move.to)];
+            const Piece fromPiece = m_pieces[ordinal(move.from)];
+            const Piece toPiece = move.promotedPiece == Piece::none() ? fromPiece : move.promotedPiece;
 
-        m_pieces[ordinal(move.to)] = toPiece;
-        m_pieces[ordinal(move.from)] = Piece::none();
+            m_pieces[ordinal(move.to)] = toPiece;
+            m_pieces[ordinal(move.from)] = Piece::none();
 
-        m_pieceBB[ordinal(fromPiece)] ^= move.from;
-        m_pieceBB[ordinal(Piece::none())] ^= move.from;
+            m_pieceBB[ordinal(fromPiece)] ^= move.from;
+            m_pieceBB[ordinal(toPiece)] ^= move.to;
 
-        m_pieceBB[ordinal(toPiece)] ^= move.to;
-        m_pieceBB[ordinal(capturedPiece)] ^= move.to;
+            m_pieceBB[ordinal(capturedPiece)] ^= move.to;
+            m_pieceBB[ordinal(Piece::none())] ^= move.from;
 
-        return capturedPiece;
+            return capturedPiece;
+        }
+        else if (move.type == MoveType::EnPassant)
+        {
+            const Piece movedPiece = m_pieces[ordinal(move.from)];
+            const Piece capturedPiece(PieceType::Pawn, opposite(movedPiece.color()));
+            const Square capturedPieceSq(move.to.file(), move.from.rank());
+
+            // on ep move there are 3 squares involved
+            m_pieces[ordinal(move.to)] = movedPiece;
+            m_pieces[ordinal(move.from)] = Piece::none();
+            m_pieces[ordinal(capturedPieceSq)] = Piece::none();
+
+            m_pieceBB[ordinal(movedPiece)] ^= move.from;
+            m_pieceBB[ordinal(movedPiece)] ^= move.to;
+
+            m_pieceBB[ordinal(Piece::none())] ^= move.from;
+            m_pieceBB[ordinal(Piece::none())] ^= move.to;
+
+            m_pieceBB[ordinal(capturedPiece)] ^= capturedPieceSq;
+            m_pieceBB[ordinal(Piece::none())] ^= capturedPieceSq;
+
+            return capturedPiece;
+        }
+        else // if (move.type == MoveType::Castle)
+        {
+            // [color][isShort]
+            constexpr Square rookDestinations[2][2] = { { F1, D1 }, { F8, D8 } };
+            constexpr Square kingDestinations[2][2] = { { G1, C1 }, { G8, C8 } };
+
+            const Square rookFromSq = move.to;
+            const Square kingFromSq = move.from;
+
+            const Piece rook = m_pieces[ordinal(rookFromSq)];
+            const Piece king = m_pieces[ordinal(kingFromSq)];
+            const Color color = king.color();
+            const bool isShort = rookFromSq.file() == fileH;
+
+            const Square rookToSq = rookDestinations[ordinal(color)][isShort];
+            const Square kingToSq = kingDestinations[ordinal(color)][isShort];
+
+            // 4 squares are involved
+            m_pieces[ordinal(rookFromSq)] = Piece::none();
+            m_pieces[ordinal(kingFromSq)] = Piece::none();
+            m_pieces[ordinal(rookToSq)] = rook;
+            m_pieces[ordinal(kingToSq)] = king;
+
+            m_pieceBB[ordinal(rook)] ^= rookFromSq;
+            m_pieceBB[ordinal(rook)] ^= rookToSq;
+
+            m_pieceBB[ordinal(king)] ^= kingFromSq;
+            m_pieceBB[ordinal(king)] ^= kingToSq;
+
+            m_pieceBB[ordinal(Piece::none())] ^= rookFromSq;
+            m_pieceBB[ordinal(Piece::none())] ^= rookToSq;
+
+            m_pieceBB[ordinal(Piece::none())] ^= kingFromSq;
+            m_pieceBB[ordinal(Piece::none())] ^= kingToSq;
+
+            return Piece::none();
+        }
     }
 
     void undoMove(Move move, Piece capturedPiece)
     {
-        const Piece toPiece = m_pieces[ordinal(move.to)];
-        const Piece fromPiece = move.promotedPiece == Piece::none() ? toPiece : Piece(PieceType::Pawn, toPiece.color());
+        if (move.type == MoveType::Normal || move.type == MoveType::Promotion)
+        {
+            const Piece toPiece = m_pieces[ordinal(move.to)];
+            const Piece fromPiece = move.promotedPiece == Piece::none() ? toPiece : Piece(PieceType::Pawn, toPiece.color());
 
-        m_pieces[ordinal(move.from)] = fromPiece;
-        m_pieces[ordinal(move.to)] = capturedPiece;
+            m_pieces[ordinal(move.from)] = fromPiece;
+            m_pieces[ordinal(move.to)] = capturedPiece;
 
-        m_pieceBB[ordinal(fromPiece)] ^= move.from;
-        m_pieceBB[ordinal(Piece::none())] ^= move.from;
+            m_pieceBB[ordinal(fromPiece)] ^= move.from;
+            m_pieceBB[ordinal(toPiece)] ^= move.to;
 
-        m_pieceBB[ordinal(toPiece)] ^= move.to;
-        m_pieceBB[ordinal(capturedPiece)] ^= move.to;
+            m_pieceBB[ordinal(capturedPiece)] ^= move.to;
+            m_pieceBB[ordinal(Piece::none())] ^= move.from;
+        }
+        else if (move.type == MoveType::EnPassant)
+        {
+            const Piece movedPiece = m_pieces[ordinal(move.to)];
+            const Piece capturedPiece(PieceType::Pawn, opposite(movedPiece.color()));
+            const Square capturedPieceSq(move.to.file(), move.from.rank());
+
+            m_pieces[ordinal(move.to)] = Piece::none();
+            m_pieces[ordinal(move.from)] = movedPiece;
+            m_pieces[ordinal(capturedPieceSq)] = capturedPiece;
+
+            m_pieceBB[ordinal(movedPiece)] ^= move.from;
+            m_pieceBB[ordinal(movedPiece)] ^= move.to;
+
+            m_pieceBB[ordinal(Piece::none())] ^= move.from;
+            m_pieceBB[ordinal(Piece::none())] ^= move.to;
+
+            // on ep move there are 3 squares involved
+            m_pieceBB[ordinal(capturedPiece)] ^= capturedPieceSq;
+            m_pieceBB[ordinal(Piece::none())] ^= capturedPieceSq;
+        }
+        else // if (move.type == MoveType::Castle)
+        {
+            // [color][isShort]
+            constexpr Square rookDestinations[2][2] = { { F1, D1 }, { F8, D8 } };
+            constexpr Square kingDestinations[2][2] = { { G1, C1 }, { G8, C8 } };
+
+            const Square rookFromSq = move.to;
+            const Square kingFromSq = move.from;
+
+            const Color color = move.to.rank() == rank1 ? Color::White : Color::Black;
+            const bool isShort = rookFromSq.file() == fileH;
+
+            const Square rookToSq = rookDestinations[ordinal(color)][isShort];
+            const Square kingToSq = kingDestinations[ordinal(color)][isShort];
+
+            const Piece rook = m_pieces[ordinal(rookToSq)];
+            const Piece king = m_pieces[ordinal(kingToSq)];
+
+            // 4 squares are involved
+            m_pieces[ordinal(rookFromSq)] = rook;
+            m_pieces[ordinal(kingFromSq)] = king;
+            m_pieces[ordinal(rookToSq)] = Piece::none();
+            m_pieces[ordinal(kingToSq)] = Piece::none();
+
+            m_pieceBB[ordinal(rook)] ^= rookFromSq;
+            m_pieceBB[ordinal(rook)] ^= rookToSq;
+
+            m_pieceBB[ordinal(king)] ^= kingFromSq;
+            m_pieceBB[ordinal(king)] ^= kingToSq;
+
+            m_pieceBB[ordinal(Piece::none())] ^= rookFromSq;
+            m_pieceBB[ordinal(Piece::none())] ^= rookToSq;
+
+            m_pieceBB[ordinal(Piece::none())] ^= kingFromSq;
+            m_pieceBB[ordinal(Piece::none())] ^= kingToSq;
+        }
     }
 
     Piece pieceAt(Square sq) const
@@ -202,14 +324,18 @@ struct Board
         return bb;
     }
 
-    bool isPromotion(Move move) const
+    bool isPromotion(Square from, Square to) const
     {
-        return m_pieces[ordinal(move.from)].type() == PieceType::Pawn && (move.to.rank() == rank1 || move.to.rank() == rank8);
+        return m_pieces[ordinal(from)].type() == PieceType::Pawn && (to.rank() == rank1 || to.rank() == rank8);
     }
 
 private:
     Piece m_pieces[cardinality<Square>()];
     Bitboard m_pieceBB[cardinality<Piece>()];
+
+    // NOTE: currently we don't track it because it's not 
+    // required to perform ep if we don't need to check validity
+    // Square m_epSquare = Square::none(); 
 };
 
 struct Position : public Board
