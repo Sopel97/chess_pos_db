@@ -179,9 +179,9 @@ struct Board
             | m_pieceBB[ordinal(Piece(PieceType::King, c))];
     }
 
-    Square pieceSquare(Piece pc) const
+    Square kingSquare(Color c) const
     {
-        return piecesBB(pc).first();
+        return piecesBB(Piece(PieceType::King, c)).first();
     }
 
     Bitboard piecesBB(Piece pc) const

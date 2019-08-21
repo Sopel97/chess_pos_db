@@ -15,6 +15,16 @@ namespace detail::san
         return fromOrdinal<File>(s - 'a');
     }
 
+    inline bool isFile(const char s)
+    {
+        return s >= 'a' && s <= 'h';
+    }
+
+    inline bool isRank(const char s)
+    {
+        return s >= '1' && s <= '8';
+    }
+
     inline Square parseSquare(const char* s)
     {
         const File file = parseFile(s[0]);
@@ -164,12 +174,18 @@ namespace detail::san
                 return Move{ fromSq, toSq };
             }
         }
-        // else if () // promotions
+        // else if () // TODO: promotions
     }
 
     template <PieceType PieceTypeV>
     inline Move sanToMove(const Position& pos, const char* san)
     {
+        static_assert(
+            PieceTypeV == PieceType::Knight 
+            || PieceTypeV == PieceType::Bishop 
+            || PieceTypeV == PieceType::Rook 
+            || PieceTypeV == PieceType::Queen);
+
         // either
         // 01234 - indices
         // a1
@@ -177,15 +193,29 @@ namespace detail::san
         // 1a1
         // a1a1
 
-        const int sanLen = len(san);
+        const int sanLen = len(san); 
 
         const Square toSq = parseSquare(san + sanLen - 2);
-        const Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove())) & bb::pseudoAttacks(PieceTypeV, toSq);
-        const Square fromSq = Square::none();
-
-        if (sanLen == 2)
+        if (sanLen == 4)
         {
-            // we may be able to resolve it trivially no matter the piece
+            // we have everything we need already in the san
+            return Move{ parseSquare(san), toSq };
+        }
+
+        // first consider all candidates with ray attacks to the toSq
+        Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove()));
+        candidates &= bb::pseudoAttacks<PieceTypeV>(toSq);
+
+        if (candidates.exactlyOne())
+        {
+            const Square fromSq = candidates.first();
+            return Move{ fromSq, toSq };
+        }
+
+        // if we have a knight then attacks==pseudoAttacks
+        if (PieceTypeV != PieceType::Knight)
+        {
+            candidates &= bb::attacks<PieceTypeV>(toSq, pos.piecesBB());
 
             if (candidates.exactlyOne())
             {
@@ -193,25 +223,33 @@ namespace detail::san
                 return Move{ fromSq, toSq };
             }
         }
-        else if (sanLen == 4)
-        {
-            // we have everything we need already in the san
-            const Square fromSq = parseSquare(san);
-            return Move{ fromSq, toSq };
-        }
 
-        // we have to fallback to specialized disambiguators
-
-        if (san[2] == '\0')
+        if (sanLen == 3)
         {
-            // a1
-            // we know that there is more than one candidate in candidates
-        }
-        else if (san[3] == '\0')
-        {
+            // we have one of the following to disambiguate with:
             // aa1
             // 1a1
+
+            if (isFile(san[0]))
+            {
+                const File fromFile = parseFile(san[0]);
+                candidates &= bb::file(fromFile);
+            }
+            else // if (isRank(san[0]))
+            {
+                const Rank fromRank = parseRank(san[0]);
+                candidates &= bb::rank(fromRank);
+            }
+
+            if (candidates.exactlyOne())
+            {
+                const Square fromSq = candidates.first();
+                return Move{ fromSq, toSq };
+            }
         }
+
+        // we have to exclude illegal moves - the last thing we can do
+        // TODO: this
     }
 
     inline Move sanToMove_King(const Position& pos, const char* san)
@@ -219,14 +257,14 @@ namespace detail::san
         // since we remove captures the only possible case is 
         // a1
 
-        const Square fromSq = pos.pieceSquare(Piece(PieceType::King, pos.sideToMove()));
+        const Square fromSq = pos.kingSquare(pos.sideToMove());
         const Square toSq = parseSquare(san);
         return Move{ fromSq, toSq };
     }
 
     inline Move sanToMove_Castle(const Position& pos, const char* san)
     {
-
+        // TODO: castling moves
     }
 }
 

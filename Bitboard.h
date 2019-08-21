@@ -16,6 +16,7 @@ public:
     {
     }
 
+private:
     constexpr explicit Bitboard(Square sq) :
         m_squares(static_cast<std::uint64_t>(1ULL) << ordinal(sq))
     {
@@ -36,7 +37,6 @@ public:
     {
     }
 
-private:
     constexpr explicit Bitboard(std::uint64_t bb) :
         m_squares(bb)
     {
@@ -64,6 +64,26 @@ public:
     static constexpr Bitboard all()
     {
         return ~none();
+    }
+
+    static constexpr Bitboard square(Square sq)
+    {
+        return Bitboard(sq);
+    }
+
+    static constexpr Bitboard file(File f)
+    {
+        return Bitboard(f);
+    }
+
+    static constexpr Bitboard rank(Rank r)
+    {
+        return Bitboard(r);
+    }
+
+    static constexpr Bitboard color(Color c)
+    {
+        return Bitboard(c);
     }
 
     static constexpr Bitboard fromBits(std::uint64_t bits)
@@ -291,12 +311,12 @@ public:
         return sq;
     }
 
-    Square first() const
+    constexpr Square first() const
     {
         return fromOrdinal<Square>(intrin::lsb(m_squares));
     }
 
-    Square last() const
+    constexpr Square last() const
     {
         return fromOrdinal<Square>(intrin::msb(m_squares));
     }
@@ -304,30 +324,6 @@ public:
     constexpr std::uint64_t bits() const
     {
         return m_squares;
-    }
-
-    constexpr Square first_constexpr() const
-    {
-        for (Square sq = A1; sq <= H8; ++sq)
-        {
-            if ((*this & sq).any())
-            {
-                return sq;
-            }
-        }
-        return A1;
-    }
-
-    constexpr Square last_constexpr() const
-    {
-        for (Square sq = H8; sq >= A1; --sq)
-        {
-            if ((*this & sq).any())
-            {
-                return sq;
-            }
-        }
-        return A1;
     }
 
     template <typename FuncT>
@@ -354,6 +350,47 @@ constexpr Bitboard operator""_bb(std::uint64_t bits)
 
 namespace bb
 {
+    constexpr Bitboard square(Square sq)
+    {
+        return Bitboard::square(sq);
+    }
+
+    constexpr Bitboard rank(Rank rank)
+    {
+        return Bitboard::rank(rank);
+    }
+
+    constexpr Bitboard file(File file)
+    {
+        return Bitboard::file(file);
+    }
+
+    constexpr Bitboard color(Color c)
+    {
+        return Bitboard::color(c);
+    }
+
+    constexpr Bitboard lightSquares = bb::color(Color::White);
+    constexpr Bitboard darkSquares = bb::color(Color::Black);
+
+    constexpr Bitboard fileA = bb::file(::fileA);
+    constexpr Bitboard fileB = bb::file(::fileB);
+    constexpr Bitboard fileC = bb::file(::fileC);
+    constexpr Bitboard fileD = bb::file(::fileD);
+    constexpr Bitboard fileE = bb::file(::fileE);
+    constexpr Bitboard fileF = bb::file(::fileF);
+    constexpr Bitboard fileG = bb::file(::fileG);
+    constexpr Bitboard fileH = bb::file(::fileH);
+
+    constexpr Bitboard rank1 = bb::rank(::rank1);
+    constexpr Bitboard rank2 = bb::rank(::rank2);
+    constexpr Bitboard rank3 = bb::rank(::rank3);
+    constexpr Bitboard rank4 = bb::rank(::rank4);
+    constexpr Bitboard rank5 = bb::rank(::rank5);
+    constexpr Bitboard rank6 = bb::rank(::rank6);
+    constexpr Bitboard rank7 = bb::rank(::rank7);
+    constexpr Bitboard rank8 = bb::rank(::rank8);
+
     namespace detail
     {
         static constexpr std::array<Offset, 8> knightOffsets{ { {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {-2, -1}, {-2, 1}, {2, -1}, {2, 1} } };
@@ -491,7 +528,7 @@ namespace bb
 
             for (Square sq = A1; sq != Square::none(); ++sq)
             {
-                const Bitboard bbsq(sq);
+                const Bitboard bbsq = square(sq);
                 const Bitboard bbh = bbsq | (bbsq + Offset{ 1, 0 }) | (bbsq + Offset{ -1, 0 }); // smear horizontally
                 const Bitboard bb = bbh | (bbh + Offset{ 0, 1 }) | (bbh + Offset{ 0, -1 }); // smear vertically
                 bbs[ordinal(sq)] = bb & ~bbsq; // don't include the king square
@@ -512,7 +549,8 @@ namespace bb
             };
         }
 
-        constexpr auto pseudoAttacks = generatePseudoAttacks();
+        // NOTE: removing constexpr reduces compile times
+        static constexpr auto pseudoAttacks = generatePseudoAttacks();
 
         static constexpr Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
         {
@@ -565,7 +603,7 @@ namespace bb
             return bbs;
         }
 
-        constexpr auto positiveRayAttacks = generatePositiveRayAttacks();
+        static constexpr auto positiveRayAttacks = generatePositiveRayAttacks();
 
         template <Direction DirV>
         constexpr Bitboard slidingAttacks(Square sq, Bitboard occupied)
@@ -575,14 +613,22 @@ namespace bb
             if constexpr (DirV == NorthWest || DirV == North || DirV == NorthEast || DirV == East)
             {
                 Bitboard blocker = (attacks & occupied) | H8; // set highest bit (H8) so msb never fails
-                return attacks ^ positiveRayAttacks[DirV][ordinal(blocker.first_constexpr())];
+                return attacks ^ positiveRayAttacks[DirV][ordinal(blocker.first())];
             }
             else
             {
                 Bitboard blocker = (attacks & occupied) | A1;
-                return attacks ^ positiveRayAttacks[DirV][ordinal(blocker.last_constexpr())];
+                return attacks ^ positiveRayAttacks[DirV][ordinal(blocker.last())];
             }
         }
+    }
+
+    template <PieceType PieceTypeV>
+    constexpr Bitboard pseudoAttacks(Square sq)
+    {
+        static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
+
+        return detail::pseudoAttacks[ordinal(PieceTypeV)][ordinal(sq)];
     }
 
     constexpr Bitboard pseudoAttacks(PieceType pt, Square sq)
@@ -590,25 +636,31 @@ namespace bb
         return detail::pseudoAttacks[ordinal(pt)][ordinal(sq)];
     }
 
-    constexpr Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
+    template <PieceType PieceTypeV>
+    constexpr Bitboard attacks(Square sq, Bitboard occupied)
     {
-        switch (pt)
+        static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
+
+        if constexpr (PieceTypeV == PieceType::Bishop)
         {
-        case PieceType::Bishop:
             return
-                  detail::slidingAttacks<detail::NorthEast>( sq, occupied)
+                detail::slidingAttacks<detail::NorthEast>(sq, occupied)
                 | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
                 | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
                 | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
-        case PieceType::Rook:           
-            return                      
-                  detail::slidingAttacks<detail::North>(sq, occupied)
+        }
+        else if constexpr (PieceTypeV == PieceType::Rook)
+        {
+            return
+                detail::slidingAttacks<detail::North>(sq, occupied)
                 | detail::slidingAttacks<detail::East>(sq, occupied)
                 | detail::slidingAttacks<detail::South>(sq, occupied)
                 | detail::slidingAttacks<detail::West>(sq, occupied);
-        case PieceType::Queen:          
-            return                      
-                  detail::slidingAttacks<detail::North>(sq, occupied)
+        }
+        else if constexpr (PieceTypeV == PieceType::Queen)
+        {
+            return
+                detail::slidingAttacks<detail::North>(sq, occupied)
                 | detail::slidingAttacks<detail::NorthEast>(sq, occupied)
                 | detail::slidingAttacks<detail::East>(sq, occupied)
                 | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
@@ -616,6 +668,23 @@ namespace bb
                 | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
                 | detail::slidingAttacks<detail::West>(sq, occupied)
                 | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
+        }
+        else
+        {
+            return pseudoAttacks<PieceTypeV>(sq);
+        }
+    }
+
+    constexpr Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
+    {
+        switch (pt)
+        {
+        case PieceType::Bishop:
+            return attacks<PieceType::Bishop>(sq, occupied);
+        case PieceType::Rook:
+            return attacks<PieceType::Rook>(sq, occupied);
+        case PieceType::Queen:
+            return attacks<PieceType::Queen>(sq, occupied);
         default:
             return pseudoAttacks(pt, sq);
         }
@@ -623,6 +692,7 @@ namespace bb
 
     // random test cases generated with stockfish
 
+#if defined(USE_CONSTEXPR_INTRINSICS)
     static_assert(attacks(PieceType::Bishop, C7, 0x401f7ac78bc80f1c_bb) == 0x0a000a0000000000_bb);
     static_assert(attacks(PieceType::Bishop, F6, 0xf258d22d4db91392_bb) == 0x0050005088000000_bb);
     static_assert(attacks(PieceType::Bishop, B1, 0x67a7aabe10d172d6_bb) == 0x0000000010080500_bb);
@@ -673,25 +743,5 @@ namespace bb
     static_assert(attacks(PieceType::Queen, H6, 0x96b30966f70500d8_bb) == 0x20c078c080000000_bb);
     static_assert(attacks(PieceType::Queen, B5, 0x74a51eba09dd373d_bb) == 0x0000070d070a0200_bb);
     static_assert(attacks(PieceType::Queen, F7, 0xded20384ba4b0368_bb) == 0x705070a824020000_bb);
-
-    constexpr Bitboard lightSquares = Bitboard(Color::White);
-    constexpr Bitboard darkSquares = Bitboard(Color::Black);
-
-    constexpr Bitboard fileA = Bitboard(::fileA);
-    constexpr Bitboard fileB = Bitboard(::fileB);
-    constexpr Bitboard fileC = Bitboard(::fileC);
-    constexpr Bitboard fileD = Bitboard(::fileD);
-    constexpr Bitboard fileE = Bitboard(::fileE);
-    constexpr Bitboard fileF = Bitboard(::fileF);
-    constexpr Bitboard fileG = Bitboard(::fileG);
-    constexpr Bitboard fileH = Bitboard(::fileH);
-
-    constexpr Bitboard rank1 = Bitboard(::rank1);
-    constexpr Bitboard rank2 = Bitboard(::rank2);
-    constexpr Bitboard rank3 = Bitboard(::rank3);
-    constexpr Bitboard rank4 = Bitboard(::rank4);
-    constexpr Bitboard rank5 = Bitboard(::rank5);
-    constexpr Bitboard rank6 = Bitboard(::rank6);
-    constexpr Bitboard rank7 = Bitboard(::rank7);
-    constexpr Bitboard rank8 = Bitboard(::rank8);
+#endif
 }
