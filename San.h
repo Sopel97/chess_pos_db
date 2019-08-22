@@ -6,38 +6,38 @@
 
 namespace detail::san
 {
-    inline bool isFile(const char s)
+    constexpr bool isFile(const char s)
     {
         return s >= 'a' && s <= 'h';
     }
 
-    inline bool isRank(const char s)
+    constexpr bool isRank(const char s)
     {
         return s >= '1' && s <= '8';
     }
 
-    inline Rank parseRank(const char s)
+    constexpr Rank parseRank(const char s)
     {
         ASSERT(isRank(s));
 
         return fromOrdinal<Rank>(s - '1');
     }
 
-    inline File parseFile(const char s)
+    constexpr File parseFile(const char s)
     {
         ASSERT(isFile(s));
 
         return fromOrdinal<File>(s - 'a');
     }
 
-    inline Square parseSquare(const char* s)
+    constexpr Square parseSquare(const char* s)
     {
         const File file = parseFile(s[0]);
         const Rank rank = parseRank(s[1]);
         return Square(file, rank);
     }
 
-    inline bool contains(const char* s, char c)
+    constexpr bool contains(const char* s, char c)
     {
         while (*s)
         {
@@ -48,12 +48,12 @@ namespace detail::san
         return false;
     }
 
-    inline bool isSanCapture(const char* san)
+    constexpr bool isSanCapture(const char* san)
     {
         return contains(san, 'x');
     }
 
-    inline void removeSanCapture(char* san)
+    constexpr void removeSanCapture(char* san)
     {
         for (;;)
         {
@@ -73,7 +73,7 @@ namespace detail::san
         ASSERT(!contains(san, 'x'));
     }
 
-    inline void removeSanDecorations(char* san)
+    constexpr void removeSanDecorations(char* san)
     {
         // removes capture designation
         // removes instances of the following characters:
@@ -81,7 +81,7 @@ namespace detail::san
         // + - check
         // !
         // ?
-        // N
+        // N - novelty
         //
         // removal starts from the end of the san
         // and stops when any character not on the list above is found
@@ -100,8 +100,11 @@ namespace detail::san
             case '+':
             case '!':
             case '?':
-            case 'N':
                 *cur = '\0';
+                continue;
+
+            case 'N':
+                if (cur != san && *(cur - 1) != '=')* cur = '\0';
                 continue;
             }
 
@@ -111,15 +114,21 @@ namespace detail::san
         removeSanCapture(san);
     }
 
-    inline int len(const char* san)
+    constexpr int strlen(const char* san)
     {
         // optimized for short strings
         const char* cur = san;
         while (*cur) ++cur;
         return static_cast<int>(cur - san);
     }
+    
+    constexpr void strcpy(char* out, const char* san)
+    {
+        while (*san) *out++ = *san++;
+        *out = '\0';
+    }
 
-    inline PieceType parsePromotedPieceType(char c)
+    constexpr PieceType parsePromotedPieceType(char c)
     {
         switch (c)
         {
@@ -134,9 +143,11 @@ namespace detail::san
         default:
             ASSERT(false);
         }
+
+        return PieceType::None;
     }
 
-    inline Move sanToMove_Pawn(const Position& pos, const char* san)
+    constexpr Move sanToMove_Pawn(const Position& pos, const char* san)
     {
         // since we remove capture information it's either
         // 012345 idx
@@ -145,7 +156,7 @@ namespace detail::san
         // a1=Q
         // aa1=Q
 
-        const int sanLen = len(san);
+        const int sanLen = strlen(san);
 
         ASSERT(sanLen >= 2 && sanLen <= 5);
 
@@ -234,7 +245,7 @@ namespace detail::san
     }
 
     template <PieceType PieceTypeV>
-    inline Move sanToMove(const Position& pos, const char* san)
+    constexpr Move sanToMove(const Position& pos, const char* san)
     {
         static_assert(
             PieceTypeV == PieceType::Knight 
@@ -249,7 +260,7 @@ namespace detail::san
         // 1a1
         // a1a1
 
-        const int sanLen = len(san); 
+        const int sanLen = strlen(san); 
 
         ASSERT(sanLen >= 2 && sanLen <= 4);
 
@@ -335,9 +346,10 @@ namespace detail::san
 
         // shouldn't happen
         ASSERT(false);
+        return Move::null();
     }
 
-    inline Move sanToMove_King(const Position& pos, const char* san)
+    constexpr Move sanToMove_King(const Position& pos, const char* san)
     {
         // since we remove captures the only possible case is 
         // a1
@@ -350,7 +362,7 @@ namespace detail::san
         return Move{ fromSq, toSq };
     }
 
-    inline Move sanToMove_Castle(const Position& pos, const char* san)
+    constexpr Move sanToMove_Castle(const Position& pos, const char* san)
     {
         // either:
         // 012345 - idx
@@ -372,7 +384,7 @@ namespace detail::san
 // assumes that the the san is correct and the move
 // described by it is legal
 // NOT const char* because it removes signs of capture
-inline Move sanToMove(const Position& pos, char* san)
+constexpr Move sanToMove(const Position& pos, char* san)
 {
     // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
     // *above regex contains all valid SAN strings
@@ -398,3 +410,57 @@ inline Move sanToMove(const Position& pos, char* san)
         return detail::san::sanToMove_Pawn(pos, san);
     }
 }
+
+constexpr Move sanToMove(const Position& pos, const char* san)
+{
+    constexpr int maxSanLength = 16; // a very generous upper bound
+
+    char buffer[maxSanLength]{};
+
+    detail::san::strcpy(buffer, san);
+
+    return sanToMove(pos, buffer);
+}
+
+#if defined(USE_CONSTEXPR_INTRINSICS)
+static_assert(sanToMove(Position::startPosition(), "a4") == Move{ A2, A4 });
+static_assert(sanToMove(Position::startPosition(), "e3") == Move{ E2, E3 });
+static_assert(sanToMove(Position::startPosition(), "Nf3") == Move{ G1, F3 });
+
+static_assert(sanToMove(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -"), "a5") == Move{ A7, A5 });
+static_assert(sanToMove(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -"), "e6") == Move{ E7, E6 });
+static_assert(sanToMove(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -"), "Nf6") == Move{ G8, F6 });
+
+static_assert(sanToMove(Position::fromFen("k7/8/8/4pP2/8/8/8/K7 w - e6 0 2"), "fxe6") == Move{ F5, E6, MoveType::EnPassant });
+
+static_assert(sanToMove(Position::fromFen("k4q2/4p3/3Q1Q2/8/8/8/8/5K2 w - - 0 1"), "Qxe7") == Move{ D6, E7 });
+static_assert(sanToMove(Position::fromFen("k2q4/4p3/3Q1Q2/8/8/8/8/3K4 w - - 0 1"), "Qxe7!?") == Move{ F6, E7 });
+
+static_assert(sanToMove(Position::fromFen("k7/8/3Q1Q2/4r3/3Q1Q2/8/8/3K4 w - - 0 1"), "Qf6xe5") == Move{ F6, E5 });
+
+static_assert(sanToMove(Position::fromFen("k7/8/3Q1Q2/4r3/8/8/8/3K4 w - - 0 1"), "Qfxe5??!") == Move{ F6, E5 });
+
+static_assert(sanToMove(Position::fromFen("k7/6N1/6N1/3r1NN1/1N6/8/8/3K4 w - - 0 1"), "Nxd5") == Move{ B4, D5 });
+static_assert(sanToMove(Position::fromFen("k7/6N1/6N1/3r1NN1/1N6/8/8/3K4 w - - 0 1"), "Kc1?") == Move{ D1, C1 });
+static_assert(sanToMove(Position::fromFen("k7/6N1/6N1/3r1NN1/1N6/8/8/3K4 w - - 0 1"), "Nd4") == Move{ F5, D4 });
+
+static_assert(sanToMove(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1"), "Bh8") == Move{ E5, H8 });
+static_assert(sanToMove(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1"), "Beg7") == Move{ E5, G7 });
+static_assert(sanToMove(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1"), "Bhg7") == Move{ H6, G7 });
+static_assert(sanToMove(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1"), "Be4") == Move{ F3, E4 });
+
+static_assert(sanToMove(Position::fromFen("8/2B5/7B/2B5/k1B5/2B5/8/K7 w - - 0 1"), "B7e5") == Move{ C7, E5 });
+
+static_assert(sanToMove(Position::fromFen("1k6/6N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1"), "O-O!") == Move{ E1, H1, MoveType::Castle });
+static_assert(sanToMove(Position::fromFen("1k6/6N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1"), "O-O-ON") == Move{ E1, A1, MoveType::Castle });
+
+static_assert(sanToMove(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1"), "d8=Q") == Move{ D7, D8, MoveType::Promotion, whiteQueen });
+static_assert(sanToMove(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1"), "d8=R") == Move{ D7, D8, MoveType::Promotion, whiteRook });
+static_assert(sanToMove(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1"), "d8=B") == Move{ D7, D8, MoveType::Promotion, whiteBishop });
+static_assert(sanToMove(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1"), "d8=N") == Move{ D7, D8, MoveType::Promotion, whiteKnight });
+
+static_assert(sanToMove(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -"), "e1=Q") == Move{ E2, E1, MoveType::Promotion, blackQueen });
+static_assert(sanToMove(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -"), "e1=R") == Move{ E2, E1, MoveType::Promotion, blackRook });
+static_assert(sanToMove(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -"), "e1=B") == Move{ E2, E1, MoveType::Promotion, blackBishop });
+static_assert(sanToMove(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -"), "e1=N") == Move{ E2, E1, MoveType::Promotion, blackKnight });
+#endif

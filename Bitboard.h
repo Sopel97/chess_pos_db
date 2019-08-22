@@ -212,6 +212,11 @@ public:
         return lhs.m_squares == rhs.m_squares;
     }
 
+    constexpr bool friend operator!=(Bitboard lhs, Bitboard rhs) noexcept
+    {
+        return lhs.m_squares != rhs.m_squares;
+    }
+
     constexpr Bitboard& operator+=(Offset offset)
     {
         if (offset.ranks > 0)

@@ -26,30 +26,4 @@ void print(Bitboard bb)
 
 int main()
 {
-    print(0x0000400040201008_bb);
-
-    constexpr Square sq = H5;
-    constexpr Bitboard occ = 0x38ddd8a535d2cbbd_bb;
-    print(occ);
-    print(bb::attacks(PieceType::Queen, sq, occ));
-    /*
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::North>(sq, occ));
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::NorthEast>(sq, occ));
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::East>(sq, occ));
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::SouthEast>(sq, occ));
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::South>(sq, occ));
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::SouthWest>(sq, occ));
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::West>(sq, occ));
-    std::cout << '\n';
-    print(bb::detail::slidingAttacks<bb::detail::NorthWest>(sq, occ));
-    std::cout << '\n';
-    print(bb::pseudoAttacks(PieceType::Bishop, sq));
-    */
 }

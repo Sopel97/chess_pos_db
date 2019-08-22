@@ -12,8 +12,8 @@
 struct Board
 {
 private:
-    static constexpr EnumArray2<Square, Color, bool> m_rookCastleDestinations = { { {{ F1, D1 }}, {{ F8, D8 }} } };
-    static constexpr EnumArray2<Square, Color, bool> m_kingCastleDestinations = { { {{ G1, C1 }}, {{ G8, C8 }} } };
+    static constexpr EnumArray2<Square, Color, bool> m_rookCastleDestinations = { { {{ D1, F1 }}, {{ D8, F8 }} } };
+    static constexpr EnumArray2<Square, Color, bool> m_kingCastleDestinations = { { {{ C1, G1 }}, {{ C8, G8 }} } };
 
 public:
 
@@ -120,7 +120,24 @@ public:
         return *(current + 1) == 'w' ? Color::White : Color::Black;
     }
 
-    void place(Piece piece, Square sq)
+    constexpr friend bool operator==(const Board& lhs, const Board& rhs) noexcept
+    {
+        bool equal = true;
+        for (Square sq = A1; sq <= H8; ++sq)
+        {
+            if (lhs.m_pieces[sq] != rhs.m_pieces[sq])
+            {
+                equal = false;
+                break;
+            }
+        }
+
+        ASSERT(bbsEqual(lhs, rhs) == equal);
+
+        return equal;
+    }
+
+    constexpr void place(Piece piece, Square sq)
     {
         ASSERT(sq.isOk());
 
@@ -129,7 +146,7 @@ public:
         m_pieceBB[piece] |= sq;
     }
 
-    void print(std::ostream& out) const
+    constexpr void print(std::ostream& out) const
     {
         for (Rank r = rank8; r >= rank1; --r)
         {
@@ -143,7 +160,7 @@ public:
 
     // returns captured piece
     // doesn't check validity
-    Piece doMove(Move move)
+    constexpr Piece doMove(Move move)
     {
         if (move.type == MoveType::Normal || move.type == MoveType::Promotion)
         {
@@ -219,7 +236,7 @@ public:
         }
     }
 
-    void undoMove(Move move, Piece capturedPiece)
+    constexpr void undoMove(Move move, Piece capturedPiece)
     {
         if (move.type == MoveType::Normal || move.type == MoveType::Promotion)
         {
@@ -289,13 +306,20 @@ public:
         }
     }
 
-    bool leavesKingInCheck(Move move, Color color) const
+    constexpr bool leavesKingInCheck(Move move, Color color) const
     {
         // checks whether by doing a move we uncover our king to a check
-        // assumes that before the move the king was not in check
         // doesn't verify castlings as it is supposed to only cover undiscovered checks
 
         ASSERT(move.from.isOk() && move.to.isOk());
+
+        const Square ksq = kingSquare(color);
+
+        if (!bb::pseudoAttacks<PieceType::Queen>(ksq).isSet(move.from))
+        {
+            // if the square is not aligned with the king we don't have to check anything
+            return false;
+        }
 
         if (move.type == MoveType::Castle)
         {
@@ -310,26 +334,28 @@ public:
             occupied ^= capturedPieceSq;
         }
 
-        const Square ksq = kingSquare(color);
-
-        const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(ksq, occupied);
-        const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
-
         const Bitboard opponentQueens = piecesBB(Piece(PieceType::Queen, !color));
         const Bitboard opponentBishopLikePieces = piecesBB(Piece(PieceType::Bishop, !color)) | opponentQueens;
         const Bitboard opponentRookLikePieces = piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens;
-        
-        return (bishopAttacks & opponentBishopLikePieces).any() || (rookAttacks & opponentRookLikePieces).any();
+
+        const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(ksq, occupied);
+        if ((bishopAttacks & opponentBishopLikePieces).any())
+        {
+            return true;
+        }
+
+        const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
+        return (rookAttacks & opponentRookLikePieces).any();
     }
 
-    Piece pieceAt(Square sq) const
+    constexpr Piece pieceAt(Square sq) const
     {
         ASSERT(sq.isOk());
 
         return m_pieces[sq];
     }
 
-    Bitboard piecesBB(Color c) const
+    constexpr Bitboard piecesBB(Color c) const
     {
         return
             m_pieceBB[Piece(PieceType::Pawn, c)]
@@ -340,17 +366,17 @@ public:
             | m_pieceBB[Piece(PieceType::King, c)];
     }
 
-    Square kingSquare(Color c) const
+    constexpr Square kingSquare(Color c) const
     {
         return piecesBB(Piece(PieceType::King, c)).first();
     }
 
-    Bitboard piecesBB(Piece pc) const
+    constexpr Bitboard piecesBB(Piece pc) const
     {
         return m_pieceBB[pc];
     }
 
-    Bitboard piecesBB() const
+    constexpr Bitboard piecesBB() const
     {
         Bitboard bb{};
 
@@ -360,7 +386,7 @@ public:
         return bb;
     }
 
-    bool isPromotion(Square from, Square to) const
+    constexpr bool isPromotion(Square from, Square to) const
     {
         ASSERT(from.isOk() && to.isOk());
 
@@ -374,6 +400,19 @@ private:
     // NOTE: currently we don't track it because it's not 
     // required to perform ep if we don't need to check validity
     // Square m_epSquare = Square::none(); 
+
+    static constexpr bool bbsEqual(const Board& lhs, const Board& rhs) noexcept
+    {
+        for (Piece pc : values<Piece>())
+        {
+            if (lhs.m_pieceBB[pc] != rhs.m_pieceBB[pc])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 };
 
 struct Position : public Board
@@ -393,12 +432,17 @@ struct Position : public Board
         return pos;
     }
 
+    static constexpr Position startPosition()
+    {
+        return fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    }
+
     constexpr void set(const char* fen)
     {
         m_sideToMove = BaseType::set(fen);
     }
 
-    Piece doMove(Move move)
+    constexpr Piece doMove(Move move)
     {
         ASSERT(move.from.isOk() && move.to.isOk());
 
@@ -407,22 +451,88 @@ struct Position : public Board
         return captured;
     }
 
-    void undoMove(Move move, Piece capturedPiece)
+    constexpr void undoMove(Move move, Piece capturedPiece)
     {
         BaseType::undoMove(move, capturedPiece);
         m_sideToMove = !m_sideToMove;
     }
 
-    Color sideToMove() const
+    constexpr Color sideToMove() const
     {
         return m_sideToMove;
     }
 
-    bool leavesKingInCheck(Move move) const
+    constexpr bool leavesKingInCheck(Move move) const
     {
         return BaseType::leavesKingInCheck(move, m_sideToMove);
+    }
+
+    constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept
+    {
+        return lhs.m_sideToMove == rhs.m_sideToMove && static_cast<const Board&>(lhs) == static_cast<const Board&>(rhs);
+    }
+
+    // these are supposed to be used only for testing
+    // that's why there's this assert in afterMove
+
+    constexpr Position beforeMove(Move move, Piece captured) const
+    {
+        Position cpy(*this);
+        cpy.undoMove(move, captured);
+        return cpy;
+    }
+
+    constexpr Position afterMove(Move move) const
+    {
+        Position cpy(*this);
+        auto pc = cpy.doMove(move);
+
+        //ASSERT(cpy.beforeMove(move, pc) == *this);
+
+        return cpy;
     }
 
 private:
     Color m_sideToMove;
 };
+
+static_assert(Position::startPosition().afterMove(Move{ A2, A4 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR b KQkq -"));
+static_assert(Position::startPosition().afterMove(Move{ E2, E3 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq -"));
+static_assert(Position::startPosition().afterMove(Move{ G1, F3 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq -"));
+
+static_assert(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -").afterMove(Move{ A7, A5 }) == Position::fromFen("rnbqkbnr/1ppppppp/8/p7/8/8/PPPPPPPP/RNBQKBNR w KQkq -"));
+static_assert(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -").afterMove(Move{ E7, E6 }) == Position::fromFen("rnbqkbnr/pppp1ppp/4p3/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"));
+static_assert(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -").afterMove(Move{ G8, F6 }) == Position::fromFen("rnbqkb1r/pppppppp/5n2/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"));
+
+static_assert(Position::fromFen("k7/8/8/4pP2/8/8/8/K7 w - e6 0 2").afterMove(Move{ F5, E6, MoveType::EnPassant }) == Position::fromFen("k7/8/4P3/8/8/8/8/K7 b - -"));
+
+static_assert(Position::fromFen("k4q2/4p3/3Q1Q2/8/8/8/8/5K2 w - - 0 1").afterMove(Move{ D6, E7 }) == Position::fromFen("k4q2/4Q3/5Q2/8/8/8/8/5K2 b - -"));
+static_assert(Position::fromFen("k2q4/4p3/3Q1Q2/8/8/8/8/3K4 w - - 0 1").afterMove(Move{ F6, E7 }) == Position::fromFen("k2q4/4Q3/3Q4/8/8/8/8/3K4 b - -"));
+
+static_assert(Position::fromFen("k7/8/3Q1Q2/4r3/3Q1Q2/8/8/3K4 w - - 0 1").afterMove(Move{ F6, E5 }) == Position::fromFen("k7/8/3Q4/4Q3/3Q1Q2/8/8/3K4 b - -"));
+
+static_assert(Position::fromFen("k7/8/3Q1Q2/4r3/8/8/8/3K4 w - - 0 1").afterMove(Move{ F6, E5 }) == Position::fromFen("k7/8/3Q4/4Q3/8/8/8/3K4 b - -"));
+
+static_assert(Position::fromFen("k7/6N1/6N1/3r1NN1/1N6/8/8/3K4 w - - 0 1").afterMove(Move{ B4, D5 }) == Position::fromFen("k7/6N1/6N1/3N1NN1/8/8/8/3K4 b - -"));
+static_assert(Position::fromFen("k7/6N1/6N1/3r1NN1/1N6/8/8/3K4 w - - 0 1").afterMove(Move{ D1, C1 }) == Position::fromFen("k7/6N1/6N1/3r1NN1/1N6/8/8/2K5 b - -"));
+static_assert(Position::fromFen("k7/6N1/6N1/3r1NN1/1N6/8/8/3K4 w - - 0 1").afterMove(Move{ F5, D4 }) == Position::fromFen("k7/6N1/6N1/3r2N1/1N1N4/8/8/3K4 b - -"));
+
+static_assert(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1").afterMove(Move{ E5, H8 }) == Position::fromFen("7B/8/7B/8/6B1/k4B2/4B3/K7 b - -"));
+static_assert(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1").afterMove(Move{ E5, G7 }) == Position::fromFen("8/6B1/7B/8/6B1/k4B2/4B3/K7 b - -"));
+static_assert(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1").afterMove(Move{ H6, G7 }) == Position::fromFen("8/6B1/8/4B3/6B1/k4B2/4B3/K7 b - -"));
+static_assert(Position::fromFen("8/8/7B/4B3/6B1/k4B2/4B3/K7 w - - 0 1").afterMove(Move{ F3, E4 }) == Position::fromFen("8/8/7B/4B3/4B1B1/k7/4B3/K7 b - -"));
+
+static_assert(Position::fromFen("8/2B5/7B/2B5/k1B5/2B5/8/K7 w - - 0 1").afterMove(Move{ C7, E5 }) == Position::fromFen("8/8/7B/2B1B3/k1B5/2B5/8/K7 b - -"));
+
+static_assert(Position::fromFen("1k6/6N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1").afterMove(Move{ E1, H1, MoveType::Castle }) == Position::fromFen("1k6/6N1/5rN1/5NN1/1N6/8/8/R4RK1 b - - 1 1"));
+static_assert(Position::fromFen("1k6/6N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1").afterMove(Move{ E1, A1, MoveType::Castle }) == Position::fromFen("1k6/6N1/5rN1/5NN1/1N6/8/8/2KR3R b - - 1 1"));
+
+static_assert(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1").afterMove(Move{ D7, D8, MoveType::Promotion, whiteQueen }) == Position::fromFen("1k1Q4/6N1/5rN1/5NN1/1N6/8/8/R3K2R b KQ - 0 1"));
+static_assert(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1").afterMove(Move{ D7, D8, MoveType::Promotion, whiteRook }) == Position::fromFen("1k1R4/6N1/5rN1/5NN1/1N6/8/8/R3K2R b KQ - 0 1"));
+static_assert(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1").afterMove(Move{ D7, D8, MoveType::Promotion, whiteBishop }) == Position::fromFen("1k1B4/6N1/5rN1/5NN1/1N6/8/8/R3K2R b KQ - 0 1"));
+static_assert(Position::fromFen("1k6/3P2N1/5rN1/5NN1/1N6/8/8/R3K2R w KQ - 0 1").afterMove(Move{ D7, D8, MoveType::Promotion, whiteKnight }) == Position::fromFen("1k1N4/6N1/5rN1/5NN1/1N6/8/8/R3K2R b KQ - 0 1"));
+
+static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2, E1, MoveType::Promotion, blackQueen }) == Position::fromFen("k7/8/8/8/8/8/8/K3q3 w - - 0 2"));
+static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2, E1, MoveType::Promotion, blackRook }) == Position::fromFen("k7/8/8/8/8/8/8/K3r3 w - - 0 2"));
+static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2, E1, MoveType::Promotion, blackBishop }) == Position::fromFen("k7/8/8/8/8/8/8/K3b3 w - - 0 2"));
+static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2, E1, MoveType::Promotion, blackKnight }) == Position::fromFen("k7/8/8/8/8/8/8/K3n3 w - - 0 2"));

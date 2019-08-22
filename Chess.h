@@ -458,7 +458,7 @@ struct Square
     constexpr friend Square operator+(Square sq, FlatSquareOffset offset)
     {
         Square sqCpy = sq;
-        sq += offset;
+        sqCpy += offset;
         return sqCpy;
     }
 
@@ -662,6 +662,14 @@ struct Move
     MoveType type = MoveType::Normal;
     Piece promotedPiece = Piece::none();
 
+    constexpr friend bool operator==(const Move& lhs, const Move& rhs) noexcept
+    {
+        return lhs.from == rhs.from
+            && lhs.to == rhs.to
+            && lhs.type == rhs.type
+            && lhs.promotedPiece == rhs.promotedPiece;
+    }
+
     constexpr static Move null()
     {
         return Move{ Square::none(), Square::none() };
@@ -677,3 +685,13 @@ struct Move
         return moves[ct][c];
     }
 };
+
+static_assert(A4 + Offset{ 0, 1 } == A5);
+static_assert(A4 + Offset{ 0, 2 } == A6);
+static_assert(A4 + Offset{ 0, -2 } == A2);
+static_assert(A4 + Offset{ 0, -1 } == A3);
+
+static_assert(E4 + Offset{ 1, 0 } == F4);
+static_assert(E4 + Offset{ 2, 0 } == G4);
+static_assert(E4 + Offset{ -1, 0 } == D4);
+static_assert(E4 + Offset{ -2, 0 } == C4);
