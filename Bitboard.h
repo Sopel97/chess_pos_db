@@ -11,7 +11,7 @@ struct BitboardIterator
     using value_type = Square;
     using difference_type = std::ptrdiff_t;
     using reference = Square;
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::input_iterator_tag;
     using pointer = const Square*;
 
     constexpr BitboardIterator() :

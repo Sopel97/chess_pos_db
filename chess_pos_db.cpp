@@ -33,6 +33,13 @@ int main()
 {
     pgn::LazyPgnFileReader fr("data/lichess_db_standard_rated_2013-01.pgn");
     int i = 0;
-    while (fr.nextGame().has_value()) ++i;
+    for (auto& game : fr)
+    {
+        ++i;
+        for (auto& pos : game.positions())
+        {
+
+        }
+    }
     std::cout << i << '\n';
 }

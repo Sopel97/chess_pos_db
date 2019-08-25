@@ -425,6 +425,11 @@ struct Position : public Board
     {
     }
 
+    constexpr void set(const char* fen)
+    {
+        m_sideToMove = BaseType::set(fen);
+    }
+
     static constexpr Position fromFen(const char* fen)
     {
         Position pos{};
@@ -434,12 +439,8 @@ struct Position : public Board
 
     static constexpr Position startPosition()
     {
-        return fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    }
-
-    constexpr void set(const char* fen)
-    {
-        m_sideToMove = BaseType::set(fen);
+        constexpr Position pos = fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        return pos;
     }
 
     constexpr Piece doMove(Move move)
