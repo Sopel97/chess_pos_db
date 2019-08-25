@@ -84,45 +84,45 @@ struct EnumTraits<PieceType>
 
 struct Piece
 {
-    static constexpr Piece none()
+    [[nodiscard]] static constexpr Piece none()
     {
         return Piece(PieceType::None, Color::White);
     }
 
-    constexpr Piece() :
+    constexpr Piece() noexcept :
         Piece(PieceType::None, Color::White)
     {
 
     }
 
-    constexpr Piece(PieceType type, Color color) :
+    constexpr Piece(PieceType type, Color color) noexcept :
         m_id((ordinal(type) << 1) | ordinal(color))
     {
     }
 
     constexpr Piece& operator=(const Piece& other) = default;
 
-    constexpr friend bool operator==(Piece lhs, Piece rhs)
+    [[nodiscard]] constexpr friend bool operator==(Piece lhs, Piece rhs) noexcept
     {
         return lhs.m_id == rhs.m_id;
     }
 
-    constexpr friend bool operator!=(Piece lhs, Piece rhs)
+    [[nodiscard]] constexpr friend bool operator!=(Piece lhs, Piece rhs) noexcept
     {
         return !(lhs == rhs);
     }
 
-    constexpr PieceType type() const
+    [[nodiscard]] constexpr PieceType type() const
     {
         return fromOrdinal<PieceType>(m_id >> 1);
     }
 
-    constexpr Color color() const
+    [[nodiscard]] constexpr Color color() const
     {
         return fromOrdinal<Color>(m_id & 1);
     }
 
-    constexpr explicit operator int() const
+    [[nodiscard]] constexpr explicit operator int() const
     {
         return static_cast<int>(m_id);
     }
@@ -176,7 +176,7 @@ struct EnumTraits<Piece>
     }
 };
 
-constexpr char toChar(Piece piece)
+[[nodiscard]] constexpr char toChar(Piece piece)
 {
     constexpr EnumArray<char, Piece> chars = {
         'P', 'p',
@@ -194,12 +194,12 @@ constexpr char toChar(Piece piece)
 template <typename TagT>
 struct Coord
 {
-    constexpr explicit Coord(int i) :
+    constexpr explicit Coord(int i) noexcept :
         m_i(i)
     {
     }
 
-    constexpr explicit operator int() const
+    [[nodiscard]] constexpr explicit operator int() const
     {
         return static_cast<int>(m_i);
     }
@@ -247,32 +247,32 @@ struct Coord
         return c1.m_i - c2.m_i;
     }
 
-    constexpr friend bool operator==(const Coord& c1, const Coord& c2)
+    [[nodiscard]] constexpr friend bool operator==(const Coord& c1, const Coord& c2) noexcept
     {
         return c1.m_i == c2.m_i;
     }
 
-    constexpr friend bool operator!=(const Coord& c1, const Coord& c2)
+    [[nodiscard]] constexpr friend bool operator!=(const Coord& c1, const Coord& c2) noexcept
     {
         return c1.m_i != c2.m_i;
     }
 
-    constexpr friend bool operator<(const Coord& c1, const Coord& c2)
+    [[nodiscard]] constexpr friend bool operator<(const Coord& c1, const Coord& c2) noexcept
     {
         return c1.m_i < c2.m_i;
     }
 
-    constexpr friend bool operator<=(const Coord& c1, const Coord& c2)
+    [[nodiscard]] constexpr friend bool operator<=(const Coord& c1, const Coord& c2) noexcept
     {
         return c1.m_i <= c2.m_i;
     }
 
-    constexpr friend bool operator>(const Coord& c1, const Coord& c2)
+    [[nodiscard]] constexpr friend bool operator>(const Coord& c1, const Coord& c2) noexcept
     {
         return c1.m_i > c2.m_i;
     }
 
-    constexpr friend bool operator>=(const Coord& c1, const Coord& c2)
+    [[nodiscard]] constexpr friend bool operator>=(const Coord& c1, const Coord& c2) noexcept
     {
         return c1.m_i >= c2.m_i;
     }
@@ -350,7 +350,7 @@ struct FlatSquareOffset
 {
     int value;
 
-    constexpr FlatSquareOffset(int files, int ranks) :
+    constexpr FlatSquareOffset(int files, int ranks) noexcept :
         value(files + ranks * cardinality<File>())
     {
 
@@ -362,7 +362,7 @@ struct Offset
     std::int8_t files;
     std::int8_t ranks;
 
-    constexpr FlatSquareOffset flat() const
+    [[nodiscard]] constexpr FlatSquareOffset flat() const
     {
         return { files, ranks };
     }
@@ -373,7 +373,7 @@ struct SquareCoords
     File file;
     Rank rank;
 
-    constexpr SquareCoords(File f, Rank r) :
+    constexpr SquareCoords(File f, Rank r) noexcept :
         file(f),
         rank(r)
     {
@@ -386,7 +386,7 @@ struct SquareCoords
         return c;
     }
 
-    constexpr friend SquareCoords operator+(const SquareCoords& c, Offset offset)
+    [[nodiscard]] constexpr friend SquareCoords operator+(const SquareCoords& c, Offset offset)
     {
         SquareCoords cpy(c);
         cpy.file += offset.files;
@@ -394,7 +394,7 @@ struct SquareCoords
         return cpy;
     }
 
-    constexpr bool isOk() const
+    [[nodiscard]] constexpr bool isOk() const
     {
         return file >= fileA && file <= fileH && rank >= rank1 && rank <= rank8;
     }
@@ -402,43 +402,43 @@ struct SquareCoords
 
 struct Square
 {
-    static constexpr Square none()
+    [[nodiscard]] static constexpr Square none()
     {
         return Square(cardinality<Rank>() * cardinality<File>());
     }
 
-    constexpr explicit Square(int idx) :
+    constexpr explicit Square(int idx) noexcept :
         m_id(idx)
     {
     }
 
-    constexpr Square(File file, Rank rank) :
+    constexpr Square(File file, Rank rank) noexcept :
         m_id(ordinal(file) + ordinal(rank) * cardinality<File>())
     {
 
     }
 
-    constexpr explicit Square(SquareCoords coords) :
+    constexpr explicit Square(SquareCoords coords) noexcept :
         Square(coords.file, coords.rank)
     {
     }
 
-    constexpr friend bool operator<=(Square lhs, Square rhs)
+    [[nodiscard]] constexpr friend bool operator<=(Square lhs, Square rhs) noexcept
     {
         return lhs.m_id <= rhs.m_id;
     }
 
-    constexpr friend bool operator>=(Square lhs, Square rhs)
+    [[nodiscard]] constexpr friend bool operator>=(Square lhs, Square rhs) noexcept
     {
         return lhs.m_id >= rhs.m_id;
     }
 
-    constexpr friend bool operator==(Square lhs, Square rhs)
+    [[nodiscard]] constexpr friend bool operator==(Square lhs, Square rhs) noexcept
     {
         return lhs.m_id == rhs.m_id;
     }
 
-    constexpr friend bool operator!=(Square lhs, Square rhs)
+    [[nodiscard]] constexpr friend bool operator!=(Square lhs, Square rhs) noexcept
     {
         return !(lhs == rhs);
     }
@@ -455,7 +455,7 @@ struct Square
         return sq;
     }
 
-    constexpr friend Square operator+(Square sq, FlatSquareOffset offset)
+    [[nodiscard]] constexpr friend Square operator+(Square sq, FlatSquareOffset offset)
     {
         Square sqCpy = sq;
         sqCpy += offset;
@@ -468,7 +468,7 @@ struct Square
         return sq;
     }
 
-    constexpr friend Square operator+(Square sq, Offset offset)
+    [[nodiscard]] constexpr friend Square operator+(Square sq, Offset offset)
     {
         return operator+(sq, offset.flat());
     }
@@ -478,27 +478,27 @@ struct Square
         return operator+=(sq, offset.flat());
     }
 
-    constexpr explicit operator int() const
+    [[nodiscard]] constexpr explicit operator int() const
     {
         return m_id;
     }
 
-    constexpr File file() const
+    [[nodiscard]] constexpr File file() const
     {
         return File(m_id % cardinality<Rank>());
     }
 
-    constexpr Rank rank() const
+    [[nodiscard]] constexpr Rank rank() const
     {
         return Rank(m_id / cardinality<Rank>());
     }
 
-    constexpr SquareCoords coords() const
+    [[nodiscard]] constexpr SquareCoords coords() const
     {
         return { file(), rank() };
     }
 
-    constexpr Color color() const
+    [[nodiscard]] constexpr Color color() const
     {
         return fromOrdinal<Color>((~m_id) & 1);
     }
@@ -513,7 +513,7 @@ struct Square
         m_id ^= 0b111000;
     }
 
-    constexpr bool isOk() const
+    [[nodiscard]] constexpr bool isOk() const
     {
         return m_id >= 0 && m_id < Square::none().m_id;
     }
@@ -662,7 +662,7 @@ struct Move
     MoveType type = MoveType::Normal;
     Piece promotedPiece = Piece::none();
 
-    constexpr friend bool operator==(const Move& lhs, const Move& rhs) noexcept
+    [[nodiscard]] constexpr friend bool operator==(const Move& lhs, const Move& rhs) noexcept
     {
         return lhs.from == rhs.from
             && lhs.to == rhs.to
@@ -670,12 +670,12 @@ struct Move
             && lhs.promotedPiece == rhs.promotedPiece;
     }
 
-    constexpr static Move null()
+    [[nodiscard]] constexpr static Move null()
     {
         return Move{ Square::none(), Square::none() };
     }
 
-    constexpr static Move castle(CastleType ct, Color c)
+    [[nodiscard]] constexpr static Move castle(CastleType ct, Color c)
     {
         constexpr EnumArray2<Move, CastleType, Color> moves = {{
             {{ { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } }},

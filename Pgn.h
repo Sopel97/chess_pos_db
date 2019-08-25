@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 
+#include "Assert.h"
 #include "Position.h"
 
 namespace pgn
@@ -18,18 +19,18 @@ namespace pgn
 
     struct UnparsedRegion
     {
-        UnparsedRegion(const char* begin, const char* end) :
+        UnparsedRegion(const char* begin, const char* end) noexcept :
             m_begin(begin),
             m_end(end)
         {
         }
 
-        const char* begin() const
+        [[nodiscard]] const char* begin() const
         {
             return m_begin;
         }
 
-        const char* end() const
+        [[nodiscard]] const char* end() const
         {
             return m_end;
         }
@@ -53,8 +54,9 @@ namespace pgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const Position*;
 
-            UnparsedPositionsIterator(UnparsedGamePositions& positions) :
-                m_positions(&positions)
+            UnparsedPositionsIterator(UnparsedRegion& moveRegion) noexcept :
+                m_moveRegion(moveRegion),
+                m_position(Position::startPosition())
             {
             }
 
@@ -64,28 +66,29 @@ namespace pgn
                 return *this;
             }
 
-            bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs)
+            [[nodiscard]] bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
             {
                 return true;
             }
 
-            bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs)
+            [[nodiscard]] bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
             {
                 return !(lhs == rhs);
             }
 
-            const Position& operator*() const
+            [[nodiscard]] const Position& operator*() const
             {
-                return m_positions->m_position;
+                return m_position;
             }
 
-            const Position* operator->() const
+            [[nodiscard]] const Position* operator->() const
             {
-                return &m_positions->m_position;
+                return &m_position;
             }
 
         private:
-            UnparsedGamePositions* m_positions;
+            UnparsedRegion m_moveRegion;
+            Position m_position;
         };
 
     public:
@@ -93,46 +96,56 @@ namespace pgn
         using iterator = UnparsedPositionsIterator;
         using const_iterator = UnparsedPositionsIterator;
 
-        UnparsedGamePositions(UnparsedRegion moveRegion) :
-            m_moveRegion(moveRegion),
-            m_position(Position::startPosition())
+        UnparsedGamePositions(UnparsedRegion moveRegion) noexcept :
+            m_moveRegion(moveRegion)
         {
+            ASSERT(m_moveRegion.begin() != nullptr);
+            ASSERT(m_moveRegion.end() != nullptr);
         }
 
-        UnparsedPositionsIterator begin() &
+        [[nodiscard]] UnparsedPositionsIterator begin()
         {
-            return { *this };
+            return { m_moveRegion };
         }
 
-        UnparsedPositionsIterator::Sentinel end() const &
+        [[nodiscard]] UnparsedPositionsIterator::Sentinel end() const
         {
             return {};
         }
 
     private:
         UnparsedRegion m_moveRegion;
-        Position m_position;
     };
 
     struct UnparsedGame
     {
-        UnparsedGame(UnparsedRegion tagRegion, UnparsedRegion moveRegion) :
-            m_tagRegion(tagRegion),
-            m_moveRegion(moveRegion)
+        explicit UnparsedGame() :
+            m_tagRegion(nullptr, nullptr),
+            m_moveRegion(nullptr, nullptr)
         {
         }
 
-        UnparsedRegion tagRegion() const
+        UnparsedGame(UnparsedRegion tagRegion, UnparsedRegion moveRegion) noexcept :
+            m_tagRegion(tagRegion),
+            m_moveRegion(moveRegion)
+        {
+            ASSERT(*m_tagRegion.begin() == '[');
+            ASSERT(*m_tagRegion.end() == '\n');
+            ASSERT(*m_moveRegion.begin() == '1');
+            ASSERT(*m_moveRegion.end() == '\n');
+        }
+
+        [[nodiscard]] UnparsedRegion tagRegion() const
         {
             return m_tagRegion;
         }
 
-        UnparsedRegion moveRegion() const
+        [[nodiscard]] UnparsedRegion moveRegion() const
         {
             return m_moveRegion;
         }
 
-        UnparsedGamePositions positions() const
+        [[nodiscard]] UnparsedGamePositions positions() const
         {
             return UnparsedGamePositions(m_moveRegion);
         }
@@ -158,7 +171,7 @@ namespace pgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const UnparsedGame*;
 
-            LazyPgnFileReaderIterator(LazyPgnFileReader& fr) :
+            LazyPgnFileReaderIterator(LazyPgnFileReader& fr) noexcept :
                 m_fileReader(&fr)
             {
             }
@@ -169,22 +182,22 @@ namespace pgn
                 return *this;
             }
 
-            bool friend operator==(const LazyPgnFileReaderIterator& lhs, Sentinel rhs)
+            [[nodiscard]] bool friend operator==(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept
             {
                 return lhs.isEnd();
             }
 
-            bool friend operator!=(const LazyPgnFileReaderIterator& lhs, Sentinel rhs)
+            [[nodiscard]] bool friend operator!=(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept
             {
                 return !(lhs == rhs);
             }
 
-            const UnparsedGame& operator*() const
+            [[nodiscard]] const UnparsedGame& operator*() const
             {
                 return m_fileReader->m_game;
             }
 
-            const UnparsedGame* operator->() const
+            [[nodiscard]] const UnparsedGame* operator->() const
             {
                 return &m_fileReader->m_game;
             }
@@ -192,7 +205,7 @@ namespace pgn
         private:
             LazyPgnFileReader* m_fileReader;
 
-            bool isEnd() const
+            [[nodiscard]] bool isEnd() const
             {
                 return m_fileReader->m_buffer.front() == '\0';
             }
@@ -210,7 +223,7 @@ namespace pgn
         LazyPgnFileReader(const std::filesystem::path& path) :
             m_file(nullptr, &std::fclose),
             m_buffer(bufferSize + 1), // one spot for '\0',
-            m_game({ nullptr, nullptr }, { nullptr, nullptr }),
+            m_game{},
             m_firstUnprocessed(m_buffer.data())
         {
             auto strPath = path.string();
@@ -223,12 +236,19 @@ namespace pgn
             moveToNextGame();
         }
 
-        LazyPgnFileReaderIterator begin() &
+        [[nodiscard]] LazyPgnFileReaderIterator begin()
         {
+#if !defined(NDEBUG)
+            // only one iterator can be constructed
+            // because the file can only be traversed once
+            ASSERT(!m_iteratorConstructed);
+            m_iteratorConstructed = true;
+#endif
+
             return { *this };
         }
 
-        LazyPgnFileReaderIterator::Sentinel end() const &
+        [[nodiscard]] LazyPgnFileReaderIterator::Sentinel end() const
         {
             return {};
         }
@@ -272,6 +292,9 @@ namespace pgn
         std::vector<char> m_buffer;
         UnparsedGame m_game;
         const char* m_firstUnprocessed; // we don't go back to anything before that
+#if !defined(NDEBUG)
+        bool m_iteratorConstructed = false;
+#endif
 
         void refillBuffer()
         {

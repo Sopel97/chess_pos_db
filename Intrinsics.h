@@ -13,7 +13,7 @@
 #if defined (USE_CONSTEXPR_INTRINSICS)
 namespace intrin
 {
-    constexpr int popcount(std::uint64_t value)
+    [[nodiscard]] constexpr int popcount(std::uint64_t value)
     {
         int r = 0;
         while (value)
@@ -24,7 +24,7 @@ namespace intrin
         return r;
     }
 
-    constexpr int lsb(std::uint64_t value)
+    [[nodiscard]] constexpr int lsb(std::uint64_t value)
     {
         // assumes value != 0
 
@@ -33,7 +33,7 @@ namespace intrin
         return 63 - r;
     }
 
-    constexpr int msb(std::uint64_t value)
+    [[nodiscard]] constexpr int msb(std::uint64_t value)
     {
         // assumes value != 0
 
@@ -45,7 +45,7 @@ namespace intrin
 #else
 namespace intrin
 {
-    inline int popcount(std::uint64_t b)
+    [[nodiscard]] inline int popcount(std::uint64_t b)
     {
 #if defined(_MSC_VER) || defined(__INTEL_COMPILER)
 
@@ -60,13 +60,13 @@ namespace intrin
 
 #if defined(__GNUC__)  // GCC, Clang, ICC
 
-    inline int lsb(std::uint64_t value) 
+    [[nodiscard]] inline int lsb(std::uint64_t value)
     {
         assert(value != 0);
         return __builtin_ctzll(value);
     }
 
-    inline Square msb(std::uint64_t value) 
+    [[nodiscard]] inline Square msb(std::uint64_t value)
     {
         assert(value != 0);
         return 63 ^ __builtin_clzll(value);
@@ -74,7 +74,7 @@ namespace intrin
 
 #elif defined(_MSC_VER)  // MSVC
 
-    inline int lsb(std::uint64_t value) 
+    [[nodiscard]] inline int lsb(std::uint64_t value)
     {
         assert(value != 0);
         unsigned long idx;
@@ -82,7 +82,7 @@ namespace intrin
         return static_cast<int>(idx);
     }
 
-    inline int msb(std::uint64_t value) 
+    [[nodiscard]] inline int msb(std::uint64_t value)
     {
         assert(value != 0);
         unsigned long idx;

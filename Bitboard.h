@@ -14,12 +14,12 @@ struct BitboardIterator
     using iterator_category = std::input_iterator_tag;
     using pointer = const Square*;
 
-    constexpr BitboardIterator() :
+    constexpr BitboardIterator() noexcept :
         m_squares(0)
     {
     }
 
-    constexpr BitboardIterator(std::uint64_t v) :
+    constexpr BitboardIterator(std::uint64_t v) noexcept :
         m_squares(v)
     {
     }
@@ -29,22 +29,22 @@ struct BitboardIterator
     constexpr BitboardIterator& operator=(const BitboardIterator&) = default;
     constexpr BitboardIterator& operator=(BitboardIterator&&) = default;
 
-    constexpr bool friend operator==(BitboardIterator lhs, BitboardIterator rhs) noexcept
+    [[nodiscard]] constexpr bool friend operator==(BitboardIterator lhs, BitboardIterator rhs) noexcept
     {
         return lhs.m_squares == rhs.m_squares;
     }
 
-    constexpr bool friend operator!=(BitboardIterator lhs, BitboardIterator rhs) noexcept
+    [[nodiscard]] constexpr bool friend operator!=(BitboardIterator lhs, BitboardIterator rhs) noexcept
     {
         return lhs.m_squares != rhs.m_squares;
     }
 
-    constexpr Square operator*() const
+    [[nodiscard]] constexpr Square operator*() const
     {
         return first();
     }
 
-    constexpr BitboardIterator& operator++()
+    constexpr BitboardIterator& operator++() noexcept
     {
         popFirst();
         return *this;
@@ -53,12 +53,12 @@ struct BitboardIterator
 private:
     std::uint64_t m_squares;
 
-    constexpr void popFirst()
+    constexpr void popFirst() noexcept
     {
         m_squares &= m_squares - 1;
     }
 
-    constexpr Square first() const
+    [[nodiscard]] constexpr Square first() const
     {
         ASSERT(m_squares != 0);
 
@@ -73,34 +73,34 @@ struct Bitboard
     // just like in Square
 
 public:
-    constexpr Bitboard() :
+    constexpr Bitboard() noexcept :
         m_squares(0)
     {
     }
 
 private:
-    constexpr explicit Bitboard(Square sq) :
+    constexpr explicit Bitboard(Square sq) noexcept :
         m_squares(static_cast<std::uint64_t>(1ULL) << ordinal(sq))
     {
         ASSERT(sq.isOk());
     }
 
-    constexpr explicit Bitboard(Rank r) :
+    constexpr explicit Bitboard(Rank r) noexcept :
         m_squares(static_cast<std::uint64_t>(0xFFULL) << (ordinal(r) * 8))
     {
     }
 
-    constexpr explicit Bitboard(File f) :
+    constexpr explicit Bitboard(File f) noexcept :
         m_squares(static_cast<std::uint64_t>(0x0101010101010101ULL) << ordinal(f))
     {
     }
 
-    constexpr explicit Bitboard(Color c) :
+    constexpr explicit Bitboard(Color c) noexcept :
         m_squares(c == Color::White ? 0xAA55AA55AA55AA55ULL : ~0xAA55AA55AA55AA55ULL)
     {
     }
 
-    constexpr explicit Bitboard(std::uint64_t bb) :
+    constexpr explicit Bitboard(std::uint64_t bb) noexcept :
         m_squares(bb)
     {
     }
@@ -119,55 +119,55 @@ private:
 
 public:
 
-    static constexpr Bitboard none()
+    [[nodiscard]] static constexpr Bitboard none()
     {
         return Bitboard{};
     }
 
-    static constexpr Bitboard all()
+    [[nodiscard]] static constexpr Bitboard all()
     {
         return ~none();
     }
 
-    static constexpr Bitboard square(Square sq)
+    [[nodiscard]] static constexpr Bitboard square(Square sq)
     {
         return Bitboard(sq);
     }
 
-    static constexpr Bitboard file(File f)
+    [[nodiscard]] static constexpr Bitboard file(File f)
     {
         return Bitboard(f);
     }
 
-    static constexpr Bitboard rank(Rank r)
+    [[nodiscard]] static constexpr Bitboard rank(Rank r)
     {
         return Bitboard(r);
     }
 
-    static constexpr Bitboard color(Color c)
+    [[nodiscard]] static constexpr Bitboard color(Color c)
     {
         return Bitboard(c);
     }
 
-    static constexpr Bitboard fromBits(std::uint64_t bits)
+    [[nodiscard]] static constexpr Bitboard fromBits(std::uint64_t bits)
     {
         return Bitboard(bits);
     }
 
     // inclusive
-    static constexpr Bitboard betweenFiles(File left, File right)
+    [[nodiscard]] static constexpr Bitboard betweenFiles(File left, File right)
     {
         ASSERT(left <= right);
 
         return Bitboard::fromBits(m_filesUpToBB[right - ordinal(left)] << ordinal(left));
     }
 
-    constexpr bool isEmpty() const
+    [[nodiscard]] constexpr bool isEmpty() const
     {
         return m_squares == 0;
     }
 
-    constexpr bool isSet(Square sq) const
+    [[nodiscard]] constexpr bool isSet(Square sq) const
     {
         return !!((m_squares >> ordinal(sq)) & 1ull);
     }
@@ -187,32 +187,32 @@ public:
         *this ^= Bitboard(sq);
     }
 
-    constexpr BitboardIterator begin() const
+    [[nodiscard]] constexpr BitboardIterator begin() const
     {
         return BitboardIterator(m_squares);
     }
 
-    constexpr BitboardIterator end() const
+    [[nodiscard]] constexpr BitboardIterator end() const
     {
         return BitboardIterator{};
     }
 
-    constexpr BitboardIterator cbegin() const
+    [[nodiscard]] constexpr BitboardIterator cbegin() const
     {
         return BitboardIterator(m_squares);
     }
 
-    constexpr BitboardIterator cend() const
+    [[nodiscard]] constexpr BitboardIterator cend() const
     {
         return BitboardIterator{};
     }
 
-    constexpr bool friend operator==(Bitboard lhs, Bitboard rhs) noexcept
+    [[nodiscard]] constexpr bool friend operator==(Bitboard lhs, Bitboard rhs) noexcept
     {
         return lhs.m_squares == rhs.m_squares;
     }
 
-    constexpr bool friend operator!=(Bitboard lhs, Bitboard rhs) noexcept
+    [[nodiscard]] constexpr bool friend operator!=(Bitboard lhs, Bitboard rhs) noexcept
     {
         return lhs.m_squares != rhs.m_squares;
     }
@@ -242,14 +242,14 @@ public:
         return *this;
     }
 
-    constexpr Bitboard operator+(Offset offset) const
+    [[nodiscard]] constexpr Bitboard operator+(Offset offset) const
     {
         Bitboard bbCpy(*this);
         bbCpy += offset;
         return bbCpy;
     }
 
-    constexpr Bitboard operator~() const
+    [[nodiscard]] constexpr Bitboard operator~() const
     {
         Bitboard bb = *this;
         bb.m_squares = ~m_squares;
@@ -274,21 +274,21 @@ public:
         return *this;
     }
 
-    constexpr Bitboard operator^(Color c) const
+    [[nodiscard]] constexpr Bitboard operator^(Color c) const
     {
         Bitboard bb = *this;
         bb ^= c;
         return bb;
     }
 
-    constexpr Bitboard operator&(Color c) const
+    [[nodiscard]] constexpr Bitboard operator&(Color c) const
     {
         Bitboard bb = *this;
         bb &= c;
         return bb;
     }
 
-    constexpr Bitboard operator|(Color c) const
+    [[nodiscard]] constexpr Bitboard operator|(Color c) const
     {
         Bitboard bb = *this;
         bb |= c;
@@ -313,21 +313,21 @@ public:
         return *this;
     }
 
-    constexpr Bitboard operator^(Square sq) const
+    [[nodiscard]] constexpr Bitboard operator^(Square sq) const
     {
         Bitboard bb = *this;
         bb ^= sq;
         return bb;
     }
 
-    constexpr Bitboard operator&(Square sq) const
+    [[nodiscard]] constexpr Bitboard operator&(Square sq) const
     {
         Bitboard bb = *this;
         bb &= sq;
         return bb;
     }
 
-    constexpr Bitboard operator|(Square sq) const
+    [[nodiscard]] constexpr Bitboard operator|(Square sq) const
     {
         Bitboard bb = *this;
         bb |= sq;
@@ -352,83 +352,70 @@ public:
         return *this;
     }
 
-    constexpr Bitboard operator^(Bitboard sq) const
+    [[nodiscard]] constexpr Bitboard operator^(Bitboard sq) const
     {
         Bitboard bb = *this;
         bb ^= sq;
         return bb;
     }
 
-    constexpr Bitboard operator&(Bitboard sq) const
+    [[nodiscard]] constexpr Bitboard operator&(Bitboard sq) const
     {
         Bitboard bb = *this;
         bb &= sq;
         return bb;
     }
 
-    constexpr Bitboard operator|(Bitboard sq) const
+    [[nodiscard]] constexpr Bitboard operator|(Bitboard sq) const
     {
         Bitboard bb = *this;
         bb |= sq;
         return bb;
     }
 
-    int count() const
+    [[nodiscard]] constexpr int count() const
     {
         return static_cast<int>(intrin::popcount(m_squares));
     }
 
-    constexpr bool moreThanOne() const
+    [[nodiscard]] constexpr bool moreThanOne() const
     {
         return !!(m_squares & (m_squares - 1));
     }
 
-    constexpr bool exactlyOne() const
+    [[nodiscard]] constexpr bool exactlyOne() const
     {
         return m_squares != 0 && !moreThanOne();
     }
 
-    constexpr bool any() const
+    [[nodiscard]] constexpr bool any() const
     {
         return !!m_squares;
     }
 
-    constexpr Square first() const
+    [[nodiscard]] constexpr Square first() const
     {
         ASSERT(m_squares != 0);
 
         return fromOrdinal<Square>(intrin::lsb(m_squares));
     }
 
-    constexpr Square last() const
+    [[nodiscard]] constexpr Square last() const
     {
         ASSERT(m_squares != 0);
 
         return fromOrdinal<Square>(intrin::msb(m_squares));
     }
 
-    constexpr std::uint64_t bits() const
+    [[nodiscard]] constexpr std::uint64_t bits() const
     {
         return m_squares;
     }
 
     // assumes the bitboard is not empty
-    constexpr Square popFirst()
+    constexpr void popFirst()
     {
-        Square sq = first();
         m_squares &= m_squares - 1;
-        return sq;
-    }
-
-    template <typename FuncT>
-    void forEach(FuncT&& f) const
-    {
-        Bitboard bb = *this;
-
-        while (!bb.isEmpty())
-        {
-            f(bb.popFirst());
-        }
     }
 
     constexpr Bitboard& operator=(const Bitboard& other) = default;
@@ -437,29 +424,29 @@ private:
     std::uint64_t m_squares;
 };
 
-constexpr Bitboard operator""_bb(std::uint64_t bits)
+[[nodiscard]] constexpr Bitboard operator""_bb(std::uint64_t bits)
 {
     return Bitboard::fromBits(bits);
 }
 
 namespace bb
 {
-    constexpr Bitboard square(Square sq)
+    [[nodiscard]] constexpr Bitboard square(Square sq)
     {
         return Bitboard::square(sq);
     }
 
-    constexpr Bitboard rank(Rank rank)
+    [[nodiscard]] constexpr Bitboard rank(Rank rank)
     {
         return Bitboard::rank(rank);
     }
 
-    constexpr Bitboard file(File file)
+    [[nodiscard]] constexpr Bitboard file(File file)
     {
         return Bitboard::file(file);
     }
 
-    constexpr Bitboard color(Color c)
+    [[nodiscard]] constexpr Bitboard color(Color c)
     {
         return Bitboard::color(c);
     }
@@ -525,13 +512,13 @@ namespace bb
             offsets[West]
         };
 
-        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Pawn()
+        [[nodiscard]] static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Pawn()
         {
             // pseudo attacks don't make sense for pawns
             return {};
         }
 
-        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Knight()
+        [[nodiscard]] static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Knight()
         {
             EnumArray<Bitboard, Square> bbs{};
 
@@ -554,7 +541,7 @@ namespace bb
             return bbs;
         }
 
-        static constexpr Bitboard generateSliderPseudoAttacks(const std::array<Offset, 4>& offsets, Square fromSq)
+        [[nodiscard]] static constexpr Bitboard generateSliderPseudoAttacks(const std::array<Offset, 4>& offsets, Square fromSq)
         {
             ASSERT(fromSq.isOk());
 
@@ -580,7 +567,7 @@ namespace bb
             return bb;
         }
 
-        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Bishop()
+        [[nodiscard]] static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Bishop()
         {
             EnumArray<Bitboard, Square> bbs{};
 
@@ -592,7 +579,7 @@ namespace bb
             return bbs;
         }
 
-        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Rook()
+        [[nodiscard]] static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Rook()
         {
             EnumArray<Bitboard, Square> bbs{};
 
@@ -604,7 +591,7 @@ namespace bb
             return bbs;
         }
 
-        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Queen()
+        [[nodiscard]] static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_Queen()
         {
             EnumArray<Bitboard, Square> bbs{};
 
@@ -618,7 +605,7 @@ namespace bb
             return bbs;
         }
 
-        static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_King()
+        [[nodiscard]] static constexpr EnumArray<Bitboard, Square> generatePseudoAttacks_King()
         {
             EnumArray<Bitboard, Square> bbs{};
 
@@ -633,7 +620,7 @@ namespace bb
             return bbs;
         }
 
-        static constexpr auto generatePseudoAttacks()
+        [[nodiscard]] static constexpr auto generatePseudoAttacks()
         {
             return EnumArray2<Bitboard, PieceType, Square>{
                 generatePseudoAttacks_Pawn(),
@@ -648,7 +635,7 @@ namespace bb
         // NOTE: removing constexpr reduces compile times
         static constexpr auto pseudoAttacks = generatePseudoAttacks();
 
-        static constexpr Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
+        [[nodiscard]] static constexpr Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
         {
             ASSERT(fromSq.isOk());
 
@@ -673,7 +660,7 @@ namespace bb
 
         // classical slider move generation approach https://www.chessprogramming.org/Classical_Approach
 
-        static constexpr EnumArray<Bitboard, Square> generatePositiveRayAttacks(Direction dir)
+        [[nodiscard]] static constexpr EnumArray<Bitboard, Square> generatePositiveRayAttacks(Direction dir)
         {
             EnumArray<Bitboard, Square> bbs{};
 
@@ -685,7 +672,7 @@ namespace bb
             return bbs;
         }
 
-        static constexpr auto generatePositiveRayAttacks()
+        [[nodiscard]] static constexpr auto generatePositiveRayAttacks()
         {
             std::array<EnumArray<Bitboard, Square>, 8> bbs{};
 
@@ -704,7 +691,7 @@ namespace bb
         static constexpr auto positiveRayAttacks = generatePositiveRayAttacks();
 
         template <Direction DirV>
-        constexpr Bitboard slidingAttacks(Square sq, Bitboard occupied)
+        [[nodiscard]] constexpr Bitboard slidingAttacks(Square sq, Bitboard occupied)
         {
             Bitboard attacks = detail::positiveRayAttacks[DirV][sq];
 
@@ -722,7 +709,7 @@ namespace bb
     }
 
     template <PieceType PieceTypeV>
-    constexpr Bitboard pseudoAttacks(Square sq)
+    [[nodiscard]] constexpr Bitboard pseudoAttacks(Square sq)
     {
         static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
 
@@ -731,7 +718,7 @@ namespace bb
         return detail::pseudoAttacks[PieceTypeV][sq];
     }
 
-    constexpr Bitboard pseudoAttacks(PieceType pt, Square sq)
+    [[nodiscard]] constexpr Bitboard pseudoAttacks(PieceType pt, Square sq)
     {
         ASSERT(sq.isOk());
 
@@ -739,7 +726,7 @@ namespace bb
     }
 
     template <PieceType PieceTypeV>
-    constexpr Bitboard attacks(Square sq, Bitboard occupied)
+    [[nodiscard]] constexpr Bitboard attacks(Square sq, Bitboard occupied)
     {
         static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
 
@@ -779,7 +766,7 @@ namespace bb
         }
     }
 
-    constexpr Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
+    [[nodiscard]] constexpr Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
     {
         ASSERT(sq.isOk());
 

@@ -6,38 +6,38 @@
 
 namespace detail::san
 {
-    constexpr bool isFile(const char s)
+    [[nodiscard]] constexpr bool isFile(const char s)
     {
         return s >= 'a' && s <= 'h';
     }
 
-    constexpr bool isRank(const char s)
+    [[nodiscard]] constexpr bool isRank(const char s)
     {
         return s >= '1' && s <= '8';
     }
 
-    constexpr Rank parseRank(const char s)
+    [[nodiscard]] constexpr Rank parseRank(const char s)
     {
         ASSERT(isRank(s));
 
         return fromOrdinal<Rank>(s - '1');
     }
 
-    constexpr File parseFile(const char s)
+    [[nodiscard]] constexpr File parseFile(const char s)
     {
         ASSERT(isFile(s));
 
         return fromOrdinal<File>(s - 'a');
     }
 
-    constexpr Square parseSquare(const char* s)
+    [[nodiscard]] constexpr Square parseSquare(const char* s)
     {
         const File file = parseFile(s[0]);
         const Rank rank = parseRank(s[1]);
         return Square(file, rank);
     }
 
-    constexpr bool contains(const char* s, char c)
+    [[nodiscard]] constexpr bool contains(const char* s, char c)
     {
         while (*s)
         {
@@ -48,7 +48,7 @@ namespace detail::san
         return false;
     }
 
-    constexpr bool isSanCapture(const char* san)
+    [[nodiscard]] constexpr bool isSanCapture(const char* san)
     {
         return contains(san, 'x');
     }
@@ -114,7 +114,7 @@ namespace detail::san
         removeSanCapture(san);
     }
 
-    constexpr int strlen(const char* san)
+    [[nodiscard]] constexpr int strlen(const char* san)
     {
         // optimized for short strings
         const char* cur = san;
@@ -128,7 +128,7 @@ namespace detail::san
         *out = '\0';
     }
 
-    constexpr PieceType parsePromotedPieceType(char c)
+    [[nodiscard]] constexpr PieceType parsePromotedPieceType(char c)
     {
         switch (c)
         {
@@ -147,7 +147,7 @@ namespace detail::san
         return PieceType::None;
     }
 
-    constexpr Move sanToMove_Pawn(const Position& pos, const char* san)
+    [[nodiscard]] constexpr Move sanToMove_Pawn(const Position& pos, const char* san)
     {
         // since we remove capture information it's either
         // 012345 idx
@@ -245,7 +245,7 @@ namespace detail::san
     }
 
     template <PieceType PieceTypeV>
-    constexpr Move sanToMove(const Position& pos, const char* san)
+    [[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san)
     {
         static_assert(
             PieceTypeV == PieceType::Knight 
@@ -349,7 +349,7 @@ namespace detail::san
         return Move::null();
     }
 
-    constexpr Move sanToMove_King(const Position& pos, const char* san)
+    [[nodiscard]] constexpr Move sanToMove_King(const Position& pos, const char* san)
     {
         // since we remove captures the only possible case is 
         // a1
@@ -362,7 +362,7 @@ namespace detail::san
         return Move{ fromSq, toSq };
     }
 
-    constexpr Move sanToMove_Castle(const Position& pos, const char* san)
+    [[nodiscard]] constexpr Move sanToMove_Castle(const Position& pos, const char* san)
     {
         // either:
         // 012345 - idx
@@ -384,7 +384,7 @@ namespace detail::san
 // assumes that the the san is correct and the move
 // described by it is legal
 // NOT const char* because it removes signs of capture
-constexpr Move sanToMove(const Position& pos, char* san)
+[[nodiscard]] constexpr Move sanToMove(const Position& pos, char* san)
 {
     // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
     // *above regex contains all valid SAN strings
@@ -411,7 +411,7 @@ constexpr Move sanToMove(const Position& pos, char* san)
     }
 }
 
-constexpr Move sanToMove(const Position& pos, const char* san)
+[[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san)
 {
     constexpr int maxSanLength = 16; // a very generous upper bound
 

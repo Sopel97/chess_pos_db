@@ -17,7 +17,7 @@ private:
 
 public:
 
-    constexpr Board()
+    constexpr Board() noexcept
     {
         m_pieces.fill(Piece::none());
         m_pieceBB.fill(Bitboard::none());
@@ -25,7 +25,7 @@ public:
     }
 
     // returns side to move
-    constexpr Color set(const char* fen)
+    [[nodiscard]] constexpr Color set(const char* fen)
     {
         ASSERT(fen != nullptr);
 
@@ -120,7 +120,7 @@ public:
         return *(current + 1) == 'w' ? Color::White : Color::Black;
     }
 
-    constexpr friend bool operator==(const Board& lhs, const Board& rhs) noexcept
+    [[nodiscard]] constexpr friend bool operator==(const Board& lhs, const Board& rhs) noexcept
     {
         bool equal = true;
         for (Square sq = A1; sq <= H8; ++sq)
@@ -306,7 +306,7 @@ public:
         }
     }
 
-    constexpr bool leavesKingInCheck(Move move, Color color) const
+    [[nodiscard]] constexpr bool leavesKingInCheck(Move move, Color color) const
     {
         // checks whether by doing a move we uncover our king to a check
         // doesn't verify castlings as it is supposed to only cover undiscovered checks
@@ -348,14 +348,14 @@ public:
         return (rookAttacks & opponentRookLikePieces).any();
     }
 
-    constexpr Piece pieceAt(Square sq) const
+    [[nodiscard]] constexpr Piece pieceAt(Square sq) const
     {
         ASSERT(sq.isOk());
 
         return m_pieces[sq];
     }
 
-    constexpr Bitboard piecesBB(Color c) const
+    [[nodiscard]] constexpr Bitboard piecesBB(Color c) const
     {
         return
             m_pieceBB[Piece(PieceType::Pawn, c)]
@@ -366,17 +366,17 @@ public:
             | m_pieceBB[Piece(PieceType::King, c)];
     }
 
-    constexpr Square kingSquare(Color c) const
+    [[nodiscard]] constexpr Square kingSquare(Color c) const
     {
         return piecesBB(Piece(PieceType::King, c)).first();
     }
 
-    constexpr Bitboard piecesBB(Piece pc) const
+    [[nodiscard]] constexpr Bitboard piecesBB(Piece pc) const
     {
         return m_pieceBB[pc];
     }
 
-    constexpr Bitboard piecesBB() const
+    [[nodiscard]] constexpr Bitboard piecesBB() const
     {
         Bitboard bb{};
 
@@ -386,7 +386,7 @@ public:
         return bb;
     }
 
-    constexpr bool isPromotion(Square from, Square to) const
+    [[nodiscard]] constexpr bool isPromotion(Square from, Square to) const
     {
         ASSERT(from.isOk() && to.isOk());
 
@@ -401,7 +401,7 @@ private:
     // required to perform ep if we don't need to check validity
     // Square m_epSquare = Square::none(); 
 
-    static constexpr bool bbsEqual(const Board& lhs, const Board& rhs) noexcept
+    [[nodiscard]] static constexpr bool bbsEqual(const Board& lhs, const Board& rhs) noexcept
     {
         for (Piece pc : values<Piece>())
         {
@@ -419,7 +419,7 @@ struct Position : public Board
 {
     using BaseType = Board;
 
-    constexpr Position() :
+    constexpr Position() noexcept :
         Board(),
         m_sideToMove(Color::White)
     {
@@ -430,14 +430,14 @@ struct Position : public Board
         m_sideToMove = BaseType::set(fen);
     }
 
-    static constexpr Position fromFen(const char* fen)
+    [[nodiscard]] static constexpr Position fromFen(const char* fen)
     {
         Position pos{};
         pos.set(fen);
         return pos;
     }
 
-    static constexpr Position startPosition()
+    [[nodiscard]] static constexpr Position startPosition()
     {
         constexpr Position pos = fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         return pos;
@@ -458,17 +458,17 @@ struct Position : public Board
         m_sideToMove = !m_sideToMove;
     }
 
-    constexpr Color sideToMove() const
+    [[nodiscard]] constexpr Color sideToMove() const
     {
         return m_sideToMove;
     }
 
-    constexpr bool leavesKingInCheck(Move move) const
+    [[nodiscard]] constexpr bool leavesKingInCheck(Move move) const
     {
         return BaseType::leavesKingInCheck(move, m_sideToMove);
     }
 
-    constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept
+    [[nodiscard]] constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept
     {
         return lhs.m_sideToMove == rhs.m_sideToMove && static_cast<const Board&>(lhs) == static_cast<const Board&>(rhs);
     }
@@ -476,14 +476,14 @@ struct Position : public Board
     // these are supposed to be used only for testing
     // that's why there's this assert in afterMove
 
-    constexpr Position beforeMove(Move move, Piece captured) const
+    [[nodiscard]] constexpr Position beforeMove(Move move, Piece captured) const
     {
         Position cpy(*this);
         cpy.undoMove(move, captured);
         return cpy;
     }
 
-    constexpr Position afterMove(Move move) const
+    [[nodiscard]] constexpr Position afterMove(Move move) const
     {
         Position cpy(*this);
         auto pc = cpy.doMove(move);
