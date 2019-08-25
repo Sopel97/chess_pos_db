@@ -1,5 +1,10 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <iostream>
 #include <iomanip>
+#include <filesystem>
+#include <cstdio>
+#include <memory>
 
 #include "Bitboard.h"
 #include "Enum.h"
@@ -26,4 +31,8 @@ void print(Bitboard bb)
 
 int main()
 {
+    pgn::LazyPgnFileReader fr("data/lichess_db_standard_rated_2013-01.pgn");
+    int i = 0;
+    while (fr.nextGame().has_value()) ++i;
+    std::cout << i << '\n';
 }
