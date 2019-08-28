@@ -39,7 +39,7 @@ struct BitboardIterator
         return lhs.m_squares != rhs.m_squares;
     }
 
-    [[nodiscard]] constexpr Square operator*() const
+    [[nodiscard]] INTRIN_CONSTEXPR Square operator*() const
     {
         return first();
     }
@@ -58,7 +58,7 @@ private:
         m_squares &= m_squares - 1;
     }
 
-    [[nodiscard]] constexpr Square first() const
+    [[nodiscard]] INTRIN_CONSTEXPR Square first() const
     {
         ASSERT(m_squares != 0);
 
@@ -373,7 +373,7 @@ public:
         return bb;
     }
 
-    [[nodiscard]] constexpr int count() const
+    [[nodiscard]] INTRIN_CONSTEXPR int count() const
     {
         return static_cast<int>(intrin::popcount(m_squares));
     }
@@ -393,14 +393,14 @@ public:
         return !!m_squares;
     }
 
-    [[nodiscard]] constexpr Square first() const
+    [[nodiscard]] INTRIN_CONSTEXPR Square first() const
     {
         ASSERT(m_squares != 0);
 
         return fromOrdinal<Square>(intrin::lsb(m_squares));
     }
 
-    [[nodiscard]] constexpr Square last() const
+    [[nodiscard]] INTRIN_CONSTEXPR Square last() const
     {
         ASSERT(m_squares != 0);
 

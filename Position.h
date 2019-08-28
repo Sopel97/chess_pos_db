@@ -306,7 +306,7 @@ public:
         }
     }
 
-    [[nodiscard]] constexpr bool leavesKingInCheck(Move move, Color color) const
+    [[nodiscard]] INTRIN_CONSTEXPR bool leavesKingInCheck(Move move, Color color) const
     {
         // checks whether by doing a move we uncover our king to a check
         // doesn't verify castlings as it is supposed to only cover undiscovered checks
@@ -366,7 +366,7 @@ public:
             | m_pieceBB[Piece(PieceType::King, c)];
     }
 
-    [[nodiscard]] constexpr Square kingSquare(Color c) const
+    [[nodiscard]] INTRIN_CONSTEXPR Square kingSquare(Color c) const
     {
         return piecesBB(Piece(PieceType::King, c)).first();
     }
@@ -463,7 +463,7 @@ struct Position : public Board
         return m_sideToMove;
     }
 
-    [[nodiscard]] constexpr bool leavesKingInCheck(Move move) const
+    [[nodiscard]] INTRIN_CONSTEXPR bool leavesKingInCheck(Move move) const
     {
         return BaseType::leavesKingInCheck(move, m_sideToMove);
     }

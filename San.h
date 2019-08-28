@@ -350,7 +350,7 @@ namespace detail::san
         return Move::null();
     }
 
-    [[nodiscard]] constexpr Move sanToMove_King(const Position& pos, const char* san)
+    [[nodiscard]] INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, const char* san)
     {
         // since we remove captures the only possible case is 
         // a1

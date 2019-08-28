@@ -14,6 +14,8 @@
 #include "Position.h"
 #include "San.h"
 
+#include "CodingTest.h"
+
 void print(Bitboard bb)
 {
     std::cout << std::hex << std::setfill('0') << std::setw(16) << bb.bits() << '\n';
@@ -31,6 +33,8 @@ void print(Bitboard bb)
 
 int main()
 {
+    test::runCodingTests();
+
     pgn::LazyPgnFileReader fr("data/lichess_db_standard_rated_2013-01.pgn");
     int i = 0;
     for (auto& game : fr)

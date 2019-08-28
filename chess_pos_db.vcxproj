@@ -158,15 +158,25 @@
     <ClCompile Include="chess_pos_db.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ArithmeticUtility.h" />
     <ClInclude Include="Assert.h" />
     <ClInclude Include="Bitboard.h" />
+    <ClInclude Include="BitStream.h" />
     <ClInclude Include="Chess.h" />
+    <ClInclude Include="Coding.h" />
+    <ClInclude Include="CodingTest.h" />
+    <ClInclude Include="Compression.h" />
     <ClInclude Include="Enum.h" />
     <ClInclude Include="EnumArray.h" />
+    <ClInclude Include="FixedVector.h" />
     <ClInclude Include="Intrinsics.h" />
     <ClInclude Include="Pgn.h" />
     <ClInclude Include="Position.h" />
     <ClInclude Include="San.h" />
+    <ClInclude Include="TypeUtility.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="info.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
