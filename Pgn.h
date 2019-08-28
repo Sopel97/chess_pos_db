@@ -115,7 +115,7 @@ namespace pgn
                 {
                     skipVariation(s);
                 }
-                else if (isValidSanMoveStart(s[0]))
+                else if (san::isValidSanMoveStart(s[0]))
                 {
                     return;
                 }
@@ -129,7 +129,7 @@ namespace pgn
 
         inline std::string_view extractMove(std::string_view s)
         {
-            ASSERT(isValidSanMoveStart(s[0]));
+            ASSERT(san::isValidSanMoveStart(s[0]));
 
             const std::size_t length = s.find(' ');
             if (length == std::string::npos)
@@ -234,7 +234,7 @@ namespace pgn
                     return *this;
                 }
 
-                const Move move = sanToMove(m_position, san.data(), san.size());
+                const Move move = san::sanToMove(m_position, san);
                 m_position.doMove(move);
 
                 m_moveRegion.remove_prefix(san.size());
