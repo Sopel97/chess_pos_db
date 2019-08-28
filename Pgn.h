@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <string_view>
 
 #include "Assert.h"
 #include "Position.h"
@@ -14,6 +15,8 @@
 
 namespace pgn
 {
+    using namespace std::literals;
+
     enum struct GameResult : std::uint8_t
     {
         WhiteWin,
@@ -24,59 +27,66 @@ namespace pgn
 
     namespace detail
     {
-        // TODO: use pointer ranges and memchr (more than twice as fast) since we have region bounds
-
-        bool isCommentBegin(const char* begin)
+        [[nodiscard]] constexpr bool isCommentBegin(char c)
         {
-            return *begin == '{' || *begin == ';';
+            return c == '{' || c == ';';
         }
 
-        bool isVariationBegin(const char* begin)
+        [[nodiscard]] constexpr bool isVariationBegin(char c)
         {
-            return *begin == '(';
+            return c == '(';
         }
 
-        // Returns a pointer to the closing brace of the comment
-        // or a nullptr if the end is not found.
+        // Readjusts `s` to start at the first character after comment ends.
+        // If the comment doesn't end then makes `s` empty
         // Comments cannot be recursive.
-        const char* seekCommentEnd(const char* begin)
+        inline void skipComment(std::string_view& s)
         {
-            ASSERT(isCommentBegin(begin));
+            const char first = s[0];
+            ASSERT(isCommentBegin(first));
 
-            if (*begin == '{')
+            const std::size_t shift = s.find(first == '{' ? '}' : '\n');
+            if (shift == std::string::npos)
             {
-                return std::strchr(begin + 1u, '}');
+                s.remove_prefix(s.size());
             }
-            else // if (*begin == ';')
+            else
             {
-                return std::strchr(begin + 1u, '\n');
+                s.remove_prefix(shift);
             }
         }
 
-        // Returns a pointer to the closing parenthesis of the variation
-        // or a nullptr if the end is not found.
+        // Readjusts `s` to start at the first character after variation ends.
+        // If the variation doesn't end then makes `s` empty
         // Variations can be recursive.
-        const char* seekVariationEnd(const char* begin)
+        inline void skipVariation(std::string_view& s)
         {
-            ASSERT(isVariationBegin(begin));
+            ASSERT(isVariationBegin(s[0]));
 
             int numUnclosedParens = 1;
 
             while (numUnclosedParens)
             {
-                ++begin;
-
-                begin = std::strpbrk(begin, "(){;");
-                if (begin == nullptr)
+                // a safer version with bounds would be nice
+                // but std::string_view::find_first_of is horrendously slow
+                const char* event = std::strpbrk(s.data() + 1u, "(){;");
+                if (event == nullptr || event - s.data() > s.size())
                 {
-                    return begin;
+                    s.remove_prefix(s.size());
+                    return;
                 }
 
-                switch (*begin)
+                s.remove_prefix(event - s.data());
+
+                switch (s[0])
                 {
                 case '{':
                 case ';':
-                    begin = seekCommentEnd(begin);
+                    skipComment(s);
+                    if (s.empty())
+                    {
+                        return;
+                    }
                     break;
 
                 case '(':
@@ -88,55 +98,89 @@ namespace pgn
                     break;
                 }
             }
-
-            return begin;
         }
 
-        const char* seekNextMove(const char* begin)
+        inline void seekNextMove(std::string_view& s)
         {
             for (;;)
             {
                 // skip characters we don't care about
-                while (std::strchr("01234567890. $", *begin) != nullptr) ++begin;
+                while ("01234567890. $"sv.find(s[0])) s.remove_prefix(1u);
 
-                if (isCommentBegin(begin))
+                if (isCommentBegin(s[0]))
                 {
-                    begin = seekCommentEnd(begin) + 1u;
+                    skipComment(s);
                 }
-                else if (isVariationBegin(begin))
+                else if (isVariationBegin(s[0]))
                 {
-                    begin = seekVariationEnd(begin) + 1u;
+                    skipVariation(s);
                 }
-                else if (isValidSanMoveStart(*begin))
+                else if (isValidSanMoveStart(s[0]))
                 {
-                    return begin;
+                    return;
                 }
                 else
                 {
-                    return nullptr;
+                    s.remove_prefix(s.size());
+                    return;
                 }
             }
         }
 
-        const char* seekTagValue(const char* begin, const char* tag)
+        inline std::string_view extractMove(std::string_view s)
         {
-            begin = std::strstr(begin, tag);
-            if (begin == nullptr)
+            ASSERT(isValidSanMoveStart(s[0]));
+
+            const std::size_t length = s.find(' ');
+            if (length == std::string::npos)
             {
-                return begin;
+                return {};
             }
 
-            return strchr(begin, '\"');
+            return s.substr(0, length);
         }
 
-        // begin points to the " character before the result value.
-        // It is assumed that the result value is correct
-        GameResult parseGameResult(const char* begin)
+        [[nodiscard]] inline std::string_view findTagValue(std::string_view s, std::string_view tag)
         {
-            ASSERT(*begin == '\"');
+            const std::size_t shift = s.find(tag);
+            if (shift == std::string::npos)
+            {
+                return {};
+            }
 
-            // 3rd character is unique and always exists
-            switch (*(begin + 3u))
+            const std::size_t valueStart = s.find('\"', shift);
+            if (valueStart == std::string::npos)
+            {
+                return {};
+            }
+
+            s.remove_prefix(valueStart + 1u);
+
+            const std::size_t valueLength = s.find('\"');
+            if (valueLength == std::string::npos)
+            {
+                return {};
+            }
+
+            return s.substr(0, valueLength);
+        }
+
+        // `tag` is the string between quotation marks
+        // It is assumed that the result value is correct
+        [[nodiscard]] inline GameResult parseGameResult(std::string_view tag)
+        {
+            // tag is one of the following:
+            // 1-0
+            // 0-1
+            // 1/2-1/2
+            // *
+
+            if (tag.size() < 3)
+            {
+                return GameResult::Unknown;
+            }
+
+            switch (tag[2])
             {
             case '0':
                 return GameResult::WhiteWin;
@@ -150,33 +194,8 @@ namespace pgn
         }
     }
 
-    constexpr const char* tagRegionEndSequence = "\n\n";
-    constexpr std::size_t tagRegionEndSequenceLength = 2;
-    constexpr const char* moveRegionEndSequence = "\n\n";
-    constexpr std::size_t moveRegionEndSequenceLength = 2;
-
-    struct UnparsedRegion
-    {
-        UnparsedRegion(const char* begin, const char* end) noexcept :
-            m_begin(begin),
-            m_end(end)
-        {
-        }
-
-        [[nodiscard]] const char* begin() const
-        {
-            return m_begin;
-        }
-
-        [[nodiscard]] const char* end() const
-        {
-            return m_end;
-        }
-
-    private:
-        const char* m_begin;
-        const char* m_end;
-    };
+    constexpr std::string_view tagRegionEndSequence = "\n\n";
+    constexpr std::string_view moveRegionEndSequence = "\n\n";
 
     struct UnparsedGamePositions
     {
@@ -192,38 +211,40 @@ namespace pgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const Position*;
 
-            UnparsedPositionsIterator(UnparsedRegion& moveRegion) noexcept :
+            UnparsedPositionsIterator(std::string_view moveRegion) noexcept :
                 m_moveRegion(moveRegion),
-                m_nextCharacter(moveRegion.begin()),
                 m_position(Position::startPosition())
             {
-                ASSERT(*m_moveRegion.begin() == '1');
-                ASSERT(*m_moveRegion.end() == '\n');
+                ASSERT(m_moveRegion.front() == '1');
             }
 
             const UnparsedPositionsIterator& operator++()
             {
-                const char* sanBegin = detail::seekNextMove(m_nextCharacter);
-                const char* sanEnd = sanBegin ? std::strchr(sanBegin, ' ') : nullptr;
-                if (sanEnd == nullptr)
+                detail::seekNextMove(m_moveRegion);
+                if (m_moveRegion.empty())
                 {
-                    m_nextCharacter = m_moveRegion.end();
+                    m_moveRegion.remove_prefix(m_moveRegion.size());
+                    return *this;
                 }
-                else
-                {
-                    const std::size_t sanLength = sanEnd - sanBegin;
-                    const Move move = sanToMove(m_position, sanBegin, sanLength);
-                    m_position.doMove(move);
 
-                    m_nextCharacter = sanEnd;
+                const std::string_view san = detail::extractMove(m_moveRegion);
+                if (san.empty())
+                {
+                    m_moveRegion.remove_prefix(m_moveRegion.size());
+                    return *this;
                 }
+
+                const Move move = sanToMove(m_position, san.data(), san.size());
+                m_position.doMove(move);
+
+                m_moveRegion.remove_prefix(san.size());
             
                 return *this;
             }
 
             [[nodiscard]] bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
             {
-                return lhs.m_nextCharacter == lhs.m_moveRegion.end();
+                return lhs.m_moveRegion.empty();
             }
 
             [[nodiscard]] bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
@@ -242,8 +263,7 @@ namespace pgn
             }
 
         private:
-            UnparsedRegion m_moveRegion;
-            const char* m_nextCharacter;
+            std::string_view m_moveRegion;
             Position m_position;
         };
 
@@ -252,11 +272,10 @@ namespace pgn
         using iterator = UnparsedPositionsIterator;
         using const_iterator = UnparsedPositionsIterator;
 
-        UnparsedGamePositions(UnparsedRegion moveRegion) noexcept :
+        UnparsedGamePositions(std::string_view moveRegion) noexcept :
             m_moveRegion(moveRegion)
         {
-            ASSERT(m_moveRegion.begin() != nullptr);
-            ASSERT(m_moveRegion.end() != nullptr);
+            ASSERT(!m_moveRegion.empty());
         }
 
         [[nodiscard]] UnparsedPositionsIterator begin()
@@ -270,44 +289,37 @@ namespace pgn
         }
 
     private:
-        UnparsedRegion m_moveRegion;
+        std::string_view m_moveRegion;
     };
 
     struct UnparsedGame
     {
         explicit UnparsedGame() :
-            m_tagRegion(nullptr, nullptr),
-            m_moveRegion(nullptr, nullptr)
+            m_tagRegion{},
+            m_moveRegion{}
         {
         }
 
-        UnparsedGame(UnparsedRegion tagRegion, UnparsedRegion moveRegion) noexcept :
+        UnparsedGame(std::string_view tagRegion, std::string_view moveRegion) noexcept :
             m_tagRegion(tagRegion),
             m_moveRegion(moveRegion)
         {
-            ASSERT(*m_tagRegion.begin() == '[');
-            ASSERT(*m_tagRegion.end() == '\n');
-            ASSERT(*m_moveRegion.begin() == '1');
-            ASSERT(*m_moveRegion.end() == '\n');
+            ASSERT(m_tagRegion.front() == '[');
+            ASSERT(m_moveRegion.front() == '1');
         }
 
         [[nodiscard]] GameResult result() const
         {
-            const char* resultString = detail::seekTagValue(m_tagRegion.begin(), "Result");
-            if (resultString == nullptr)
-            {
-                return GameResult::Unknown;
-            }
-
-            return detail::parseGameResult(resultString);
+            const std::string_view tag = detail::findTagValue(m_tagRegion, "Result"sv);
+            return detail::parseGameResult(tag);
         }
 
-        [[nodiscard]] UnparsedRegion tagRegion() const
+        [[nodiscard]] std::string_view tagRegion() const
         {
             return m_tagRegion;
         }
 
-        [[nodiscard]] UnparsedRegion moveRegion() const
+        [[nodiscard]] std::string_view moveRegion() const
         {
             return m_moveRegion;
         }
@@ -318,8 +330,8 @@ namespace pgn
         }
 
     private:
-        UnparsedRegion m_tagRegion;
-        UnparsedRegion m_moveRegion;
+        std::string_view m_tagRegion;
+        std::string_view m_moveRegion;
     };
 
     // is supposed to work as a game iterator
@@ -390,8 +402,7 @@ namespace pgn
         LazyPgnFileReader(const std::filesystem::path& path) :
             m_file(nullptr, &std::fclose),
             m_buffer(bufferSize + 1), // one spot for '\0',
-            m_game{},
-            m_firstUnprocessed(m_buffer.data())
+            m_game{}
         {
             auto strPath = path.string();
             m_file.reset(std::fopen(strPath.c_str(), "r"));
@@ -404,6 +415,7 @@ namespace pgn
 
             const std::size_t numBytesRead = std::fread(m_buffer.data(), 1, bufferSize, m_file.get());
             m_buffer[numBytesRead] = '\0';
+            m_bufferView = std::string_view(m_buffer.data(), numBytesRead);
 
             // find the first game
             moveToNextGame();
@@ -437,16 +449,17 @@ namespace pgn
             while(m_buffer.front() != '\0')
             {
                 // try find region bounds
-                const char* tagend = std::strstr(m_firstUnprocessed, tagRegionEndSequence);
-                if (tagend == nullptr)
+                const std::size_t tagEnd = m_bufferView.find(tagRegionEndSequence);
+                if (tagEnd == std::string::npos)
                 {
                     // fetch more data if needed
                     refillBuffer();
                     continue;
                 }
 
-                const char* moveend = std::strstr(tagend + tagRegionEndSequenceLength, moveRegionEndSequence);
-                if (moveend == nullptr)
+                const std::size_t moveStart = tagEnd + tagRegionEndSequence.size();
+                const std::size_t moveEnd = m_bufferView.find(moveRegionEndSequence, moveStart);
+                if (moveEnd == std::string::npos)
                 {
                     refillBuffer();
                     continue;
@@ -455,11 +468,11 @@ namespace pgn
                 // we only extract one game at the time
 
                 m_game = UnparsedGame(
-                    { m_firstUnprocessed, tagend }, 
-                    { tagend + tagRegionEndSequenceLength, moveend }
+                    m_bufferView.substr(0, tagEnd),
+                    m_bufferView.substr(moveStart, moveEnd - moveStart)
                 );
 
-                m_firstUnprocessed = moveend + moveRegionEndSequenceLength;
+                m_bufferView.remove_prefix(moveEnd + moveRegionEndSequence.size());
 
                 return;
             }
@@ -468,8 +481,8 @@ namespace pgn
     private:
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
         std::vector<char> m_buffer;
+        std::string_view m_bufferView; // what is currently being processed
         UnparsedGame m_game;
-        const char* m_firstUnprocessed; // we don't go back to anything before that
 #if !defined(NDEBUG)
         bool m_iteratorConstructed = false;
 #endif
@@ -480,7 +493,7 @@ namespace pgn
             // and fills the rest with new data
 
             // copy to the beginning everything that was not yet read (commited)
-            std::size_t numBytesProcessed = m_firstUnprocessed - m_buffer.data();
+            std::size_t numBytesProcessed = m_bufferView.data() - m_buffer.data();
             if (numBytesProcessed == 0)
             {
                 // if we were unable to process anything then scrap the whole buffer
@@ -496,7 +509,7 @@ namespace pgn
             const std::size_t numBytesRead = std::fread(m_buffer.data() + numBytesLeft, 1, numBytesProcessed, m_file.get());
             m_buffer[numBytesLeft + numBytesRead] = '\0';
 
-            m_firstUnprocessed = m_buffer.data();
+            m_bufferView = std::string_view(m_buffer.data(), numBytesLeft + numBytesRead);
         }
     };
 
