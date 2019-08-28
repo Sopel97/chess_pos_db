@@ -39,6 +39,8 @@ namespace detail::san
 
     [[nodiscard]] constexpr bool contains(const char* s, char c)
     {
+        ASSERT(c != '\0');
+
         while (*s)
         {
             if (*s == c) return true;
@@ -66,7 +68,7 @@ namespace detail::san
         // ^san
         while (*san) // the original '\0' after we copy it
         {
-            *san = *(san + 1);
+            *san = *(san + 1); // it is safe because the check above will catch a copied null terminator earlier
             ++san;
         }
 
@@ -89,22 +91,21 @@ namespace detail::san
         char* cur = san;
         while (*cur) ++cur;
 
-        for (;;)
+        for (;cur > san;)
         {
             --cur;
-            if (cur == san) break;
 
             switch (*cur)
             {
+            case 'N':
+                if (*(cur - 1) == '=') break;
+
             case '#':
             case '+':
             case '!':
             case '?':
-                *cur = '\0';
-                continue;
 
-            case 'N':
-                if (cur != san && *(cur - 1) != '=')* cur = '\0';
+                *cur = '\0';
                 continue;
             }
 
