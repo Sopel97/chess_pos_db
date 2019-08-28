@@ -5,13 +5,151 @@
 #include <optional>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 
 #include "Assert.h"
 #include "Position.h"
+#include "San.h"
 
 namespace pgn
 {
+    enum struct GameResult : std::uint8_t
+    {
+        WhiteWin,
+        BlackWin,
+        Draw,
+        Unknown
+    };
+
+    namespace detail
+    {
+        // TODO: use pointer ranges and memchr (more than twice as fast) since we have region bounds
+
+        bool isCommentBegin(const char* begin)
+        {
+            return *begin == '{' || *begin == ';';
+        }
+
+        bool isVariationBegin(const char* begin)
+        {
+            return *begin == '(';
+        }
+
+        // Returns a pointer to the closing brace of the comment
+        // or a nullptr if the end is not found.
+        // Comments cannot be recursive.
+        const char* seekCommentEnd(const char* begin)
+        {
+            ASSERT(isCommentBegin(begin));
+
+            if (*begin == '{')
+            {
+                return std::strchr(begin + 1u, '}');
+            }
+            else // if (*begin == ';')
+            {
+                return std::strchr(begin + 1u, '\n');
+            }
+        }
+
+        // Returns a pointer to the closing parenthesis of the variation
+        // or a nullptr if the end is not found.
+        // Variations can be recursive.
+        const char* seekVariationEnd(const char* begin)
+        {
+            ASSERT(isVariationBegin(begin));
+
+            int numUnclosedParens = 1;
+
+            while (numUnclosedParens)
+            {
+                ++begin;
+
+                begin = std::strpbrk(begin, "(){;");
+                if (begin == nullptr)
+                {
+                    return begin;
+                }
+
+                switch (*begin)
+                {
+                case '{':
+                case ';':
+                    begin = seekCommentEnd(begin);
+                    break;
+
+                case '(':
+                    numUnclosedParens += 1;
+                    break;
+
+                case ')':
+                    numUnclosedParens -= 1;
+                    break;
+                }
+            }
+
+            return begin;
+        }
+
+        const char* seekNextMove(const char* begin)
+        {
+            for (;;)
+            {
+                // skip characters we don't care about
+                while (std::strchr("01234567890. $", *begin) != nullptr) ++begin;
+
+                if (isCommentBegin(begin))
+                {
+                    begin = seekCommentEnd(begin) + 1u;
+                }
+                else if (isVariationBegin(begin))
+                {
+                    begin = seekVariationEnd(begin) + 1u;
+                }
+                else if (isValidSanMoveStart(*begin))
+                {
+                    return begin;
+                }
+                else
+                {
+                    return nullptr;
+                }
+            }
+        }
+
+        const char* seekTagValue(const char* begin, const char* tag)
+        {
+            begin = std::strstr(begin, tag);
+            if (begin == nullptr)
+            {
+                return begin;
+            }
+
+            return strchr(begin, '\"');
+        }
+
+        // begin points to the " character before the result value.
+        // It is assumed that the result value is correct
+        GameResult parseGameResult(const char* begin)
+        {
+            ASSERT(*begin == '\"');
+
+            // 3rd character is unique and always exists
+            switch (*(begin + 3u))
+            {
+            case '0':
+                return GameResult::WhiteWin;
+            case '1':
+                return GameResult::BlackWin;
+            case '2':
+                return GameResult::Draw;
+            default:
+                return GameResult::Unknown;
+            }
+        }
+    }
+
     constexpr const char* tagRegionEndSequence = "\n\n";
     constexpr std::size_t tagRegionEndSequenceLength = 2;
     constexpr const char* moveRegionEndSequence = "\n\n";
@@ -56,19 +194,36 @@ namespace pgn
 
             UnparsedPositionsIterator(UnparsedRegion& moveRegion) noexcept :
                 m_moveRegion(moveRegion),
+                m_nextCharacter(moveRegion.begin()),
                 m_position(Position::startPosition())
             {
+                ASSERT(*m_moveRegion.begin() == '1');
+                ASSERT(*m_moveRegion.end() == '\n');
             }
 
             const UnparsedPositionsIterator& operator++()
             {
-                // TODO:
+                const char* sanBegin = detail::seekNextMove(m_nextCharacter);
+                const char* sanEnd = sanBegin ? std::strchr(sanBegin, ' ') : nullptr;
+                if (sanEnd == nullptr)
+                {
+                    m_nextCharacter = m_moveRegion.end();
+                }
+                else
+                {
+                    const std::size_t sanLength = sanEnd - sanBegin;
+                    const Move move = sanToMove(m_position, sanBegin, sanLength);
+                    m_position.doMove(move);
+
+                    m_nextCharacter = sanEnd;
+                }
+            
                 return *this;
             }
 
             [[nodiscard]] bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
             {
-                return true;
+                return lhs.m_nextCharacter == lhs.m_moveRegion.end();
             }
 
             [[nodiscard]] bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
@@ -88,6 +243,7 @@ namespace pgn
 
         private:
             UnparsedRegion m_moveRegion;
+            const char* m_nextCharacter;
             Position m_position;
         };
 
@@ -133,6 +289,17 @@ namespace pgn
             ASSERT(*m_tagRegion.end() == '\n');
             ASSERT(*m_moveRegion.begin() == '1');
             ASSERT(*m_moveRegion.end() == '\n');
+        }
+
+        [[nodiscard]] GameResult result() const
+        {
+            const char* resultString = detail::seekTagValue(m_tagRegion.begin(), "Result");
+            if (resultString == nullptr)
+            {
+                return GameResult::Unknown;
+            }
+
+            return detail::parseGameResult(resultString);
         }
 
         [[nodiscard]] UnparsedRegion tagRegion() const
@@ -229,11 +396,22 @@ namespace pgn
             auto strPath = path.string();
             m_file.reset(std::fopen(strPath.c_str(), "r"));
 
+            if (m_file == nullptr)
+            {
+                m_buffer[0] = '\0';
+                return;
+            }
+
             const std::size_t numBytesRead = std::fread(m_buffer.data(), 1, bufferSize, m_file.get());
             m_buffer[numBytesRead] = '\0';
 
             // find the first game
             moveToNextGame();
+        }
+
+        [[nodiscard]] bool isOpen() const
+        {
+            return m_file != nullptr;
         }
 
         [[nodiscard]] LazyPgnFileReaderIterator begin()

@@ -35,7 +35,7 @@ int main()
 {
     test::runCodingTests();
 
-    pgn::LazyPgnFileReader fr("data/lichess_db_standard_rated_2013-01.pgn");
+    pgn::LazyPgnFileReader fr("data/one_game_annotated.pgn");
     int i = 0;
     for (auto& game : fr)
     {

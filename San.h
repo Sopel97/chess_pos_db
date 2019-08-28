@@ -129,6 +129,13 @@ namespace detail::san
         *out = '\0';
     }
 
+    constexpr void strcpy(char* out, const char* san, std::size_t length)
+    {
+        const char* end = san + length;
+        while (san != end) *out++ = *san++;
+        *out = '\0';
+    }
+
     [[nodiscard]] constexpr PieceType parsePromotedPieceType(char c)
     {
         switch (c)
@@ -214,10 +221,6 @@ namespace detail::san
             if (pos.pieceAt(move.to) == Piece::none())
             {
                 move.type = MoveType::EnPassant;
-            }
-            else
-            {
-                ASSERT(pos.pieceAt(move.to).type() == PieceType::Pawn);
             }
 
             if (pos.sideToMove() == Color::White)
@@ -412,6 +415,11 @@ namespace detail::san
     }
 }
 
+[[nodiscard]] bool isValidSanMoveStart(char c)
+{
+    return std::strchr("NBRQKOabcdefgh", c) != nullptr;
+}
+
 [[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san)
 {
     constexpr int maxSanLength = 16; // a very generous upper bound
@@ -419,6 +427,17 @@ namespace detail::san
     char buffer[maxSanLength]{};
 
     detail::san::strcpy(buffer, san);
+
+    return sanToMove(pos, buffer);
+}
+
+[[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san, std::size_t len)
+{
+    constexpr int maxSanLength = 16; // a very generous upper bound
+
+    char buffer[maxSanLength]{};
+
+    detail::san::strcpy(buffer, san, len);
 
     return sanToMove(pos, buffer);
 }
