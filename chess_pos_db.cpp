@@ -35,15 +35,23 @@ int main()
 {
     test::runCodingTests();
 
-    pgn::LazyPgnFileReader fr("data/one_game_annotated.pgn");
+    pgn::LazyPgnFileReader fr("data/philidor.pgn");
+    if (!fr.isOpen())
+    {
+        std::cout << "Failed to open file.\n";
+        return 1;
+    }
+
     int i = 0;
     for (auto& game : fr)
     {
         ++i;
         for (auto& pos : game.positions())
         {
-
+            pos.print(std::cout);
+            std::cout << '\n';
         }
     }
     std::cout << i << '\n';
+    return 0;
 }

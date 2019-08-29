@@ -105,7 +105,7 @@ namespace pgn
             for (;;)
             {
                 // skip characters we don't care about
-                while ("01234567890. $"sv.find(s[0])) s.remove_prefix(1u);
+                while ("01234567890. $\n"sv.find(s[0]) != std::string::npos) s.remove_prefix(1u);
 
                 if (isCommentBegin(s[0]))
                 {
@@ -131,7 +131,7 @@ namespace pgn
         {
             ASSERT(san::isValidSanMoveStart(s[0]));
 
-            const std::size_t length = s.find(' ');
+            const std::size_t length = std::min(s.find(' '), s.find('\n'));
             if (length == std::string::npos)
             {
                 return {};
@@ -194,8 +194,8 @@ namespace pgn
         }
     }
 
-    constexpr std::string_view tagRegionEndSequence = "\n\n";
-    constexpr std::string_view moveRegionEndSequence = "\n\n";
+    constexpr std::string_view tagSectionEndSequence = "\n\n";
+    constexpr std::string_view moveSectionEndSequence = "\n\n";
 
     struct UnparsedGamePositions
     {
@@ -211,40 +211,40 @@ namespace pgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const Position*;
 
-            UnparsedPositionsIterator(std::string_view moveRegion) noexcept :
-                m_moveRegion(moveRegion),
+            UnparsedPositionsIterator(std::string_view moveSection) noexcept :
+                m_moveSection(moveSection),
                 m_position(Position::startPosition())
             {
-                ASSERT(m_moveRegion.front() == '1');
+                ASSERT(m_moveSection.front() == '1');
             }
 
             const UnparsedPositionsIterator& operator++()
             {
-                detail::seekNextMove(m_moveRegion);
-                if (m_moveRegion.empty())
+                detail::seekNextMove(m_moveSection);
+                if (m_moveSection.empty())
                 {
-                    m_moveRegion.remove_prefix(m_moveRegion.size());
+                    m_moveSection.remove_prefix(m_moveSection.size());
                     return *this;
                 }
 
-                const std::string_view san = detail::extractMove(m_moveRegion);
+                const std::string_view san = detail::extractMove(m_moveSection);
                 if (san.empty())
                 {
-                    m_moveRegion.remove_prefix(m_moveRegion.size());
+                    m_moveSection.remove_prefix(m_moveSection.size());
                     return *this;
                 }
 
                 const Move move = san::sanToMove(m_position, san);
                 m_position.doMove(move);
 
-                m_moveRegion.remove_prefix(san.size());
+                m_moveSection.remove_prefix(san.size());
             
                 return *this;
             }
 
             [[nodiscard]] bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
             {
-                return lhs.m_moveRegion.empty();
+                return lhs.m_moveSection.empty();
             }
 
             [[nodiscard]] bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
@@ -263,7 +263,7 @@ namespace pgn
             }
 
         private:
-            std::string_view m_moveRegion;
+            std::string_view m_moveSection;
             Position m_position;
         };
 
@@ -272,15 +272,15 @@ namespace pgn
         using iterator = UnparsedPositionsIterator;
         using const_iterator = UnparsedPositionsIterator;
 
-        UnparsedGamePositions(std::string_view moveRegion) noexcept :
-            m_moveRegion(moveRegion)
+        UnparsedGamePositions(std::string_view moveSection) noexcept :
+            m_moveSection(moveSection)
         {
-            ASSERT(!m_moveRegion.empty());
+            ASSERT(!m_moveSection.empty());
         }
 
         [[nodiscard]] UnparsedPositionsIterator begin()
         {
-            return { m_moveRegion };
+            return { m_moveSection };
         }
 
         [[nodiscard]] UnparsedPositionsIterator::Sentinel end() const
@@ -289,49 +289,49 @@ namespace pgn
         }
 
     private:
-        std::string_view m_moveRegion;
+        std::string_view m_moveSection;
     };
 
     struct UnparsedGame
     {
         explicit UnparsedGame() :
-            m_tagRegion{},
-            m_moveRegion{}
+            m_tagSection{},
+            m_moveSection{}
         {
         }
 
-        UnparsedGame(std::string_view tagRegion, std::string_view moveRegion) noexcept :
-            m_tagRegion(tagRegion),
-            m_moveRegion(moveRegion)
+        UnparsedGame(std::string_view tagSection, std::string_view moveSection) noexcept :
+            m_tagSection(tagSection),
+            m_moveSection(moveSection)
         {
-            ASSERT(m_tagRegion.front() == '[');
-            ASSERT(m_moveRegion.front() == '1');
+            ASSERT(m_tagSection.front() == '[');
+            ASSERT(m_moveSection.front() == '1');
         }
 
         [[nodiscard]] GameResult result() const
         {
-            const std::string_view tag = detail::findTagValue(m_tagRegion, "Result"sv);
+            const std::string_view tag = detail::findTagValue(m_tagSection, "Result"sv);
             return detail::parseGameResult(tag);
         }
 
-        [[nodiscard]] std::string_view tagRegion() const
+        [[nodiscard]] std::string_view tagSection() const
         {
-            return m_tagRegion;
+            return m_tagSection;
         }
 
-        [[nodiscard]] std::string_view moveRegion() const
+        [[nodiscard]] std::string_view moveSection() const
         {
-            return m_moveRegion;
+            return m_moveSection;
         }
 
         [[nodiscard]] UnparsedGamePositions positions() const
         {
-            return UnparsedGamePositions(m_moveRegion);
+            return UnparsedGamePositions(m_moveSection);
         }
 
     private:
-        std::string_view m_tagRegion;
-        std::string_view m_moveRegion;
+        std::string_view m_tagSection;
+        std::string_view m_moveSection;
     };
 
     // is supposed to work as a game iterator
@@ -350,14 +350,34 @@ namespace pgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const UnparsedGame*;
 
-            LazyPgnFileReaderIterator(LazyPgnFileReader& fr) noexcept :
-                m_fileReader(&fr)
+            // currently bufferSize must be bigger than the maximum number of bytes taken by a single game
+            // TODO: resize buffer when didn't process anything
+            static constexpr std::size_t bufferSize = 1024 * 32;
+
+            LazyPgnFileReaderIterator(const std::filesystem::path& path) :
+                m_file(nullptr, &std::fclose),
+                m_buffer(bufferSize + 1), // one spot for '\0',
+                m_bufferView(m_buffer.data(), bufferSize),
+                m_game{}
             {
+                auto strPath = path.string();
+                m_file.reset(std::fopen(strPath.c_str(), "r"));
+
+                if (m_file == nullptr)
+                {
+                    m_buffer[0] = '\0';
+                    return;
+                }
+
+                refillBuffer();
+
+                // find the first game
+                moveToNextGame();
             }
 
             const LazyPgnFileReaderIterator& operator++()
             {
-                m_fileReader->moveToNextGame();
+                moveToNextGame();
                 return *this;
             }
 
@@ -373,20 +393,117 @@ namespace pgn
 
             [[nodiscard]] const UnparsedGame& operator*() const
             {
-                return m_fileReader->m_game;
+                return m_game;
             }
 
             [[nodiscard]] const UnparsedGame* operator->() const
             {
-                return &m_fileReader->m_game;
+                return &m_game;
             }
 
         private:
-            LazyPgnFileReader* m_fileReader;
+            std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
+            std::vector<char> m_buffer;
+            std::string_view m_bufferView; // what is currently being processed
+            UnparsedGame m_game;
 
             [[nodiscard]] bool isEnd() const
             {
-                return m_fileReader->m_buffer.front() == '\0';
+                return m_buffer.front() == '\0';
+            }
+
+            void moveToNextGame()
+            {
+                while (m_buffer.front() != '\0')
+                {
+                    // We look for a sequence:
+                    // 1. any number of empty lines
+                    // 2. any number of non-empty lines - tag section
+                    // 3. any number of empty lines
+                    // 4. any number of non-empty lines - move section
+                    // 5. one empty line
+                    //
+                    // If we cannot find such a sequence then more data is fetched.
+                    // If we cannot find such a sequence after looking through the whole buffer
+                    // then we scrap the buffer (TODO: buffer resizing)
+
+                    const std::size_t tagStart = m_bufferView.find_first_not_of('\n');
+                    if (tagStart == std::string::npos)
+                    {
+                        refillBuffer();
+                        continue;
+                    }
+
+                    const std::size_t tagEnd = m_bufferView.find(tagSectionEndSequence, tagStart);
+                    if (tagEnd == std::string::npos)
+                    {
+                        refillBuffer();
+                        continue;
+                    }
+
+                    const std::size_t moveStart = m_bufferView.find_first_not_of('\n', tagEnd);
+                    if (moveStart == std::string::npos)
+                    {
+                        refillBuffer();
+                        continue;
+                    }
+
+                    const std::size_t moveEnd = m_bufferView.find(moveSectionEndSequence, moveStart);
+                    if (moveEnd == std::string::npos)
+                    {
+                        refillBuffer();
+                        continue;
+                    }
+
+                    // We only extract one game at the time.
+
+                    m_game = UnparsedGame(
+                        m_bufferView.substr(tagStart, tagEnd - tagStart),
+                        m_bufferView.substr(moveStart, moveEnd - moveStart)
+                    );
+
+                    m_bufferView.remove_prefix(moveEnd);
+
+                    return;
+                }
+            }
+
+            void refillBuffer()
+            {
+                // copies unprocessed data to the beginning
+                // and fills the rest with new data
+
+                // copy to the beginning everything that was not yet read (commited)
+                std::size_t numBytesProcessed = m_bufferView.data() - m_buffer.data();
+                if (numBytesProcessed == 0)
+                {
+                    // if we were unable to process anything then scrap the whole buffer
+                    numBytesProcessed = bufferSize;
+                }
+                else if (numBytesProcessed != bufferSize)
+                {
+                    std::memmove(m_buffer.data(), m_buffer.data() + numBytesProcessed, bufferSize - numBytesProcessed);
+                }
+
+                // fill the buffer and put '\0' at the end
+                const std::size_t numBytesLeft = bufferSize - numBytesProcessed;
+                const std::size_t numBytesRead = std::fread(m_buffer.data() + numBytesLeft, 1, numBytesProcessed, m_file.get());
+
+                // If we hit the end of file we make sure that it ends with at least two new lines.
+                // One is there by the PGN standard, the second one may not.
+                // We need it for easier search for empty lines. We can just search for "\n\n"
+                // If the buffer is empty we don't add anything so it is recognized as empty by the parser.
+                if (numBytesLeft + numBytesRead && numBytesRead < numBytesProcessed)
+                {
+                    m_buffer[numBytesLeft + numBytesRead] = '\n';
+                    m_buffer[numBytesLeft + numBytesRead + 1u] = '\0';
+                    m_bufferView = std::string_view(m_buffer.data(), numBytesLeft + numBytesRead + 1u);
+                }
+                else
+                {
+                    m_buffer[numBytesLeft + numBytesRead] = '\0';
+                    m_bufferView = std::string_view(m_buffer.data(), numBytesLeft + numBytesRead);
+                }
             }
         };
 
@@ -395,30 +512,15 @@ namespace pgn
         using iterator = LazyPgnFileReaderIterator;
         using const_iterator = LazyPgnFileReaderIterator;
 
-        // currently bufferSize must be bigger than the maximum number of bytes taken by a single game
-        // TODO: resize buffer when didn't process anything
-        static constexpr std::size_t bufferSize = 1024 * 32;
-
+        // We keep the file opened. That way we weakly enforce that a created iterator
+        // (that reopens the file to have it's own cursor)
+        // is valid after a successful call to isOpen()
         LazyPgnFileReader(const std::filesystem::path& path) :
             m_file(nullptr, &std::fclose),
-            m_buffer(bufferSize + 1), // one spot for '\0',
-            m_game{}
+            m_path(path)
         {
             auto strPath = path.string();
             m_file.reset(std::fopen(strPath.c_str(), "r"));
-
-            if (m_file == nullptr)
-            {
-                m_buffer[0] = '\0';
-                return;
-            }
-
-            const std::size_t numBytesRead = std::fread(m_buffer.data(), 1, bufferSize, m_file.get());
-            m_buffer[numBytesRead] = '\0';
-            m_bufferView = std::string_view(m_buffer.data(), numBytesRead);
-
-            // find the first game
-            moveToNextGame();
         }
 
         [[nodiscard]] bool isOpen() const
@@ -428,14 +530,7 @@ namespace pgn
 
         [[nodiscard]] LazyPgnFileReaderIterator begin()
         {
-#if !defined(NDEBUG)
-            // only one iterator can be constructed
-            // because the file can only be traversed once
-            ASSERT(!m_iteratorConstructed);
-            m_iteratorConstructed = true;
-#endif
-
-            return { *this };
+            return { m_path };
         }
 
         [[nodiscard]] LazyPgnFileReaderIterator::Sentinel end() const
@@ -444,74 +539,7 @@ namespace pgn
         }
 
     private:
-        void moveToNextGame()
-        {
-            while(m_buffer.front() != '\0')
-            {
-                // try find region bounds
-                const std::size_t tagEnd = m_bufferView.find(tagRegionEndSequence);
-                if (tagEnd == std::string::npos)
-                {
-                    // fetch more data if needed
-                    refillBuffer();
-                    continue;
-                }
-
-                const std::size_t moveStart = tagEnd + tagRegionEndSequence.size();
-                const std::size_t moveEnd = m_bufferView.find(moveRegionEndSequence, moveStart);
-                if (moveEnd == std::string::npos)
-                {
-                    refillBuffer();
-                    continue;
-                }
-
-                // we only extract one game at the time
-
-                m_game = UnparsedGame(
-                    m_bufferView.substr(0, tagEnd),
-                    m_bufferView.substr(moveStart, moveEnd - moveStart)
-                );
-
-                m_bufferView.remove_prefix(moveEnd + moveRegionEndSequence.size());
-
-                return;
-            }
-        }
-
-    private:
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
-        std::vector<char> m_buffer;
-        std::string_view m_bufferView; // what is currently being processed
-        UnparsedGame m_game;
-#if !defined(NDEBUG)
-        bool m_iteratorConstructed = false;
-#endif
-
-        void refillBuffer()
-        {
-            // copies unprocessed data to the beginning
-            // and fills the rest with new data
-
-            // copy to the beginning everything that was not yet read (commited)
-            std::size_t numBytesProcessed = m_bufferView.data() - m_buffer.data();
-            if (numBytesProcessed == 0)
-            {
-                // if we were unable to process anything then scrap the whole buffer
-                numBytesProcessed = bufferSize;
-            }
-            else if (numBytesProcessed != bufferSize)
-            {
-                std::memmove(m_buffer.data(), m_buffer.data() + numBytesProcessed, bufferSize - numBytesProcessed);
-            }
-
-            // fill the buffer and put '\0' at the end
-            const std::size_t numBytesLeft = bufferSize - numBytesProcessed;
-            const std::size_t numBytesRead = std::fread(m_buffer.data() + numBytesLeft, 1, numBytesProcessed, m_file.get());
-            m_buffer[numBytesLeft + numBytesRead] = '\0';
-
-            m_bufferView = std::string_view(m_buffer.data(), numBytesLeft + numBytesRead);
-        }
+        std::filesystem::path m_path;
     };
-
-
 }
