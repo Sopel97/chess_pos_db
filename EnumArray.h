@@ -39,11 +39,15 @@ struct EnumArray
 
     [[nodiscard]] constexpr ValueType& operator[](const KeyType& dir)
     {
+        ASSERT(ordinal(dir) < SizeV);
+
         return elements[ordinal(dir)];
     }
 
     [[nodiscard]] constexpr const ValueType& operator[](const KeyType& dir) const
     {
+        ASSERT(ordinal(dir) < SizeV);
+
         return elements[ordinal(dir)];
     }
 
