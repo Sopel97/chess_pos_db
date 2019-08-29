@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Assert.h"
+#include "ArithmeticUtility.h"
 #include "FixedVector.h"
 
 namespace bit
@@ -53,20 +54,8 @@ namespace bit
             FixedVector<EntryType, (MaxNumBitsV / numBitsInEntry + (MaxNumBitsV % numBitsInEntry != 0u))>
         >;
 
-        static constexpr auto nbitmasks = []() {
-            std::array<EntryType, numBitsInEntry + 1> nbitmasks{};
-
-            for (EntryType i = 0; i < numBitsInEntry; ++i)
-            {
-                nbitmasks[i] = (static_cast<EntryType>(1u) << i) - 1u;
-            }
-            nbitmasks[numBitsInEntry] = ~static_cast<EntryType>(0u);
-
-            return nbitmasks;
-        }();
-
-        static constexpr auto ones = nbitmasks.back();
-        static constexpr auto zeros = nbitmasks.front();
+        static constexpr auto ones = nbitmask<EntryType>.back();
+        static constexpr auto zeros = nbitmask<EntryType>.front();
 
         static constexpr std::size_t initialAllocationSize = 16u;
 
@@ -159,7 +148,7 @@ namespace bit
             }
 
             // mask so we don't write trash bits
-            value &= nbitmasks[length];
+            value &= nbitmask<EntryType>[length];
 
             m_numBits += length;
 
@@ -241,7 +230,7 @@ namespace bit
                 // everything is contained in this single entry
 
                 const size_type numSuperfluousBits = (numReadableBitsInThisEntry - length);
-                return (m_entries[entryIdx] >> numSuperfluousBits) & nbitmasks[length];
+                return (m_entries[entryIdx] >> numSuperfluousBits) & nbitmask<EntryType>[length];
             }
             else
             {
@@ -251,7 +240,7 @@ namespace bit
 
                 const EntryType upper = m_entries[entryIdx] << numLowerBits;
                 const EntryType lower = m_entries[entryIdx + 1u] >> (numBitsInEntry - numLowerBits);
-                return (lower | upper) & nbitmasks[length];
+                return (lower | upper) & nbitmask<EntryType>[length];
             }
         }
 

@@ -85,6 +85,26 @@ constexpr std::size_t maxFibonacciNumberIndexForType()
 }
 
 template <typename IntT>
+constexpr auto computeMasks()
+{
+    static_assert(std::is_unsigned_v<IntT>);
+
+    constexpr std::size_t numBits = sizeof(IntT) * CHAR_BIT;
+    std::array<IntT, numBits + 1u> nbitmasks{};
+
+    for (std::size_t i = 0; i < numBits; ++i)
+    {
+        nbitmasks[i] = (static_cast<IntT>(1u) << i) - 1u;
+    }
+    nbitmasks[numBits] = ~static_cast<IntT>(0u);
+
+    return nbitmasks;
+}
+
+template <typename IntT>
+constexpr auto nbitmask = computeMasks<IntT>();
+
+template <typename IntT>
 constexpr auto computeFibonacciNumbers()
 {
     constexpr std::size_t size = maxFibonacciNumberIndexForType<IntT>() + 1;

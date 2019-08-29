@@ -11,7 +11,7 @@
 
 namespace bit
 {
-    template <typename CodingT, typename ValueT>
+    template <typename CodingT, typename ValueT, typename EnableT = void>
     struct CompressedSizeUpperBound
     {
         // in bits
@@ -19,7 +19,7 @@ namespace bit
     };
 
     template <typename CodingT, typename ValueT, std::size_t SizeV>
-    struct CompressedSizeUpperBound<CodingT, std::array<ValueT, SizeV>>
+    struct CompressedSizeUpperBound<CodingT, std::array<ValueT, SizeV>, void>
     {
         // in bits
         static constexpr std::size_t value = mulSaturate(CompressedSizeUpperBound<CodingT, ValueT>::value, SizeV);
@@ -140,12 +140,20 @@ namespace bit
 
             return static_cast<IntT>(value - 1u);
         }
+
+        // maximum size after compression of an integer with numBits bits
+        [[nodiscard]] static constexpr std::size_t maxCompressedSize(std::size_t numBits)
+        {
+            ASSERT(numBits != 0u);
+
+            return (numBits - 1u) + 2u * (floorLog2(numBits)) + 1u;
+        }
     };
 
-    template <> struct CompressedSizeUpperBound<EliasDeltaCoding, std::uint8_t> { static constexpr std::size_t value = 14u; };
-    template <> struct CompressedSizeUpperBound<EliasDeltaCoding, std::uint16_t> { static constexpr std::size_t value = 24u; };
-    template <> struct CompressedSizeUpperBound<EliasDeltaCoding, std::uint32_t> { static constexpr std::size_t value = 42u; };
-    template <> struct CompressedSizeUpperBound<EliasDeltaCoding, std::uint64_t> { static constexpr std::size_t value = 76u; };
+    template <typename IntT> struct CompressedSizeUpperBound<EliasDeltaCoding, IntT, std::enable_if_t<std::is_integral_v<IntT>>>
+    { 
+        static constexpr std::size_t value = EliasDeltaCoding::maxCompressedSize(sizeof(IntT) * CHAR_BIT);
+    };
 
     struct FibonacciCoding : Coding<FibonacciCoding>
     {
@@ -260,12 +268,28 @@ namespace bit
 
             return value - 1;
         }
+
+        // maximum size after compression of an integer with numBits bits
+        [[nodiscard]] static constexpr std::size_t maxCompressedSize(std::size_t numBits)
+        {
+            ASSERT(numBits != 0u);
+            ASSERT(numBits <= 64u);
+
+            constexpr auto& fibonacci = fibonacciNumbers<uint64_t>;
+            for (std::size_t i = fibonacci.size() - 1; i > 0; --i)
+            {
+                if (fibonacci[i] <= nbitmask<uint64_t>[numBits])
+                {
+                    return i;
+                }
+            }
+        }
     };
 
-    template <> struct CompressedSizeUpperBound<FibonacciCoding, std::uint8_t> { static constexpr std::size_t value = 13u; };
-    template <> struct CompressedSizeUpperBound<FibonacciCoding, std::uint16_t> { static constexpr std::size_t value = 24u; };
-    template <> struct CompressedSizeUpperBound<FibonacciCoding, std::uint32_t> { static constexpr std::size_t value = 47u; };
-    template <> struct CompressedSizeUpperBound<FibonacciCoding, std::uint64_t> { static constexpr std::size_t value = 93u; };
+    template <typename IntT> struct CompressedSizeUpperBound<FibonacciCoding, IntT, std::enable_if_t<std::is_integral_v<IntT>>>
+    {
+        static constexpr std::size_t value = FibonacciCoding::maxCompressedSize(sizeof(IntT) * CHAR_BIT);
+    };
 
     struct EliasGammaCoding : Coding<EliasGammaCoding>
     {
@@ -296,12 +320,20 @@ namespace bit
 
             return static_cast<IntT>(value - 1u);
         }
+
+        // maximum size after compression of an integer with numBits bits
+        [[nodiscard]] static constexpr std::size_t maxCompressedSize(std::size_t numBits)
+        {
+            ASSERT(numBits != 0u);
+
+            return 2u * (numBits - 1u) + 1u;
+        }
     };
 
-    template <> struct CompressedSizeUpperBound<EliasGammaCoding, std::uint8_t> { static constexpr std::size_t value = 15u; };
-    template <> struct CompressedSizeUpperBound<EliasGammaCoding, std::uint16_t> { static constexpr std::size_t value = 31u; };
-    template <> struct CompressedSizeUpperBound<EliasGammaCoding, std::uint32_t> { static constexpr std::size_t value = 63u; };
-    template <> struct CompressedSizeUpperBound<EliasGammaCoding, std::uint64_t> { static constexpr std::size_t value = 127u; };
+    template <typename IntT> struct CompressedSizeUpperBound<EliasGammaCoding, IntT, std::enable_if_t<std::is_integral_v<IntT>>>
+    {
+        static constexpr std::size_t value = EliasGammaCoding::maxCompressedSize(sizeof(IntT) * CHAR_BIT);
+    };
 
     struct EliasOmegaCoding : Coding<EliasOmegaCoding>
     {
@@ -399,12 +431,31 @@ namespace bit
             reader.skipBits(1u);
             return static_cast<IntT>(value - 1u);
         }
+
+        // maximum size after compression of an integer with numBits bits
+        [[nodiscard]] static constexpr std::size_t maxCompressedSize(std::size_t numBits)
+        {
+            switch (numBits)
+            {
+            case 8u:
+                return 14u;
+            case 16u:
+                return 23u;
+            case 32u:
+                return 43u;
+            case 64u:
+                return 76u;
+            }
+
+            // we don't care about other sizes, and there is no easy formula
+            return std::numeric_limits<std::size_t>::max();
+        }
     };
 
-    template <> struct CompressedSizeUpperBound<EliasOmegaCoding, std::uint8_t> { static constexpr std::size_t value = 14u; };
-    template <> struct CompressedSizeUpperBound<EliasOmegaCoding, std::uint16_t> { static constexpr std::size_t value = 23u; };
-    template <> struct CompressedSizeUpperBound<EliasOmegaCoding, std::uint32_t> { static constexpr std::size_t value = 43u; };
-    template <> struct CompressedSizeUpperBound<EliasOmegaCoding, std::uint64_t> { static constexpr std::size_t value = 76u; };
+    template <typename IntT> struct CompressedSizeUpperBound<EliasOmegaCoding, IntT, std::enable_if_t<std::is_integral_v<IntT>>>
+    {
+        static constexpr std::size_t value = EliasOmegaCoding::maxCompressedSize(sizeof(IntT) * CHAR_BIT);
+    };
 
     template <std::size_t OrderV = 0u>
     struct ExpGolombCoding : Coding<ExpGolombCoding<OrderV>>
@@ -426,7 +477,7 @@ namespace bit
 
             if constexpr (OrderV > 0)
             {
-                const IntT remainder = value & ((static_cast<IntT>(1u) << OrderV) - 1u);
+                const IntT remainder = value & nbitmask<IntT>[OrderV];
                 bs.writeBits(remainder, OrderV);
             }
         }
@@ -443,31 +494,22 @@ namespace bit
 
             return static_cast<IntT>(value);
         }
-    };
 
-    namespace detail
-    {
-        constexpr std::size_t expGolombSizeAfterCompression(std::uint64_t value, std::size_t order)
+        // maximum size after compression of an integer with numBits bits
+        [[nodiscard]] static constexpr std::size_t maxCompressedSize(std::size_t numBits)
         {
-            return 2u * (floorLog2((value >> order) + 1u)) + 1u + order;
-        }
-    }
+            ASSERT(numBits > 0u);
+            ASSERT(numBits <= 64u);
 
-    template <std::size_t OrderV> struct CompressedSizeUpperBound<ExpGolombCoding<OrderV>, std::uint8_t>
-    {
-        static constexpr std::size_t value = detail::expGolombSizeAfterCompression(std::numeric_limits<std::uint8_t>::max() - 1u, OrderV);
+            // we can't code intmax
+            const std::uint64_t value = nbitmask<std::uint64_t>[numBits] - 1u;
+            return 2u * (floorLog2((value >> OrderV) + 1u)) + 1u + OrderV;
+        }
     };
-    template <std::size_t OrderV> struct CompressedSizeUpperBound<ExpGolombCoding<OrderV>, std::uint16_t>
+
+    template <std::size_t OrderV, typename IntT> struct CompressedSizeUpperBound<ExpGolombCoding<OrderV>, IntT, std::enable_if_t<std::is_integral_v<IntT>>>
     {
-        static constexpr std::size_t value = detail::expGolombSizeAfterCompression(std::numeric_limits<std::uint16_t>::max() - 1u, OrderV);
-    };
-    template <std::size_t OrderV> struct CompressedSizeUpperBound<ExpGolombCoding<OrderV>, std::uint32_t>
-    {
-        static constexpr std::size_t value = detail::expGolombSizeAfterCompression(std::numeric_limits<std::uint32_t>::max() - 1u, OrderV);
-    };
-    template <std::size_t OrderV> struct CompressedSizeUpperBound<ExpGolombCoding<OrderV>, std::uint64_t>
-    {
-        static constexpr std::size_t value = detail::expGolombSizeAfterCompression(std::numeric_limits<std::uint64_t>::max() - 1u, OrderV);
+        static constexpr std::size_t value = ExpGolombCoding<OrderV>::maxCompressedSize(sizeof(IntT) * CHAR_BIT);
     };
 
     // GroupSizeV denotes the number of data bits in one part
@@ -489,7 +531,7 @@ namespace bit
 
             // we store the continuation bit as the LSB of a part
 
-            constexpr IntT groupMask = (static_cast<IntT>(1u) << GroupSizeV) - 1u;
+            constexpr IntT groupMask = nbitmask<IntT>[GroupSizeV];
 
             for (;;)
             {
@@ -526,32 +568,20 @@ namespace bit
 
             return static_cast<IntT>(value);
         }
-    };
 
-    namespace detail
-    {
-        constexpr std::size_t variableLengthCodingMaxSizeForNumBits(std::uint64_t numBits, std::size_t groupSize)
+        // maximum size after compression of an integer with numBits bits
+        [[nodiscard]] static constexpr std::size_t maxCompressedSize(std::size_t numBits)
         {
-            const std::size_t numParts = (numBits + groupSize - 1u) / groupSize;
-            const std::size_t partSize = groupSize + 1u;
+            ASSERT(numBits > 0u);
+
+            const std::size_t numParts = (numBits + GroupSizeV - 1u) / GroupSizeV;
+            const std::size_t partSize = GroupSizeV + 1u;
             return numParts * partSize;
         }
-    }
+    };
 
-    template <std::size_t GroupSizeV> struct CompressedSizeUpperBound<VariableLengthCoding<GroupSizeV>, std::uint8_t>
+    template <std::size_t GroupSizeV, typename IntT> struct CompressedSizeUpperBound<VariableLengthCoding<GroupSizeV>, IntT, std::enable_if_t<std::is_integral_v<IntT>>>
     {
-        static constexpr std::size_t value = detail::variableLengthCodingMaxSizeForNumBits(8u, GroupSizeV);
-    };
-    template <std::size_t GroupSizeV> struct CompressedSizeUpperBound<VariableLengthCoding<GroupSizeV>, std::uint16_t>
-    {
-        static constexpr std::size_t value = detail::variableLengthCodingMaxSizeForNumBits(16u, GroupSizeV);
-    };
-    template <std::size_t GroupSizeV> struct CompressedSizeUpperBound<VariableLengthCoding<GroupSizeV>, std::uint32_t>
-    {
-        static constexpr std::size_t value = detail::variableLengthCodingMaxSizeForNumBits(32u, GroupSizeV);
-    };
-    template <std::size_t GroupSizeV> struct CompressedSizeUpperBound<VariableLengthCoding<GroupSizeV>, std::uint64_t>
-    {
-        static constexpr std::size_t value = detail::variableLengthCodingMaxSizeForNumBits(64u, GroupSizeV);
+        static constexpr std::size_t value = VariableLengthCoding<GroupSizeV>::maxCompressedSize(sizeof(IntT) * CHAR_BIT);
     };
 }
