@@ -32,6 +32,8 @@ struct EnumTraits<Color>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
     }
 };
@@ -59,7 +61,7 @@ struct EnumTraits<PieceType>
     using IdType = int;
     using EnumType = PieceType;
 
-    static constexpr int cardinality = 6; // None is special
+    static constexpr int cardinality = 7;
     static constexpr bool isNaturalIndex = true;
 
     static constexpr std::array<EnumType, cardinality> values{
@@ -68,7 +70,8 @@ struct EnumTraits<PieceType>
         PieceType::Bishop,
         PieceType::Rook,
         PieceType::Queen,
-        PieceType::King
+        PieceType::King,
+        PieceType::None
     };
 
     [[nodiscard]] static constexpr int ordinal(EnumType c) noexcept
@@ -98,6 +101,7 @@ struct Piece
     constexpr Piece(PieceType type, Color color) noexcept :
         m_id((ordinal(type) << 1) | ordinal(color))
     {
+        ASSERT(type != PieceType::None || color == Color::White);
     }
 
     constexpr Piece& operator=(const Piece& other) = default;
@@ -348,12 +352,13 @@ struct EnumTraits<Rank>
 // ranks north
 struct FlatSquareOffset
 {
-    int value;
+    std::int8_t value;
 
     constexpr FlatSquareOffset(int files, int ranks) noexcept :
         value(files + ranks * cardinality<File>())
     {
-
+        ASSERT(files + ranks * cardinality<File>() >= std::numeric_limits<std::int8_t>::min());
+        ASSERT(files + ranks * cardinality<File>() <= std::numeric_limits<std::int8_t>::max());
     }
 };
 
@@ -402,20 +407,25 @@ struct SquareCoords
 
 struct Square
 {
+private:
+    static constexpr std::int8_t m_noneId = cardinality<Rank>() * cardinality<File>();
+
+public:
     [[nodiscard]] static constexpr Square none()
     {
-        return Square(cardinality<Rank>() * cardinality<File>());
+        return Square(m_noneId);
     }
 
     constexpr explicit Square(int idx) noexcept :
         m_id(idx)
     {
+        ASSERT(isOk() || m_id == m_noneId);
     }
 
     constexpr Square(File file, Rank rank) noexcept :
         m_id(ordinal(file) + ordinal(rank) * cardinality<File>())
     {
-
+        ASSERT(isOk());
     }
 
     constexpr explicit Square(SquareCoords coords) noexcept :
@@ -464,12 +474,17 @@ struct Square
 
     constexpr friend Square& operator+=(Square& sq, FlatSquareOffset offset)
     {
+        ASSERT(sq.m_id + offset.value >= 0 && sq.m_id + offset.value < m_noneId);
         sq.m_id += offset.value;
         return sq;
     }
 
     [[nodiscard]] constexpr friend Square operator+(Square sq, Offset offset)
     {
+        ASSERT(sq.file() + offset.files >= fileA);
+        ASSERT(sq.file() + offset.files <= fileH);
+        ASSERT(sq.rank() + offset.ranks >= rank1);
+        ASSERT(sq.rank() + offset.ranks <= rank8);
         return operator+(sq, offset.flat());
     }
 
@@ -515,7 +530,7 @@ struct Square
 
     [[nodiscard]] constexpr bool isOk() const
     {
-        return m_id >= 0 && m_id < Square::none().m_id;
+        return m_id >= 0 && m_id < m_noneId;
     }
 
 private:

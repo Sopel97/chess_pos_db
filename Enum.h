@@ -26,6 +26,8 @@ template <typename EnumT>
 template <typename EnumT>
 [[nodiscard]] constexpr EnumT fromOrdinal(int id) noexcept
 {
+    ASSERT(!EnumTraits<EnumT>::isNaturalIndex || (id >= 0 && id < EnumTraits<EnumT>::cardinality));
+
     return EnumTraits<EnumT>::fromOrdinal(id);
 }
 

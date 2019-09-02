@@ -327,23 +327,30 @@ public:
         }
 
         Bitboard occupied = (piecesBB() ^ move.from) | move.to;
+        Bitboard captured = Bitboard::none();
 
         if (move.type == MoveType::EnPassant)
         {
             const Square capturedPieceSq(move.to.file(), move.from.rank());
             occupied ^= capturedPieceSq;
         }
+        else if (m_pieces[move.to] != Piece::none())
+        {
+            // A capture happened.
+            // We have to exclude the captured piece.
+            captured |= move.to;
+        }
 
         const Bitboard opponentQueens = piecesBB(Piece(PieceType::Queen, !color));
-        const Bitboard opponentBishopLikePieces = piecesBB(Piece(PieceType::Bishop, !color)) | opponentQueens;
-        const Bitboard opponentRookLikePieces = piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens;
 
+        const Bitboard opponentBishopLikePieces = (piecesBB(Piece(PieceType::Bishop, !color)) | opponentQueens) & ~captured;
         const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(ksq, occupied);
         if ((bishopAttacks & opponentBishopLikePieces).any())
         {
             return true;
         }
 
+        const Bitboard opponentRookLikePieces = (piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens) & ~captured;
         const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
         return (rookAttacks & opponentRookLikePieces).any();
     }
@@ -391,6 +398,11 @@ public:
         ASSERT(from.isOk() && to.isOk());
 
         return m_pieces[from].type() == PieceType::Pawn && (to.rank() == rank1 || to.rank() == rank8);
+    }
+
+    const Piece* piecesRaw() const
+    {
+        return m_pieces.data();
     }
 
 private:

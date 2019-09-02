@@ -14,6 +14,8 @@ namespace san
     {
         [[nodiscard]] constexpr int strlen(const char* san)
         {
+            ASSERT(san != nullptr);
+
             // optimized for short strings
             const char* cur = san;
             while (*cur) ++cur;
@@ -22,12 +24,18 @@ namespace san
 
         constexpr void strcpy(char* out, const char* san)
         {
+            ASSERT(out != nullptr);
+            ASSERT(san != nullptr);
+
             while (*san)* out++ = *san++;
             *out = '\0';
         }
 
         constexpr void strcpy(char* out, const char* san, std::size_t length)
         {
+            ASSERT(out != nullptr);
+            ASSERT(san != nullptr);
+
             const char* end = san + length;
             while (san != end)* out++ = *san++;
             *out = '\0';
@@ -85,6 +93,7 @@ namespace san
                 ++san;
             }
 
+            ASSERT(san[0] == 'x');
             // x__
             // ^san
             while (*san) // the original '\0' after we copy it
@@ -149,10 +158,9 @@ namespace san
                 return PieceType::Rook;
             case 'Q':
                 return PieceType::Queen;
-            default:
-                ASSERT(false);
             }
 
+            ASSERT(false);
             return PieceType::None;
         }
 
@@ -184,26 +192,32 @@ namespace san
                 {
                     ASSERT(move.to.rank() >= rank3);
 
-                    if (pos.pieceAt(move.to + Offset{ 0, -1 }).type() == PieceType::Pawn)
+                    const Square push1 = move.to + Offset{ 0, -1 };
+                    const Square push2 = move.to + Offset{ 0, -2 };
+                    if (pos.pieceAt(push1).type() == PieceType::Pawn)
                     {
-                        move.from = move.to + Offset{ 0, -1 };
+                        move.from = push1;
                     }
-                    else if (pos.pieceAt(move.to + Offset{ 0, -2 }).type() == PieceType::Pawn)
+                    // NOTE: if we leave else if here then msvc optimizer breaks the code by assuming
+                    //       that the first condition (above) is always true
+                    else // if (pos.pieceAt(push2).type() == PieceType::Pawn)
                     {
-                        move.from = move.to + Offset{ 0, -2 };
+                        move.from = push2;
                     }
                 }
                 else
                 {
                     ASSERT(move.to.rank() <= rank6);
 
-                    if (pos.pieceAt(move.to + Offset{ 0, 1 }).type() == PieceType::Pawn)
+                    const Square push1 = move.to + Offset{ 0, 1 };
+                    const Square push2 = move.to + Offset{ 0, 2 };
+                    if (pos.pieceAt(push1).type() == PieceType::Pawn)
                     {
-                        move.from = move.to + Offset{ 0, 1 };
+                        move.from = push1;
                     }
-                    else if (pos.pieceAt(move.to + Offset{ 0, 2 }).type() == PieceType::Pawn)
+                    else // if (pos.pieceAt(push2).type() == PieceType::Pawn)
                     {
-                        move.from = move.to + Offset{ 0, 2 };
+                        move.from = push2;
                     }
                 }
 
@@ -245,6 +259,8 @@ namespace san
             }
 
             ASSERT(pos.pieceAt(move.from).type() == PieceType::Pawn);
+            ASSERT(move.from.isOk());
+            ASSERT(move.to.isOk());
 
             return move;
         }
@@ -270,6 +286,7 @@ namespace san
             ASSERT(sanLen >= 2 && sanLen <= 4);
 
             const Square toSq = parseSquare(san.substr(sanLen - 2u));
+
             if (sanLen == 4)
             {
                 // we have everything we need already in the san
