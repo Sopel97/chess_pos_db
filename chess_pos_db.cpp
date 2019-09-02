@@ -19,6 +19,8 @@
 
 #include "lib/xxhash/xxhash_cpp.h"
 
+#include "lib/robin_hood/robin_hood.h"
+
 #include "CodingTest.h"
 
 void print(Bitboard bb)
@@ -58,7 +60,8 @@ int main()
         return 1;
     }
     auto t0 = std::chrono::high_resolution_clock::now();
-    std::unordered_map<PositionSignature, std::uint64_t> hist;
+    robin_hood::unordered_node_map<PositionSignature, std::array<std::uint64_t, 9>> hist;
+    hist.reserve(10'000'000);
     int numGames = 0;
     int numPositions = 0;
     for (auto& game : fr)
@@ -75,7 +78,7 @@ int main()
             std::cout << '\n';
             */
 
-            ++hist[PositionSignature(pos)];
+            ++hist[PositionSignature(pos)][0];
             ++numPositions;
         }
     }
