@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <memory>
 #include <unordered_map>
+#include <chrono>
 
 #include "Bitboard.h"
 #include "Enum.h"
@@ -56,7 +57,7 @@ int main()
         std::cout << "Failed to open file.\n";
         return 1;
     }
-
+    auto t0 = std::chrono::high_resolution_clock::now();
     std::unordered_map<PositionSignature, std::uint64_t> hist;
     int numGames = 0;
     int numPositions = 0;
@@ -78,6 +79,7 @@ int main()
             ++numPositions;
         }
     }
-    std::cout << numGames << ' ' << numPositions << ' ' << hist.size() << '\n';
+    auto t1 = std::chrono::high_resolution_clock::now();
+    std::cout << (t1-t0).count() / 1e9f << ' ' << numGames << ' ' << numPositions << ' ' << hist.size() << '\n';
     return 0;
 }

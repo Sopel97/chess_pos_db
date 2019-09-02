@@ -433,9 +433,30 @@ namespace san
         }
     }
 
+    constexpr std::array<bool, 256> validStart = []() {
+        std::array<bool, 256> validStart{};
+
+        validStart['N'] = true;
+        validStart['B'] = true;
+        validStart['R'] = true;
+        validStart['Q'] = true;
+        validStart['K'] = true;
+        validStart['O'] = true;
+        validStart['a'] = true;
+        validStart['b'] = true;
+        validStart['c'] = true;
+        validStart['d'] = true;
+        validStart['e'] = true;
+        validStart['f'] = true;
+        validStart['g'] = true;
+        validStart['h'] = true;
+
+        return validStart;
+    }();
+
     [[nodiscard]] constexpr bool isValidSanMoveStart(char c)
     {
-        return "NBRQKOabcdefgh"sv.find(c) != std::string::npos;
+        return validStart[static_cast<unsigned char>(c)];
     }
 
     [[nodiscard]] constexpr Move sanToMove(const Position& pos, std::string_view san)

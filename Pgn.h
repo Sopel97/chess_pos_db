@@ -100,12 +100,46 @@ namespace pgn
             }
         }
 
+        constexpr std::array<bool, 256> skip = []() {
+            std::array<bool, 256> skip{};
+
+            skip['0'] = true;
+            skip['1'] = true;
+            skip['2'] = true;
+            skip['3'] = true;
+            skip['4'] = true;
+            skip['5'] = true;
+            skip['6'] = true;
+            skip['7'] = true;
+            skip['8'] = true;
+            skip['9'] = true;
+            skip['.'] = true;
+            skip['$'] = true;
+            skip['\n'] = true;
+            skip[' '] = true;
+
+            return skip;
+        }();
+
         inline void seekNextMove(std::string_view& s)
         {
             for (;;)
             {
                 // skip characters we don't care about
-                while ("01234567890. $\n"sv.find(s[0]) != std::string::npos) s.remove_prefix(1u);
+                {
+                    std::size_t idx = 0;
+                    const std::size_t size = s.size();
+                    while (skip[static_cast<unsigned char>(s[idx])])
+                    {
+                        ++idx;
+                        if (idx >= size)
+                        {
+                            s.remove_prefix(size);
+                            return;
+                        }
+                    }
+                    s.remove_prefix(idx);
+                }
 
                 if (isCommentBegin(s[0]))
                 {
@@ -131,13 +165,18 @@ namespace pgn
         {
             ASSERT(san::isValidSanMoveStart(s[0]));
 
-            const std::size_t length = std::min(s.find(' '), s.find('\n'));
-            if (length == std::string::npos)
+            std::size_t idx = 0;
+            const std::size_t size = s.size();
+            while (s[idx] != ' ' && s[idx] != '\n')
             {
-                return {};
+                ++idx;
+                if (idx >= size)
+                {
+                    return {};
+                }
             }
 
-            return s.substr(0, length);
+            return s.substr(0, idx);
         }
 
         [[nodiscard]] inline std::string_view findTagValue(std::string_view s, std::string_view tag)

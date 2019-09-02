@@ -9,7 +9,7 @@
 // When compiler in release mode the __assume breaks the code, results in unpredictable behaviour
 // But when checking for an error and throwing it never happens
 // NOTE: left as terminate until the problem with __assume is not resolved
-#define ASSERT(e) if(!(e)) std::terminate();
+#define ASSERT(e) /*if(!(e)) std::terminate();*/
 
 #else
 
