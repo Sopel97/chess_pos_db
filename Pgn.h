@@ -194,7 +194,7 @@ namespace pgn
         }
     }
 
-    constexpr std::string_view tagSectionEndSequence = "\n\n";
+    constexpr std::string_view tagSectionEndSequence = "]\n\n";
     constexpr std::string_view moveSectionEndSequence = "\n\n";
 
     struct UnparsedGamePositions
@@ -421,7 +421,7 @@ namespace pgn
                     // 2. any number of non-empty lines - tag section
                     // 3. any number of empty lines
                     // 4. any number of non-empty lines - move section
-                    // 5. one empty line
+                    // 5. any number of empty lines
                     //
                     // If we cannot find such a sequence then more data is fetched.
                     // If we cannot find such a sequence after looking through the whole buffer
@@ -441,7 +441,7 @@ namespace pgn
                         continue;
                     }
 
-                    const std::size_t moveStart = m_bufferView.find_first_not_of('\n', tagEnd);
+                    const std::size_t moveStart = m_bufferView.find_first_not_of('\n', tagEnd + tagSectionEndSequence.size());
                     if (moveStart == std::string::npos)
                     {
                         refillBuffer();
@@ -455,6 +455,12 @@ namespace pgn
                         continue;
                     }
 
+                    std::size_t nextGameStart = m_bufferView.find_first_not_of('\n', moveEnd + moveSectionEndSequence.size());
+                    if (nextGameStart == std::string::npos)
+                    {
+                        nextGameStart = m_bufferView.size();
+                    }
+
                     // We only extract one game at the time.
 
                     m_game = UnparsedGame(
@@ -462,7 +468,7 @@ namespace pgn
                         m_bufferView.substr(moveStart, moveEnd - moveStart)
                     );
 
-                    m_bufferView.remove_prefix(moveEnd);
+                    m_bufferView.remove_prefix(nextGameStart);
 
                     return;
                 }

@@ -172,6 +172,7 @@
     <ClInclude Include="Intrinsics.h" />
     <ClInclude Include="Pgn.h" />
     <ClInclude Include="Position.h" />
+    <ClInclude Include="PositionSignature.h" />
     <ClInclude Include="San.h" />
     <ClInclude Include="TypeUtility.h" />
   </ItemGroup>

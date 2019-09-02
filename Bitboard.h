@@ -475,6 +475,7 @@ namespace bb
     namespace detail
     {
         static constexpr std::array<Offset, 8> knightOffsets{ { {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {-2, -1}, {-2, 1}, {2, -1}, {2, 1} } };
+        static constexpr std::array<Offset, 8> kingOffsets{ { {-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1} } };
 
         enum Direction
         {
@@ -609,12 +610,20 @@ namespace bb
         {
             EnumArray<Bitboard, Square> bbs{};
 
-            for (Square sq = A1; sq != Square::none(); ++sq)
+            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
             {
-                const Bitboard bbsq = square(sq);
-                const Bitboard bbh = bbsq | (bbsq + Offset{ 1, 0 }) | (bbsq + Offset{ -1, 0 }); // smear horizontally
-                const Bitboard bb = bbh | (bbh + Offset{ 0, 1 }) | (bbh + Offset{ 0, -1 }); // smear vertically
-                bbs[sq] = bb & ~bbsq; // don't include the king square
+                Bitboard bb{};
+
+                for (auto&& offset : kingOffsets)
+                {
+                    const SquareCoords toSq = fromSq.coords() + offset;
+                    if (toSq.isOk())
+                    {
+                        bb |= Square(toSq);
+                    }
+                }
+
+                bbs[fromSq] = bb;
             }
 
             return bbs;
@@ -693,6 +702,8 @@ namespace bb
         template <Direction DirV>
         [[nodiscard]] constexpr Bitboard slidingAttacks(Square sq, Bitboard occupied)
         {
+            ASSERT(sq.isOk());
+
             Bitboard attacks = detail::positiveRayAttacks[DirV][sq];
 
             if constexpr (DirV == NorthWest || DirV == North || DirV == NorthEast || DirV == East)
