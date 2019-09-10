@@ -71,6 +71,9 @@
     <ClInclude Include="PositionSignature.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="External.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="info.txt">

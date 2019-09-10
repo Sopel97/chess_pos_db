@@ -168,6 +168,7 @@
     <ClInclude Include="Compression.h" />
     <ClInclude Include="Enum.h" />
     <ClInclude Include="EnumArray.h" />
+    <ClInclude Include="External.h" />
     <ClInclude Include="FixedVector.h" />
     <ClInclude Include="Intrinsics.h" />
     <ClInclude Include="Pgn.h" />
