@@ -29,9 +29,6 @@
     <ClInclude Include="Enum.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="EnumArray.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Intrinsics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -72,6 +69,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="External.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="EnumMap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

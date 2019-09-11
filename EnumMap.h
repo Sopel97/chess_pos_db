@@ -7,8 +7,8 @@
 
 // assumes the indices are from 0 to n
 
-template <typename ValueT, typename EnumT, std::size_t SizeV = cardinality<EnumT>()>
-struct EnumArray
+template <typename EnumT, typename ValueT, std::size_t SizeV = cardinality<EnumT>()>
+struct EnumMap
 {
     static_assert(isNaturalIndex<EnumT>(), "Enum must start with 0 and end with cardinality-1.");
 
@@ -149,5 +149,5 @@ struct EnumArray
     ValueT elements[SizeV];
 };
 
-template <typename ValueT, typename Enum1T, typename Enum2T, std::size_t Size1V = cardinality<Enum1T>(), std::size_t Size2V = cardinality<Enum2T>()>
-using EnumArray2 = EnumArray<EnumArray<ValueT, Enum2T, Size2V>, Enum1T, Size1V>;
+template <typename Enum1T, typename Enum2T, typename ValueT, std::size_t Size1V = cardinality<Enum1T>(), std::size_t Size2V = cardinality<Enum2T>()>
+using EnumMap2 = EnumMap<Enum1T, EnumMap<Enum2T, ValueT, Size2V>, Size1V>;

@@ -167,7 +167,7 @@
     <ClInclude Include="CodingTest.h" />
     <ClInclude Include="Compression.h" />
     <ClInclude Include="Enum.h" />
-    <ClInclude Include="EnumArray.h" />
+    <ClInclude Include="EnumMap.h" />
     <ClInclude Include="External.h" />
     <ClInclude Include="FixedVector.h" />
     <ClInclude Include="Intrinsics.h" />

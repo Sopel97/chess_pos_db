@@ -2,7 +2,7 @@
 
 #include "Assert.h"
 #include "Bitboard.h"
-#include "EnumArray.h"
+#include "EnumMap.h"
 #include "Chess.h"
 
 #include <iostream>
@@ -12,8 +12,8 @@
 struct Board
 {
 private:
-    static constexpr EnumArray2<Square, Color, bool> m_rookCastleDestinations = { { {{ D1, F1 }}, {{ D8, F8 }} } };
-    static constexpr EnumArray2<Square, Color, bool> m_kingCastleDestinations = { { {{ C1, G1 }}, {{ C8, G8 }} } };
+    static constexpr EnumMap2<Color, bool, Square> m_rookCastleDestinations = { { {{ D1, F1 }}, {{ D8, F8 }} } };
+    static constexpr EnumMap2<Color, bool, Square> m_kingCastleDestinations = { { {{ C1, G1 }}, {{ C8, G8 }} } };
 
 public:
 
@@ -406,8 +406,8 @@ public:
     }
 
 private:
-    EnumArray<Piece, Square> m_pieces;
-    EnumArray<Bitboard, Piece> m_pieceBB;
+    EnumMap<Square, Piece> m_pieces;
+    EnumMap<Piece, Bitboard> m_pieceBB;
 
     // NOTE: currently we don't track it because it's not 
     // required to perform ep if we don't need to check validity

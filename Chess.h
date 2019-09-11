@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Enum.h"
-#include "EnumArray.h"
+#include "EnumMap.h"
 
 #include <cstdint>
 
@@ -182,7 +182,7 @@ struct EnumTraits<Piece>
 
 [[nodiscard]] constexpr char toChar(Piece piece)
 {
-    constexpr EnumArray<char, Piece> chars = {
+    constexpr EnumMap<Piece, char> chars = {
         'P', 'p',
         'N', 'n',
         'B', 'b',
@@ -692,7 +692,7 @@ struct Move
 
     [[nodiscard]] constexpr static Move castle(CastleType ct, Color c)
     {
-        constexpr EnumArray2<Move, CastleType, Color> moves = {{
+        constexpr EnumMap2<CastleType, Color, Move> moves = {{
             {{ { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } }},
             {{ { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }}
         }};
