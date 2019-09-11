@@ -10,6 +10,8 @@
 #include <string_view>
 
 #include "Assert.h"
+#include "Date.h"
+#include "Eco.h"
 #include "Position.h"
 #include "San.h"
 
@@ -27,6 +29,34 @@ namespace pgn
 
     namespace detail
     {
+        [[nodiscard]] std::uint16_t parseUInt16(std::string_view sv)
+        {
+            ASSERT(sv.size() > 0);
+            ASSERT(sv.size() <= 5);
+
+            std::uint16_t v = 0;
+
+            switch (sv.size())
+            {
+            case 5:
+                v += (sv[4] - '0') * 10000;
+            case 4:
+                v += (sv[3] - '0') * 1000;
+            case 3:
+                v += (sv[2] - '0') * 100;
+            case 2:
+                v += (sv[1] - '0') * 10;
+            case 1:
+                v += sv[0] - '0';
+                break;
+
+            default:
+                ASSERT(false);
+            }
+
+            return v;
+        }
+
         [[nodiscard]] constexpr bool isCommentBegin(char c)
         {
             return c == '{' || c == ';';
@@ -179,6 +209,7 @@ namespace pgn
             return s.substr(0, idx);
         }
 
+        // NOTE: We don't support escaping quotation marks inside a tag value.
         [[nodiscard]] inline std::string_view findTagValue(std::string_view s, std::string_view tag)
         {
             const std::size_t shift = s.find(tag);
@@ -351,6 +382,27 @@ namespace pgn
         {
             const std::string_view tag = detail::findTagValue(m_tagSection, "Result"sv);
             return detail::parseGameResult(tag);
+        }
+
+        [[nodiscard]] Date date() const
+        {
+            return { detail::findTagValue(m_tagSection, "Date"sv) };
+        }
+
+        [[nodiscard]] Eco eco() const
+        {
+            return { detail::findTagValue(m_tagSection, "ECO"sv) };
+        }
+
+        [[nodiscard]] std::uint16_t plyCount() const
+        {
+            const std::string_view tag = detail::findTagValue(m_tagSection, "PlyCount"sv);
+            return detail::parseUInt16(tag);
+        }
+
+        [[nodiscard]] std::string_view tag(std::string_view tag) const
+        {
+            return detail::findTagValue(m_tagSection, tag);
         }
 
         [[nodiscard]] std::string_view tagSection() const

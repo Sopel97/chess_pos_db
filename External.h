@@ -170,6 +170,13 @@ namespace ext
                 });
             }
 
+            void seekToEnd()
+            {
+                return withHandle([&](NativeFileHandle handle) {
+                    std::fseek(handle, 0, SEEK_END);
+                });
+            }
+
             [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count)
             {
                 return withHandle([&](NativeFileHandle handle) {
@@ -380,10 +387,16 @@ namespace ext
         }
     };
 
+    enum struct OpenMode
+    {
+        Truncate,
+        Append
+    };
+
     struct BinaryOutputFile
     {
-        BinaryOutputFile(std::filesystem::path path, bool append = false) :
-            m_file(std::make_unique<detail::File>(std::move(path), append ? m_openmodeAppend : m_openmodeTruncate))
+        BinaryOutputFile(std::filesystem::path path, OpenMode mode = OpenMode::Truncate) :
+            m_file(std::make_unique<detail::File>(std::move(path), mode == OpenMode::Append ? m_openmodeAppend : m_openmodeTruncate))
         {
         }
 
@@ -440,6 +453,89 @@ namespace ext
         static inline const std::string m_openmodeAppend = "ab";
 
         std::unique_ptr<detail::File> m_file;
+    };
+
+    struct BinaryInputOutputFile
+    {
+        BinaryInputOutputFile(std::filesystem::path path, OpenMode mode = OpenMode::Truncate) :
+            m_file(std::make_unique<detail::File>(std::move(path), mode == OpenMode::Append ? m_openmodeAppend : m_openmodeTruncate))
+        {
+        }
+
+        BinaryInputOutputFile(const BinaryInputOutputFile&) = delete;
+        BinaryInputOutputFile(BinaryInputOutputFile&&) = default;
+        BinaryInputOutputFile& operator=(const BinaryInputOutputFile&) = delete;
+        BinaryInputOutputFile& operator=(BinaryInputOutputFile&&) = default;
+
+        [[nodiscard]] friend bool operator==(const BinaryInputOutputFile& lhs, const BinaryInputOutputFile& rhs) noexcept
+        {
+            return &lhs == &rhs;
+        }
+
+        [[nodiscard]] decltype(auto) isOpen() const
+        {
+            return m_file->isOpen();
+        }
+
+        [[nodiscard]] decltype(auto) path() const
+        {
+            return m_file->path();
+        }
+
+        [[nodiscard]] decltype(auto) openmode() const
+        {
+            return m_file->openmode();
+        }
+
+        [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
+        {
+            return m_file->read(destination, offset, elementSize, count);
+        }
+
+        [[nodiscard]] std::size_t size() const
+        {
+            return m_file->size();
+        }
+
+        void write(const std::byte* source, std::size_t elementSize, std::size_t count) const
+        {
+            seekToEnd();
+            const std::size_t elementsWritten = m_file->write(source, elementSize, count);
+            if (elementsWritten != count)
+            {
+                throw Exception("Cannot write all bytes.");
+            }
+        }
+
+        // reopens the file in readonly mode
+        [[nodiscard]] ImmutableBinaryFile seal()
+        {
+            flush();
+            ImmutableBinaryFile f(m_file->path());
+            m_file.reset();
+            return std::move(f);
+        }
+
+        void flush()
+        {
+            m_file->flush();
+        }
+
+    private:
+        static inline const std::string m_openmodeTruncate = "wb+";
+        static inline const std::string m_openmodeAppend = "ab+";
+
+        std::unique_ptr<detail::File> m_file;
+
+        void seek(std::size_t offset) const
+        {
+            m_file->seekset(offset);
+        }
+
+        void seekToEnd() const
+        {
+            m_file->seekToEnd();
+        }
     };
 
     template <typename T>
@@ -1054,6 +1150,182 @@ namespace ext
         Buffer<T> m_buffer;
         T* m_nextEmpty;
         bool m_live;
+
+        void flushBuffer()
+        {
+            if (m_buffer.data() == nullptr)
+            {
+                return;
+            }
+
+            const std::size_t numObjectsToWrite = m_nextEmpty - m_buffer.data();
+            if (numObjectsToWrite == 0u)
+            {
+                return;
+            }
+
+            m_file.write(
+                reinterpret_cast<const std::byte*>(m_buffer.data()),
+                sizeof(T),
+                numObjectsToWrite
+            );
+
+            m_file.flush();
+
+            m_nextEmpty = m_buffer.data();
+        }
+    };
+
+    template <typename T>
+    struct Vector
+    {
+        static_assert(std::is_trivially_copyable_v<T>);
+
+        using value_type = T;
+
+        // it "borrows" the file, allows its later retrieval
+        Vector(BinaryInputOutputFile&& file, Buffer<T>&& buffer = Buffer<T>(1024)) :
+            m_file(std::move(file)),
+            m_buffer(std::move(buffer)),
+            m_nextEmpty(m_buffer.data()),
+            m_size(m_file.size())
+        {
+        }
+
+        Vector(const Vector&) = delete;
+        Vector(Vector&&) = default;
+        Vector& operator=(const Vector&) = delete;
+        Vector& operator=(Vector&&) = default;
+
+        ~Vector()
+        {
+            flushBuffer();
+        }
+
+        [[nodiscard]] decltype(auto) path() const
+        {
+            return m_file.path();
+        }
+
+        [[nodiscard]] std::size_t size() const
+        {
+            return m_size;
+        }
+
+        [[nodiscard]] std::size_t size_bytes() const
+        {
+            return size() * sizeof(T);
+        }
+
+        [[nodiscard]] bool empty() const
+        {
+            return m_size == 0;
+        }
+
+        [[nodiscard]] void read(T* destination, std::size_t offset, std::size_t count) const
+        {
+            flushBuffer();
+
+            const std::size_t elementsRead = m_file.read(
+                reinterpret_cast<std::byte*>(destination),
+                offset * sizeof(T),
+                sizeof(T),
+                count
+            );
+
+            if (elementsRead != count)
+            {
+                throw Exception("Cannot read file.");
+            }
+        }
+
+        [[nodiscard]] std::size_t read(T* destination) const
+        {
+            read(destination, 0, size());
+            return size();
+        }
+
+        [[nodiscard]] T operator[](std::size_t i) const
+        {
+            ASSERT(i < size());
+
+            T value;
+            read(&value, i, 1u);
+
+            return value;
+        }
+
+        [[nodiscard]] T front() const
+        {
+            ASSERT(!empty());
+
+            return operator[](0);
+        }
+
+        [[nodiscard]] T back() const
+        {
+            ASSERT(!empty());
+
+            return operator[](size() - 1u);
+        }
+
+        template <typename... Ts>
+        void emplace_back(Ts&& ... args)
+        {
+            *(m_nextEmpty++) = T{ std::forward<Ts>(args)... };
+
+            if (m_nextEmpty == m_buffer.data() + m_buffer.size())
+            {
+                flushBuffer();
+            }
+
+            m_size += 1;
+        }
+
+        // pods don't benefit from move semantics
+        void push_back(const T& value)
+        {
+            *(m_nextEmpty++) = value;
+
+            if (m_nextEmpty == m_buffer.data() + m_buffer.size())
+            {
+                flushBuffer();
+            }
+
+            m_size += 1;
+        }
+
+        void append(const T* data, std::size_t count)
+        {
+            const std::size_t bufferSizeLeft = m_buffer.size() - (m_nextEmpty - m_buffer.data());
+            if (count < bufferSizeLeft)
+            {
+                // if we can fit it in the buffer with some space left then do it
+                std::copy(data, data + count, m_nextEmpty);
+                m_nextEmpty += count;
+            }
+            else
+            {
+                // if we would fill the buffer completely or it doesn't fit then flush what we have
+                // and write straight from the passed data
+                flushBuffer();
+                m_file.write(reinterpret_cast<const std::byte*>(data), sizeof(T), count);
+                m_file.flush();
+            }
+
+            m_size += count;
+        }
+
+        void flush()
+        {
+            flushBuffer();
+        }
+
+    private:
+        BinaryInputOutputFile m_file;
+        Buffer<T> m_buffer;
+        T* m_nextEmpty;
+        std::size_t m_size;
 
         void flushBuffer()
         {

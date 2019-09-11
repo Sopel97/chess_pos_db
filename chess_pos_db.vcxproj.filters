@@ -80,6 +80,15 @@
     <ClInclude Include="EnumMap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="StorageHeader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Eco.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Date.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="info.txt">

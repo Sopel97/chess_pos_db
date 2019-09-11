@@ -166,6 +166,8 @@
     <ClInclude Include="Coding.h" />
     <ClInclude Include="CodingTest.h" />
     <ClInclude Include="Compression.h" />
+    <ClInclude Include="Date.h" />
+    <ClInclude Include="Eco.h" />
     <ClInclude Include="Enum.h" />
     <ClInclude Include="EnumMap.h" />
     <ClInclude Include="External.h" />
@@ -177,6 +179,7 @@
     <ClInclude Include="Position.h" />
     <ClInclude Include="PositionSignature.h" />
     <ClInclude Include="San.h" />
+    <ClInclude Include="StorageHeader.h" />
     <ClInclude Include="TypeUtility.h" />
   </ItemGroup>
   <ItemGroup>

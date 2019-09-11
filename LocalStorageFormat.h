@@ -5,6 +5,7 @@
 #include "GameClassification.h"
 #include "Pgn.h"
 #include "PositionSignature.h"
+#include "StorageHeader.h"
 
 #include <array>
 #include <cstdint>
@@ -92,6 +93,7 @@ namespace persistence
             discoverFiles();
         }
 
+        // data has to be sorted in ascending order
         void store(const LocalStorageFormatEntry* data, std::size_t count)
         {
             ASSERT(!m_path.empty());
@@ -104,6 +106,7 @@ namespace persistence
             m_files.emplace_back(outFile.seal());
         }
 
+        // entries have to be sorted in ascending order
         void store(const std::vector<LocalStorageFormatEntry>& entries)
         {
             store(entries.data(), entries.size());
@@ -183,8 +186,16 @@ namespace persistence
             * m_numPartitionsByHashModulo;
 
     public:
+        struct ImportStats
+        {
+            std::size_t numGames = 0;
+            std::size_t numSkippedGames = 0; // We skip games with an unknown result.
+            std::size_t numPositions = 0;
+        };
+
         LocalStorageFormat(std::filesystem::path path) :
-            m_path(path)
+            m_path(path),
+            m_header(path, 1'000'000) // TODO: pass memory to here
         {
             initializePartitions();
         }
@@ -195,7 +206,7 @@ namespace persistence
         }
 
         // returns number of positions added
-        std::size_t storeFromPgns(const std::vector<std::filesystem::path>& paths, GameLevel level, std::size_t memory)
+        ImportStats importPgns(const std::vector<std::filesystem::path>& paths, GameLevel level, std::size_t memory)
         {
             const std::size_t bucketSize = 
                 ext::numObjectsPerBufferUnit<LocalStorageFormatEntry>(
@@ -208,7 +219,7 @@ namespace persistence
                 bucket.reserve(bucketSize);
             });
 
-            std::size_t numPositions = 0;
+            ImportStats stats{};
             for (auto& path : paths)
             {
                 pgn::LazyPgnFileReader fr(path);
@@ -223,19 +234,22 @@ namespace persistence
                     const pgn::GameResult pgnResult = game.result();
                     if (pgnResult == pgn::GameResult::Unknown)
                     {
+                        stats.numSkippedGames += 1;
                         continue;
                     }
+
+                    const std::uint32_t gameIdx = m_header.addGame(game);
+                    stats.numGames += 1;
 
                     const GameResult result = convertResult(pgnResult);
 
                     for (auto& pos : game.positions())
                     {
-                        // TODO: game index
-                        LocalStorageFormatEntry entry(pos, 0);
+                        LocalStorageFormatEntry entry(pos, gameIdx);
                         const int partitionIdx = entry.hashMod(m_numPartitionsByHashModulo);
                         auto& bucket = entries[result][partitionIdx];
                         bucket.emplace_back(entry);
-                        ++numPositions;
+                        stats.numPositions += 1;
 
                         if (bucket.size() == bucketSize)
                         {
@@ -250,17 +264,18 @@ namespace persistence
                 store(bucket, level, result, idx);
              });
 
-            return numPositions;
+            return stats;
         }
 
-        void storeFromPgn(const std::filesystem::path& path, GameLevel level, std::size_t memory)
+        ImportStats importPgn(const std::filesystem::path& path, GameLevel level, std::size_t memory)
         {
-            storeFromPgns({ path }, level, memory);
+            return importPgns({ path }, level, memory);
         }
 
     private:
         std::filesystem::path m_path;
 
+        Header m_header;
         FilesStorageType m_files;
 
         // this is nontrivial to do in the constructor initializer list
