@@ -4,6 +4,7 @@
 
 #include "lib/xxhash/xxhash_cpp.h"
 
+#include <cstring>
 #include <functional>
 
 // currently only uses hash
@@ -12,30 +13,48 @@
 
 struct PositionSignature
 {
-    PositionSignature(const Position& pos) :
-        m_hash(xxhash::XXH3_128bits(pos.piecesRaw(), 64))
+    using StorageType = std::array<std::uint32_t, 4>;
+
+    PositionSignature(const Position& pos)
     {
-        m_hash.low64 ^= ordinal(pos.sideToMove());
+        auto h = xxhash::XXH3_128bits(pos.piecesRaw(), 64);
+        std::memcpy(m_hash.data(), &h, sizeof(StorageType));
+        m_hash[0] ^= ordinal(pos.sideToMove());
     }
 
     [[nodiscard]] friend bool operator==(const PositionSignature& lhs, const PositionSignature& rhs) noexcept
     {
-        return (lhs.m_hash.high64 == rhs.m_hash.high64) && (lhs.m_hash.low64 == rhs.m_hash.low64);
+        return
+            lhs.m_hash[0] == rhs.m_hash[0]
+            && lhs.m_hash[1] == rhs.m_hash[1]
+            && lhs.m_hash[2] == rhs.m_hash[2]
+            && lhs.m_hash[3] == rhs.m_hash[3];
     }
 
     [[nodiscard]] friend bool operator<(const PositionSignature& lhs, const PositionSignature& rhs) noexcept
     {
-        return (lhs.m_hash.high64 < rhs.m_hash.high64) | ((lhs.m_hash.high64 == rhs.m_hash.high64) & (lhs.m_hash.low64 < rhs.m_hash.low64));
+        if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
+        else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
+
+        if (lhs.m_hash[1] < rhs.m_hash[1]) return true;
+        else if (lhs.m_hash[1] > rhs.m_hash[1]) return false;
+
+        if (lhs.m_hash[2] < rhs.m_hash[2]) return true;
+        else if (lhs.m_hash[2] > rhs.m_hash[2]) return false;
+
+        if (lhs.m_hash[3] < rhs.m_hash[3]) return true;
+        return false;
     }
 
-    [[nodiscard]] const xxhash::XXH128_hash_t& hash() const
+    [[nodiscard]] const StorageType& hash() const
     {
         return m_hash;
     }
 
 private:
-    xxhash::XXH128_hash_t m_hash;
+    StorageType m_hash;
 };
+static_assert(sizeof(PositionSignature) == 16);
 
 namespace std
 {
@@ -45,7 +64,7 @@ namespace std
         using result_type = std::size_t;
         result_type operator()(const argument_type& s) const noexcept
         {
-            return static_cast<std::size_t>(s.hash().low64);
+            return (static_cast<std::size_t>(s.hash()[0]) << 32) | s.hash()[1];
         }
     };
 }

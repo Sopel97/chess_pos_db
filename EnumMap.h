@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <iterator>
 
+#include "Assert.h"
 #include "Enum.h"
 
 // assumes the indices are from 0 to n
