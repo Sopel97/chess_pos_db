@@ -15,12 +15,19 @@ struct PositionSignature
 {
     using StorageType = std::array<std::uint32_t, 4>;
 
+    PositionSignature() = default;
+
     PositionSignature(const Position& pos)
     {
         auto h = xxhash::XXH3_128bits(pos.piecesRaw(), 64);
         std::memcpy(m_hash.data(), &h, sizeof(StorageType));
         m_hash[0] ^= ordinal(pos.sideToMove());
     }
+
+    PositionSignature(const PositionSignature&) = default;
+    PositionSignature(PositionSignature&&) = default;
+    PositionSignature& operator=(const PositionSignature&) = default;
+    PositionSignature& operator=(PositionSignature&&) = default;
 
     [[nodiscard]] friend bool operator==(const PositionSignature& lhs, const PositionSignature& rhs) noexcept
     {
@@ -62,7 +69,7 @@ namespace std
     {
         using argument_type = PositionSignature;
         using result_type = std::size_t;
-        result_type operator()(const argument_type& s) const noexcept
+        [[nodiscard]] result_type operator()(const argument_type& s) const noexcept
         {
             return (static_cast<std::size_t>(s.hash()[0]) << 32) | s.hash()[1];
         }

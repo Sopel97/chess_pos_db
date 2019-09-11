@@ -424,6 +424,7 @@ namespace ext
         // reopens the file in readonly mode
         [[nodiscard]] ImmutableBinaryFile seal()
         {
+            flush();
             ImmutableBinaryFile f(m_file->path());
             m_file.reset();
             return std::move(f);
@@ -1018,7 +1019,7 @@ namespace ext
                 // if we would fill the buffer completely or it doesn't fit then flush what we have
                 // and write straight from the passed data
                 flushBuffer();
-                m_file.write(reinterpret_cast<const std::byte*>(data), sizeof(T), count * sizeof(T));
+                m_file.write(reinterpret_cast<const std::byte*>(data), sizeof(T), count);
                 m_file.flush();
             }
         }
@@ -1070,7 +1071,7 @@ namespace ext
             m_file.write(
                 reinterpret_cast<const std::byte*>(m_buffer.data()),
                 sizeof(T),
-                numObjectsToWrite * sizeof(T)
+                numObjectsToWrite
             );
 
             m_file.flush();
