@@ -7,8 +7,10 @@
 #include "PositionSignature.h"
 #include "StorageHeader.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <execution>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -156,7 +158,7 @@ namespace persistence
     private:
         static inline const std::string m_name = "local";
 
-        static constexpr int m_numPartitionsByHashModulo = 4;
+        static constexpr std::uint32_t m_numPartitionsByHashModulo = 4;
 
         template <typename T>
         using PerDirectory = EnumMap2<GameLevel, GameResult, std::array<T, m_numPartitionsByHashModulo>>;
@@ -185,6 +187,8 @@ namespace persistence
             * cardinality<GameResult>()
             * m_numPartitionsByHashModulo;
 
+        static constexpr std::size_t m_headerBufferMemory = 4 * 1024 * 1024;
+
     public:
         struct ImportStats
         {
@@ -195,7 +199,7 @@ namespace persistence
 
         LocalStorageFormat(std::filesystem::path path) :
             m_path(path),
-            m_header(path, 1'000'000) // TODO: pass memory to here
+            m_header(path, m_headerBufferMemory)
         {
             initializePartitions();
         }
@@ -238,18 +242,18 @@ namespace persistence
                         continue;
                     }
 
-                    const std::uint32_t gameIdx = m_header.addGame(game);
-                    stats.numGames += 1;
-
                     const GameResult result = convertResult(pgnResult);
 
+                    const std::uint32_t gameIdx = m_header.nextGameId();
+
+                    std::size_t numPositionsInGame = 0;
                     for (auto& pos : game.positions())
                     {
                         LocalStorageFormatEntry entry(pos, gameIdx);
                         const int partitionIdx = entry.hashMod(m_numPartitionsByHashModulo);
                         auto& bucket = entries[result][partitionIdx];
                         bucket.emplace_back(entry);
-                        stats.numPositions += 1;
+                        numPositionsInGame += 1;
 
                         if (bucket.size() == bucketSize)
                         {
@@ -257,6 +261,14 @@ namespace persistence
                             bucket.clear();
                         }
                     }
+
+                    ASSERT(numPositionsInGame > 0);
+
+                    const std::uint32_t actualGameIdx = m_header.addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u));
+                    ASSERT(actualGameIdx == gameIdx);
+
+                    stats.numGames += 1;
+                    stats.numPositions += numPositionsInGame;
                 }
             }
 
@@ -287,7 +299,7 @@ namespace persistence
                 for (const auto& result : values<GameResult>())
                 {
                     const std::filesystem::path resultPath = levelPath / m_pathByGameResult[result];
-                    for (int partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
+                    for (std::uint32_t partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
                     {
                         const std::filesystem::path partitionPath = resultPath / std::to_string(partitionIdx);
                         m_files[level][result][partitionIdx].setPath(m_path / partitionPath);
@@ -298,7 +310,15 @@ namespace persistence
 
         void store(std::vector<LocalStorageFormatEntry>& entries, GameLevel level, GameResult result, int partitionIdx)
         {
-            std::stable_sort(entries.begin(), entries.end());
+            // TODO: sorting the output buffers takes around the same time as outputting them
+            //       (that is when the size is >~150MiB)
+            //       Since the whole files are written at once we could instead
+            //       create a function in ext:: that writes a whole file
+            //       and bypasses the FilePool.
+            //       Then after the whole import process is finished we collect the ImmutableSpans.
+            //       Limits to one write at the same time - one thread.
+            //       We need just one additional buffer that we swap for the buffer that is to be sorted.
+            std::stable_sort(std::execution::par_unseq, entries.begin(), entries.end());
             m_files[level][result][partitionIdx].store(entries);
         }
 
@@ -309,7 +329,7 @@ namespace persistence
             {
                 for (const auto& result : values<GameResult>())
                 {
-                    for (int partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
+                    for (std::uint32_t partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
                     {
                         f(data[level][result][partitionIdx], level, result, partitionIdx);
                     }
@@ -322,7 +342,7 @@ namespace persistence
         {
             for (const auto& result : values<GameResult>())
             {
-                for (int partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
+                for (std::uint32_t partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
                 {
                     f(data[result][partitionIdx], result, partitionIdx);
                 }

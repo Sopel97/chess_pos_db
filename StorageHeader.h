@@ -102,6 +102,16 @@ namespace persistence
             return addHeader(HeaderEntry(game));
         }
 
+        [[nodiscard]] std::uint32_t addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+        {
+            return addHeader(HeaderEntry(game, plyCount));
+        }
+
+        [[nodiscard]] std::uint32_t nextGameId() const
+        {
+            return static_cast<std::uint32_t>(m_index.size());
+        }
+
     private:
         std::filesystem::path m_path;
         ext::Vector<char> m_header;

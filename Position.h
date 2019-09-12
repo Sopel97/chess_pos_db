@@ -162,11 +162,29 @@ public:
     // doesn't check validity
     constexpr Piece doMove(Move move)
     {
-        if (move.type == MoveType::Normal || move.type == MoveType::Promotion)
+        if (move.type == MoveType::Normal)
         {
             const Piece capturedPiece = m_pieces[move.to];
+            const Piece piece = m_pieces[move.from];
+
+            m_pieces[move.to] = piece;
+            m_pieces[move.from] = Piece::none();
+
+            m_pieceBB[piece] ^= move.from;
+            m_pieceBB[piece] ^= move.to;
+
+            m_pieceBB[capturedPiece] ^= move.to;
+            m_pieceBB[Piece::none()] ^= move.from;
+
+            return capturedPiece;
+        }
+        else if (move.type == MoveType::Promotion)
+        {
+            // We split it even though it's similar just because
+            // the normal case is much more common.
+            const Piece capturedPiece = m_pieces[move.to];
             const Piece fromPiece = m_pieces[move.from];
-            const Piece toPiece = move.promotedPiece == Piece::none() ? fromPiece : move.promotedPiece;
+            const Piece toPiece = move.promotedPiece;
 
             m_pieces[move.to] = toPiece;
             m_pieces[move.from] = Piece::none();

@@ -199,7 +199,20 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
 int main()
 {
     persistence::LocalStorageFormat e("w:/catobase/.tmp");
-    e.importPgn("data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human, 256'000'000);
+    e.importPgns({
+        "data/lichess_db_standard_rated_2013-01.pgn",
+        "data/lichess_db_standard_rated_2013-02.pgn",
+        "data/lichess_db_standard_rated_2013-03.pgn",
+        "data/lichess_db_standard_rated_2013-04.pgn",
+        "data/lichess_db_standard_rated_2013-05.pgn",
+        "data/lichess_db_standard_rated_2013-06.pgn",
+        "data/lichess_db_standard_rated_2013-07.pgn",
+        "data/lichess_db_standard_rated_2013-08.pgn",
+        "data/lichess_db_standard_rated_2013-09.pgn",
+        "data/lichess_db_standard_rated_2013-10.pgn",
+        "data/lichess_db_standard_rated_2013-11.pgn",
+        "data/lichess_db_standard_rated_2013-12.pgn"
+        }, GameLevel::Human, 2u * 1024u * 1024u * 1024u);
     return 0;
     {
         auto t0 = std::chrono::high_resolution_clock::now();

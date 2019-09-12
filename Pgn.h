@@ -100,7 +100,7 @@ namespace pgn
                 // a safer version with bounds would be nice
                 // but std::string_view::find_first_of is horrendously slow
                 const char* event = std::strpbrk(s.data() + 1u, "(){;");
-                if (event == nullptr || event - s.data() > s.size())
+                if (event == nullptr || static_cast<std::size_t>(event - s.data()) > s.size())
                 {
                     s.remove_prefix(s.size());
                     return;
@@ -130,26 +130,29 @@ namespace pgn
             }
         }
 
-        constexpr std::array<bool, 256> skip = []() {
-            std::array<bool, 256> skip{};
+        namespace lookup::seekNextMove
+        {
+            constexpr std::array<bool, 256> skip = []() {
+                std::array<bool, 256> skip{};
 
-            skip['0'] = true;
-            skip['1'] = true;
-            skip['2'] = true;
-            skip['3'] = true;
-            skip['4'] = true;
-            skip['5'] = true;
-            skip['6'] = true;
-            skip['7'] = true;
-            skip['8'] = true;
-            skip['9'] = true;
-            skip['.'] = true;
-            skip['$'] = true;
-            skip['\n'] = true;
-            skip[' '] = true;
+                skip['0'] = true;
+                skip['1'] = true;
+                skip['2'] = true;
+                skip['3'] = true;
+                skip['4'] = true;
+                skip['5'] = true;
+                skip['6'] = true;
+                skip['7'] = true;
+                skip['8'] = true;
+                skip['9'] = true;
+                skip['.'] = true;
+                skip['$'] = true;
+                skip['\n'] = true;
+                skip[' '] = true;
 
-            return skip;
-        }();
+                return skip;
+            }();
+        }
 
         inline void seekNextMove(std::string_view& s)
         {
@@ -159,7 +162,7 @@ namespace pgn
                 {
                     std::size_t idx = 0;
                     const std::size_t size = s.size();
-                    while (skip[static_cast<unsigned char>(s[idx])])
+                    while (lookup::seekNextMove::skip[static_cast<unsigned char>(s[idx])])
                     {
                         ++idx;
                         if (idx >= size)
@@ -171,6 +174,11 @@ namespace pgn
                     s.remove_prefix(idx);
                 }
 
+                if (san::isValidSanMoveStart(s[0]))
+                {
+                    return;
+                }
+                
                 if (isCommentBegin(s[0]))
                 {
                     skipComment(s);
@@ -178,10 +186,6 @@ namespace pgn
                 else if (isVariationBegin(s[0]))
                 {
                     skipVariation(s);
-                }
-                else if (san::isValidSanMoveStart(s[0]))
-                {
-                    return;
                 }
                 else
                 {
@@ -191,16 +195,33 @@ namespace pgn
             }
         }
 
+        namespace lookup::extractMove
+        {
+            constexpr std::array<bool, 256> skip = []() {
+                std::array<bool, 256> skip{};
+                for (auto& v : skip) v = true;
+
+                skip['\t'] = false;
+                skip['\n'] = false;
+                skip[' '] = false;
+
+                return skip;
+            }();
+        }
+
         inline std::string_view extractMove(std::string_view s)
         {
-            ASSERT(san::isValidSanMoveStart(s[0]));
+            constexpr std::size_t minSanLength = 2;
 
-            std::size_t idx = 0;
+            ASSERT(san::isValidSanMoveStart(s[0]));
+            ASSERT(s.size() > minSanLength);
+
+            std::size_t idx = minSanLength;
             const std::size_t size = s.size();
-            while (s[idx] != ' ' && s[idx] != '\n')
+            while (lookup::extractMove::skip[static_cast<unsigned char>(s[idx])])
             {
                 ++idx;
-                if (idx >= size)
+                if (idx > size)
                 {
                     return {};
                 }
@@ -443,7 +464,7 @@ namespace pgn
 
             // currently bufferSize must be bigger than the maximum number of bytes taken by a single game
             // TODO: resize buffer when didn't process anything
-            static constexpr std::size_t bufferSize = 1024 * 32;
+            static constexpr std::size_t bufferSize = 1u * 1024u * 1024u - 1u;
 
             LazyPgnFileReaderIterator(const std::filesystem::path& path) :
                 m_file(nullptr, &std::fclose),

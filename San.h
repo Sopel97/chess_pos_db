@@ -84,25 +84,49 @@ namespace san
             return contains(san, 'x');
         }
 
-        constexpr void removeSanCapture(char* san)
+        // returns new length
+        constexpr std::size_t removeSanCapture(char* san, std::size_t length)
         {
+            // There is no valid san with length less than 4
+            // that has a capture
+            if (length < 4)
+            {
+                return length;
+            }
+
             for (;;)
             {
                 if (*san == 'x') break;
-                if (*san == '\0') return;
+                if (*san == '\0') return length;
                 ++san;
             }
 
             ASSERT(san[0] == 'x');
             // x__
             // ^san
-            while (*san) // the original '\0' after we copy it
+            while (*san)
             {
-                *san = *(san + 1); // it is safe because the check above will catch a copied null terminator earlier
+                *san = *(san + 1);
                 ++san;
             }
 
             ASSERT(!contains(san, 'x'));
+
+            return length - 1u;
+        }
+
+        namespace lookup::removeSanDecorations
+        {
+            constexpr std::array<bool, 256> isDecoration = []() {
+                std::array<bool, 256> isDecoration{};
+
+                isDecoration['#'] = true;
+                isDecoration['+'] = true;
+                isDecoration['!'] = true;
+                isDecoration['?'] = true;
+
+                return isDecoration;
+            }();
         }
 
         constexpr std::size_t removeSanDecorations(char* san, std::size_t length)
@@ -113,37 +137,28 @@ namespace san
             // + - check
             // !
             // ?
-            // N - novelty
             //
             // removal starts from the end of the san
             // and stops when any character not on the list above is found
             //
             // returns the new length of the san
 
+            ASSERT(length >= 2);
+
             char* cur = san + length - 1u;
 
-            for (; cur > san; --cur)
+            while (lookup::removeSanDecorations::isDecoration[static_cast<unsigned char>(*cur)])
             {
-                switch (*cur)
+                *cur = '\0';
+                --cur;
+                if (cur == san)
                 {
-                case 'N':
-                    if (*(cur - 1) == '=') break;
-
-                case '#':
-                case '+':
-                case '!':
-                case '?':
-
-                    *cur = '\0';
-                    continue;
+                    return 0;
                 }
-
-                break;
             }
 
-            removeSanCapture(san);
-
-            return strlen(san);
+            const std::size_t newLength = cur - san + 1u;
+            return removeSanCapture(san, newLength);
         }
 
         [[nodiscard]] constexpr PieceType parsePromotedPieceType(char c)
@@ -310,21 +325,6 @@ namespace san
                 return Move{ fromSq, toSq };
             }
 
-            // if we have a knight then attacks==pseudoAttacks
-            if (PieceTypeV != PieceType::Knight)
-            {
-                candidates &= bb::attacks<PieceTypeV>(toSq, pos.piecesBB());
-
-                if (candidates.exactlyOne())
-                {
-                    const Square fromSq = candidates.first();
-
-                    ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
-
-                    return Move{ fromSq, toSq };
-                }
-            }
-
             if (sanLen == 3)
             {
                 // we have one of the following to disambiguate with:
@@ -341,6 +341,21 @@ namespace san
                     const Rank fromRank = parseRank(san[0]);
                     candidates &= bb::rank(fromRank);
                 }
+
+                if (candidates.exactlyOne())
+                {
+                    const Square fromSq = candidates.first();
+
+                    ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
+
+                    return Move{ fromSq, toSq };
+                }
+            }
+
+            // if we have a knight then attacks==pseudoAttacks
+            if (PieceTypeV != PieceType::Knight)
+            {
+                candidates &= bb::attacks<PieceTypeV>(toSq, pos.piecesBB());
 
                 if (candidates.exactlyOne())
                 {
