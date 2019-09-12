@@ -1554,6 +1554,24 @@ namespace ext
     }
 
     template <typename T>
+    void writeFile(const std::filesystem::path& path, const T* data, const std::size_t count)
+    {
+        const std::string pathString = path.string();
+        auto file = std::fopen(pathString.c_str(), "wb");
+        if (file == nullptr)
+        {
+            throw Exception("Cannot open file.");
+        }
+        const std::size_t objectsWritten = std::fwrite(data, sizeof(T), count, file);
+        if (objectsWritten != count)
+        {
+            throw Exception("Cannot write all elements.");
+        }
+
+        std::fclose(file);
+    }
+
+    template <typename T>
     void copy(const ImmutableSpan<T>& in, BinaryOutputFile& outFile)
     {
         withBackInserter<T>(outFile, [&](BackInserter<T>& out) {

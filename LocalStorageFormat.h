@@ -9,10 +9,17 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <execution>
 #include <filesystem>
+#include <future>
+#include <mutex>
+#include <queue>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 namespace persistence
@@ -78,6 +85,202 @@ namespace persistence
         int m_id;
     };
 
+    struct LocalStorageFormatFutureFile
+    {
+        LocalStorageFormatFutureFile(std::future<void>&& future, std::filesystem::path path) :
+            m_future(std::move(future)),
+            m_path(std::move(path)),
+            m_id(std::stoi(m_path.filename().string()))
+        {
+        }
+
+        [[nodiscard]] friend bool operator<(const LocalStorageFormatFutureFile& lhs, const LocalStorageFormatFutureFile& rhs) noexcept
+        {
+            return lhs.m_id < rhs.m_id;
+        }
+
+        [[nodiscard]] int id() const
+        {
+            return m_id;
+        }
+
+        [[nodiscard]] LocalStorageFormatFile get()
+        {
+            m_future.get();
+            return { m_path };
+        }
+
+    private:
+        std::future<void> m_future;
+        std::filesystem::path m_path;
+        int m_id;
+    };
+
+    struct LocalStorageFormatAsyncStorePipeline
+    {
+    private:
+        struct Job
+        {
+            Job(std::filesystem::path path, std::vector<LocalStorageFormatEntry>&& buffer, std::promise<void>&& promise) :
+                path(std::move(path)),
+                buffer(std::move(buffer)),
+                promise(std::move(promise))
+            {
+            }
+
+            std::filesystem::path path;
+            std::vector<LocalStorageFormatEntry> buffer;
+            std::promise<void> promise;
+        };
+
+    public:
+        LocalStorageFormatAsyncStorePipeline(std::vector<std::vector<LocalStorageFormatEntry>>&& buffers) :
+            m_sortingThreadFinished(false),
+            m_writingThreadFinished(false),
+            m_sortingThread([this]() { runSortingThread(); }),
+            m_writingThread([this]() { runWritingThread(); })
+        {
+            for (auto&& buffer : buffers)
+            {
+                m_bufferQueue.emplace(std::move(buffer));
+            }
+        }
+
+        LocalStorageFormatAsyncStorePipeline(const LocalStorageFormatAsyncStorePipeline&) = delete;
+
+        ~LocalStorageFormatAsyncStorePipeline()
+        {
+            waitForCompletion();
+        }
+
+        std::future<void> scheduleUnordered(const std::filesystem::path& path, std::vector<LocalStorageFormatEntry>&& elements)
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+
+            std::promise<void> promise;
+            std::future<void> future = promise.get_future();
+            m_sortQueue.emplace(path, std::move(elements), std::move(promise));
+
+            lock.unlock();
+            m_sortQueueNotEmpty.notify_one();
+
+            return future;
+        }
+
+        std::future<void> scheduleOrdered(const std::filesystem::path& path, std::vector<LocalStorageFormatEntry>&& elements)
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+
+            std::promise<void> promise;
+            std::future<void> future = promise.get_future();
+            m_sortQueue.emplace(path, std::move(elements), std::move(promise));
+
+            lock.unlock();
+            m_writeQueueNotEmpty.notify_one();
+
+            return future;
+        }
+
+        std::vector<LocalStorageFormatEntry> getEmptyBuffer()
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+
+            m_bufferQueueNotEmpty.wait(lock, [this]() {return !m_bufferQueue.empty(); });
+
+            auto buffer = std::move(m_bufferQueue.front());
+            m_bufferQueue.pop();
+
+            return buffer;
+        }
+
+        void waitForCompletion()
+        {
+            if (!m_sortingThreadFinished.load())
+            {
+                m_sortingThreadFinished.store(true);
+                m_sortQueueNotEmpty.notify_one();
+                m_sortingThread.join();
+
+                m_writingThreadFinished.store(true);
+                m_writeQueueNotEmpty.notify_one();
+                m_writingThread.join();
+            }
+        }
+
+    private:
+        std::queue<Job> m_sortQueue;
+        std::queue<Job> m_writeQueue;
+        std::queue<std::vector<LocalStorageFormatEntry>> m_bufferQueue;
+
+        std::condition_variable m_sortQueueNotEmpty;
+        std::condition_variable m_writeQueueNotEmpty;
+        std::condition_variable m_bufferQueueNotEmpty;
+
+        std::mutex m_mutex;
+
+        std::atomic_bool m_sortingThreadFinished;
+        std::atomic_bool m_writingThreadFinished;
+
+        std::thread m_sortingThread;
+        std::thread m_writingThread;
+
+        void runSortingThread()
+        {
+            for (;;)
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+                m_sortQueueNotEmpty.wait(lock, [this]() {return !m_sortQueue.empty() || m_sortingThreadFinished.load(); });
+
+                if (m_sortQueue.empty())
+                {
+                    return;
+                }
+
+                Job job = std::move(m_sortQueue.front());
+                m_sortQueue.pop();
+
+                lock.unlock();
+
+                std::stable_sort(job.buffer.begin(), job.buffer.end());
+
+                lock.lock();
+                m_writeQueue.emplace(std::move(job));
+                lock.unlock();
+
+                m_writeQueueNotEmpty.notify_one();
+            }
+        }
+
+        void runWritingThread()
+        {
+            for (;;)
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+                m_writeQueueNotEmpty.wait(lock, [this]() {return !m_writeQueue.empty() || m_writingThreadFinished.load(); });
+
+                if (m_writeQueue.empty())
+                {
+                    return;
+                }
+
+                Job job = std::move(m_writeQueue.front());
+                m_writeQueue.pop();
+
+                lock.unlock();
+
+                ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
+                job.buffer.clear();
+
+                lock.lock();
+                m_bufferQueue.emplace(std::move(job.buffer));
+                lock.unlock();
+
+                m_bufferQueueNotEmpty.notify_one();
+                job.promise.set_value();
+            }
+        }
+    };
+
     struct LocalStorageFormatPartition
     {
         LocalStorageFormatPartition() = default;
@@ -96,38 +299,59 @@ namespace persistence
         }
 
         // data has to be sorted in ascending order
-        void store(const LocalStorageFormatEntry* data, std::size_t count)
+        void storeOrdered(const LocalStorageFormatEntry* data, std::size_t count)
         {
             ASSERT(!m_path.empty());
 
-            ext::BinaryOutputFile outFile(nextPath());
-            ext::withBackInserterUnbuffered<LocalStorageFormatEntry>(outFile, [&](ext::BackInserter<LocalStorageFormatEntry>& out) {
-                out.append(data, count);
-            });
-
-            m_files.emplace_back(outFile.seal());
+            auto path = nextPath();
+            ext::writeFile(path, data, count);
+            m_files.emplace_back(path);
         }
 
         // entries have to be sorted in ascending order
-        void store(const std::vector<LocalStorageFormatEntry>& entries)
+        void storeOrdered(const std::vector<LocalStorageFormatEntry>& entries)
         {
-            store(entries.data(), entries.size());
+            storeOrdered(entries.data(), entries.size());
+        }
+
+        // entries have to be sorted in ascending order
+        void storeUnordered(LocalStorageFormatAsyncStorePipeline& pipeline, std::vector<LocalStorageFormatEntry>&& entries)
+        {
+            ASSERT(!m_path.empty());
+
+            auto path = nextPath();
+            m_futureFiles.emplace_back(pipeline.scheduleUnordered(path, std::move(entries)), path);
+        }
+
+        // collects future files
+        void updateFiles()
+        {
+            for (auto& f : m_futureFiles)
+            {
+                m_files.emplace_back(f.get());
+            }
+            m_futureFiles.clear();
+            m_futureFiles.shrink_to_fit();
         }
 
     private:
         std::filesystem::path m_path;
         std::vector<LocalStorageFormatFile> m_files;
+        std::vector<LocalStorageFormatFutureFile> m_futureFiles;
 
         [[nodiscard]] int nextId() const
         {
-            if (m_files.empty())
+            if (!m_futureFiles.empty())
             {
-                return 0;
+                return m_futureFiles.back().id() + 1;
             }
-            else
+
+            if (!m_files.empty())
             {
                 return m_files.back().id() + 1;
             }
+
+            return 0;
         }
 
         [[nodiscard]] std::filesystem::path nextPath() const
@@ -212,16 +436,26 @@ namespace persistence
         // returns number of positions added
         ImportStats importPgns(const std::vector<std::filesystem::path>& paths, GameLevel level, std::size_t memory)
         {
+            constexpr int numAdditionalBuffers = cardinality<GameResult>() * m_numPartitionsByHashModulo;
+
             const std::size_t bucketSize = 
                 ext::numObjectsPerBufferUnit<LocalStorageFormatEntry>(
                     memory, 
-                    cardinality<GameResult>() * m_numPartitionsByHashModulo
+                    cardinality<GameResult>() * m_numPartitionsByHashModulo + numAdditionalBuffers
                 );
 
             PerGameLevel<std::vector<LocalStorageFormatEntry>> entries;
             forEach(entries, [bucketSize](auto& bucket, GameResult result, int idx) {
                 bucket.reserve(bucketSize);
             });
+            std::vector<std::vector<LocalStorageFormatEntry>> additionalBuffers;
+            for (int i = 0; i < numAdditionalBuffers; ++i)
+            {
+                additionalBuffers.emplace_back();
+                additionalBuffers.back().reserve(bucketSize);
+            }
+
+            LocalStorageFormatAsyncStorePipeline pipeline(std::move(additionalBuffers));
 
             ImportStats stats{};
             for (auto& path : paths)
@@ -257,7 +491,7 @@ namespace persistence
 
                         if (bucket.size() == bucketSize)
                         {
-                            store(bucket, level, result, partitionIdx);
+                            store(pipeline, bucket, level, result, partitionIdx);
                             bucket.clear();
                         }
                     }
@@ -272,9 +506,14 @@ namespace persistence
                 }
             }
 
+            forEach(entries, [this, &pipeline, level](auto& bucket, GameResult result, int idx) {
+                store(pipeline, bucket, level, result, idx);
+            });
+
+            pipeline.waitForCompletion();
             forEach(entries, [this, level](auto& bucket, GameResult result, int idx) {
-                store(bucket, level, result, idx);
-             });
+                m_files[level][result][idx].updateFiles();
+            });
 
             return stats;
         }
@@ -308,18 +547,11 @@ namespace persistence
             }
         }
 
-        void store(std::vector<LocalStorageFormatEntry>& entries, GameLevel level, GameResult result, int partitionIdx)
+        void store(LocalStorageFormatAsyncStorePipeline& pipeline, std::vector<LocalStorageFormatEntry>& entries, GameLevel level, GameResult result, int partitionIdx)
         {
-            // TODO: sorting the output buffers takes around the same time as outputting them
-            //       (that is when the size is >~150MiB)
-            //       Since the whole files are written at once we could instead
-            //       create a function in ext:: that writes a whole file
-            //       and bypasses the FilePool.
-            //       Then after the whole import process is finished we collect the ImmutableSpans.
-            //       Limits to one write at the same time - one thread.
-            //       We need just one additional buffer that we swap for the buffer that is to be sorted.
-            std::stable_sort(std::execution::par_unseq, entries.begin(), entries.end());
-            m_files[level][result][partitionIdx].store(entries);
+            auto newBuffer = pipeline.getEmptyBuffer();
+            entries.swap(newBuffer);
+            m_files[level][result][partitionIdx].storeUnordered(pipeline, std::move(newBuffer));
         }
 
         template <typename T, typename FuncT>

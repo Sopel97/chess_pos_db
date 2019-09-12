@@ -213,6 +213,13 @@ int main()
         "data/lichess_db_standard_rated_2013-11.pgn",
         "data/lichess_db_standard_rated_2013-12.pgn"
         }, GameLevel::Human, 2u * 1024u * 1024u * 1024u);
+        
+    /*
+    persistence::LocalStorageFormat e("w:/catobase/.tmp");
+    e.importPgns({
+        "data/lichess_db_standard_rated_2013-01.pgn"
+        }, GameLevel::Human, 2u * 1024u * 1024u * 1024u);
+        */
     return 0;
     {
         auto t0 = std::chrono::high_resolution_clock::now();
