@@ -377,6 +377,18 @@ namespace persistence
         }
     };
 
+    template <typename T>
+    std::vector<std::vector<T>> createBuffers(std::size_t numBuffers, std::size_t size)
+    {
+        std::vector<std::vector<T>> buffers;
+        buffers.resize(numBuffers);
+        for (auto& buffer : buffers)
+        {
+            buffer.reserve(size);
+        }
+        return buffers;
+    }
+
     struct LocalStorageFormat
     {
     private:
@@ -411,7 +423,8 @@ namespace persistence
             * cardinality<GameResult>()
             * m_numPartitionsByHashModulo;
 
-        static constexpr std::size_t m_headerBufferMemory = 4 * 1024 * 1024;
+        // TODO: maybe make it configurable, though it doesn't need to be big.
+        static constexpr std::size_t m_pgnParserMemory = 1ull * 1024ull * 1024ull;
 
     public:
         struct ImportStats
@@ -419,11 +432,18 @@ namespace persistence
             std::size_t numGames = 0;
             std::size_t numSkippedGames = 0; // We skip games with an unknown result.
             std::size_t numPositions = 0;
+
+            ImportStats& operator+=(const ImportStats& rhs)
+            {
+                numGames += rhs.numGames;
+                numSkippedGames += rhs.numSkippedGames;
+                numPositions += rhs.numPositions;
+            }
         };
 
-        LocalStorageFormat(std::filesystem::path path) :
+        LocalStorageFormat(std::filesystem::path path, std::size_t headerBufferMemory) :
             m_path(path),
-            m_header(path, m_headerBufferMemory)
+            m_header(path, headerBufferMemory)
         {
             initializePartitions();
         }
@@ -433,7 +453,6 @@ namespace persistence
             return m_name;
         }
 
-        // returns number of positions added
         ImportStats importPgns(const std::vector<std::filesystem::path>& paths, GameLevel level, std::size_t memory)
         {
             constexpr int numAdditionalBuffers = cardinality<GameResult>() * m_numPartitionsByHashModulo;
@@ -448,22 +467,16 @@ namespace persistence
             forEach(entries, [bucketSize](auto& bucket, GameResult result, int idx) {
                 bucket.reserve(bucketSize);
             });
-            std::vector<std::vector<LocalStorageFormatEntry>> additionalBuffers;
-            for (int i = 0; i < numAdditionalBuffers; ++i)
-            {
-                additionalBuffers.emplace_back();
-                additionalBuffers.back().reserve(bucketSize);
-            }
 
-            LocalStorageFormatAsyncStorePipeline pipeline(std::move(additionalBuffers));
+            LocalStorageFormatAsyncStorePipeline pipeline(createBuffers<LocalStorageFormatEntry>(numAdditionalBuffers, bucketSize));
 
             ImportStats stats{};
             for (auto& path : paths)
             {
-                pgn::LazyPgnFileReader fr(path);
+                pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                 if (!fr.isOpen())
                 {
-                    std::cout << "Failed to open file " << path << '\n';
+                    std::cerr << "Failed to open file " << path << '\n';
                     break;
                 }
 
@@ -484,7 +497,7 @@ namespace persistence
                     for (auto& pos : game.positions())
                     {
                         LocalStorageFormatEntry entry(pos, gameIdx);
-                        const int partitionIdx = entry.hashMod(m_numPartitionsByHashModulo);
+                        const std::uint32_t partitionIdx = entry.hashMod(m_numPartitionsByHashModulo);
                         auto& bucket = entries[result][partitionIdx];
                         bucket.emplace_back(entry);
                         numPositionsInGame += 1;
@@ -506,15 +519,35 @@ namespace persistence
                 }
             }
 
-            forEach(entries, [this, &pipeline, level](auto& bucket, GameResult result, int idx) {
+            forEach(entries, [this, &pipeline, level](auto& bucket, GameResult result, std::uint32_t idx) {
                 store(pipeline, bucket, level, result, idx);
             });
 
             pipeline.waitForCompletion();
-            forEach(entries, [this, level](auto& bucket, GameResult result, int idx) {
+            forEach(entries, [this, level](auto& bucket, GameResult result, std::uint32_t idx) {
                 m_files[level][result][idx].updateFiles();
             });
 
+            return stats;
+        }
+
+        ImportStats importPgns(const std::vector<std::pair<std::filesystem::path, GameLevel>>& pgns, std::size_t memory)
+        {
+            // TODO: 3 threads asynchronously loading pgns
+            //       and dumping data to one pipeline.
+            //       May have better performance since we're not io bound.
+            //       Seems like we're bound by sorting and pgn parsing.
+            EnumMap<GameLevel, std::vector<std::filesystem::path>> pathsByLevel;
+            for (auto& [path, level] : pgns)
+            {
+                pathsByLevel[level].emplace_back(path);
+            }
+            
+            ImportStats stats{};
+            for (auto level : values<GameLevel>())
+            {
+                stats += importPgns(pathsByLevel[level], level, memory); 
+            }
             return stats;
         }
 
@@ -547,7 +580,13 @@ namespace persistence
             }
         }
 
-        void store(LocalStorageFormatAsyncStorePipeline& pipeline, std::vector<LocalStorageFormatEntry>& entries, GameLevel level, GameResult result, int partitionIdx)
+        void store(
+            LocalStorageFormatAsyncStorePipeline& pipeline, 
+            std::vector<LocalStorageFormatEntry>& entries, 
+            GameLevel level, 
+            GameResult result, 
+            std::uint32_t partitionIdx
+        )
         {
             auto newBuffer = pipeline.getEmptyBuffer();
             entries.swap(newBuffer);

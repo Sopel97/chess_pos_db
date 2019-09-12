@@ -198,7 +198,7 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
 
 int main()
 {
-    persistence::LocalStorageFormat e("w:/catobase/.tmp");
+    persistence::LocalStorageFormat e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
     e.importPgns({
         "data/lichess_db_standard_rated_2013-01.pgn",
         "data/lichess_db_standard_rated_2013-02.pgn",

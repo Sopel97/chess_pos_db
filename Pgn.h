@@ -451,6 +451,9 @@ namespace pgn
     struct LazyPgnFileReader
     {
     private:
+        // currently bufferSize must be bigger than the maximum number of bytes taken by a single game
+        // TODO: resize buffer when didn't process anything
+        static constexpr std::size_t m_minBufferSize = 32ull * 1024ull;
 
         struct LazyPgnFileReaderIterator
         {
@@ -462,12 +465,9 @@ namespace pgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const UnparsedGame*;
 
-            // currently bufferSize must be bigger than the maximum number of bytes taken by a single game
-            // TODO: resize buffer when didn't process anything
-            static constexpr std::size_t bufferSize = 1u * 1024u * 1024u - 1u;
-
-            LazyPgnFileReaderIterator(const std::filesystem::path& path) :
+            LazyPgnFileReaderIterator(const std::filesystem::path& path, std::size_t bufferSize) :
                 m_file(nullptr, &std::fclose),
+                m_bufferSize(bufferSize),
                 m_buffer(bufferSize + 1), // one spot for '\0',
                 m_bufferView(m_buffer.data(), bufferSize),
                 m_game{}
@@ -515,6 +515,7 @@ namespace pgn
 
         private:
             std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
+            std::size_t m_bufferSize;
             std::vector<char> m_buffer;
             std::string_view m_bufferView; // what is currently being processed
             UnparsedGame m_game;
@@ -596,15 +597,15 @@ namespace pgn
                 if (numBytesProcessed == 0)
                 {
                     // if we were unable to process anything then scrap the whole buffer
-                    numBytesProcessed = bufferSize;
+                    numBytesProcessed = m_bufferSize;
                 }
-                else if (numBytesProcessed != bufferSize)
+                else if (numBytesProcessed != m_bufferSize)
                 {
-                    std::memmove(m_buffer.data(), m_buffer.data() + numBytesProcessed, bufferSize - numBytesProcessed);
+                    std::memmove(m_buffer.data(), m_buffer.data() + numBytesProcessed, m_bufferSize - numBytesProcessed);
                 }
 
                 // fill the buffer and put '\0' at the end
-                const std::size_t numBytesLeft = bufferSize - numBytesProcessed;
+                const std::size_t numBytesLeft = m_bufferSize - numBytesProcessed;
                 const std::size_t numBytesRead = std::fread(m_buffer.data() + numBytesLeft, 1, numBytesProcessed, m_file.get());
 
                 // If we hit the end of file we make sure that it ends with at least two new lines.
@@ -633,9 +634,10 @@ namespace pgn
         // We keep the file opened. That way we weakly enforce that a created iterator
         // (that reopens the file to have it's own cursor)
         // is valid after a successful call to isOpen()
-        LazyPgnFileReader(const std::filesystem::path& path) :
+        LazyPgnFileReader(const std::filesystem::path& path, std::size_t bufferSize = m_minBufferSize) :
             m_file(nullptr, &std::fclose),
-            m_path(path)
+            m_path(path),
+            m_bufferSize(std::max(m_minBufferSize, bufferSize))
         {
             auto strPath = path.string();
             m_file.reset(std::fopen(strPath.c_str(), "r"));
@@ -648,7 +650,7 @@ namespace pgn
 
         [[nodiscard]] LazyPgnFileReaderIterator begin()
         {
-            return { m_path };
+            return { m_path, m_bufferSize };
         }
 
         [[nodiscard]] LazyPgnFileReaderIterator::Sentinel end() const
@@ -659,5 +661,6 @@ namespace pgn
     private:
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
         std::filesystem::path m_path;
+        std::size_t m_bufferSize;
     };
 }
