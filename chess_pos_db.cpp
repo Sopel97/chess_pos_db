@@ -198,21 +198,22 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
 
 int main()
 {
-    persistence::LocalStorageFormat e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
-    e.importPgns({
-        "data/lichess_db_standard_rated_2013-01.pgn",
-        "data/lichess_db_standard_rated_2013-02.pgn",
-        "data/lichess_db_standard_rated_2013-03.pgn",
-        "data/lichess_db_standard_rated_2013-04.pgn",
-        "data/lichess_db_standard_rated_2013-05.pgn",
-        "data/lichess_db_standard_rated_2013-06.pgn",
-        "data/lichess_db_standard_rated_2013-07.pgn",
-        "data/lichess_db_standard_rated_2013-08.pgn",
-        "data/lichess_db_standard_rated_2013-09.pgn",
-        "data/lichess_db_standard_rated_2013-10.pgn",
-        "data/lichess_db_standard_rated_2013-11.pgn",
-        "data/lichess_db_standard_rated_2013-12.pgn"
-        }, GameLevel::Human, 2u * 1024u * 1024u * 1024u);
+    //persistence::LocalStorageFormat e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    persistence::LocalStorageFormat e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    e.importPgns(std::execution::par, {
+        {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Engine},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-04.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-05.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-06.pgn", GameLevel::Engine},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-07.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-08.pgn", GameLevel::Engine},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-09.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine}
+        }, 2u * 1024u * 1024u * 1024u);
         
     /*
     persistence::LocalStorageFormat e("w:/catobase/.tmp");

@@ -117,10 +117,14 @@ namespace persistence
         ext::Vector<char> m_header;
         ext::Vector<std::size_t> m_index;
 
+        std::mutex m_mutex;
+
         // returns the index of the header (not the address)
         [[nodiscard]] std::uint32_t addHeader(const HeaderEntry& entry)
         {
             const std::size_t headerSizeBytes = m_header.size();
+
+            std::unique_lock<std::mutex> lock(m_mutex);
             m_header.append(entry.data(), entry.size());
             m_index.emplace_back(headerSizeBytes);
             return static_cast<std::uint32_t>(m_index.size() - 1u);
