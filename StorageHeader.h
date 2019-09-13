@@ -7,11 +7,14 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 
 namespace persistence
 {
     struct HeaderEntry
     {
+        static constexpr std::uint16_t unknownPlyCount = std::numeric_limits<std::uint16_t>::max();
+
         HeaderEntry(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
             m_date(game.date()),
             m_eco(game.eco()),
@@ -21,7 +24,7 @@ namespace persistence
         }
 
         HeaderEntry(const pgn::UnparsedGame& game) :
-            HeaderEntry(game, game.plyCount())
+            HeaderEntry(game, game.plyCount(unknownPlyCount))
         {
         }
 
@@ -81,7 +84,7 @@ namespace persistence
             m_size = sizeof(HeaderEntry) - sizeof(m_packedStrings) + i;
         }
     };
-    static_assert(sizeof(HeaderEntry) == 2 + 2 + 2 + 2 + 768);
+    static_assert(sizeof(HeaderEntry) == 2 + 4 + 2 + 2 + 768);
 
     struct Header
     {

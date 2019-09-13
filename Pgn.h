@@ -36,18 +36,19 @@ namespace pgn
 
             std::uint16_t v = 0;
 
+            std::size_t idx = 0;
             switch (sv.size())
             {
             case 5:
-                v += (sv[4] - '0') * 10000;
+                v += (sv[idx++] - '0') * 10000;
             case 4:
-                v += (sv[3] - '0') * 1000;
+                v += (sv[idx++] - '0') * 1000;
             case 3:
-                v += (sv[2] - '0') * 100;
+                v += (sv[idx++] - '0') * 100;
             case 2:
-                v += (sv[1] - '0') * 10;
+                v += (sv[idx++] - '0') * 10;
             case 1:
-                v += sv[0] - '0';
+                v += sv[idx] - '0';
                 break;
 
             default:
@@ -55,6 +56,28 @@ namespace pgn
             }
 
             return v;
+        }
+
+        // Date parsing is a bit lenient - it accepts yyyy, yyyy.mm, yyyy.mm.dd
+        [[nodiscard]] Date parseDate(std::string_view sv)
+        {
+            ASSERT(sv.size() >= 4);
+
+            std::uint16_t year = parseUInt16(sv.substr(0, 4));
+            std::uint8_t month = 0;
+            std::uint8_t day = 0;
+
+            if (sv.size() >= 7)
+            {
+                month = (sv[5] - '0') * 10 + (sv[6] - '0');
+            }
+
+            if (sv.size() >= 10)
+            {
+                day = (sv[8] - '0') * 10 + (sv[9] - '0');
+            }
+
+            return Date(year, month, day);
         }
 
         [[nodiscard]] constexpr bool isCommentBegin(char c)
@@ -231,8 +254,18 @@ namespace pgn
         }
 
         // NOTE: We don't support escaping quotation marks inside a tag value.
-        [[nodiscard]] inline std::string_view findTagValue(std::string_view s, std::string_view tag)
+        [[nodiscard]] inline std::string_view findTagValue(std::string_view s, std::string_view tagName)
         {
+            constexpr std::size_t maxTagNameLength = 256;
+
+            ASSERT(tagName.size() + 2u <= maxTagNameLength);
+
+            char tagMatch[256];
+            tagMatch[0] = '[';
+            tagName.copy(tagMatch + 1u, tagName.size());
+            tagMatch[tagName.size() + 1u] = ' ';
+            std::string_view tag(tagMatch, tagName.size() + 2u);
+
             const std::size_t shift = s.find(tag);
             if (shift == std::string::npos)
             {
@@ -407,7 +440,18 @@ namespace pgn
 
         [[nodiscard]] Date date() const
         {
-            return { detail::findTagValue(m_tagSection, "Date"sv) };
+            std::string_view tag = detail::findTagValue(m_tagSection, "Date"sv);
+            if (tag.empty())
+            {
+                // lichess database uses this - non standard - tag
+                tag = detail::findTagValue(m_tagSection, "UTCDate"sv);
+            }
+
+            if (tag.empty())
+            {
+                return {};
+            }
+            return detail::parseDate(tag);
         }
 
         [[nodiscard]] Eco eco() const
@@ -418,6 +462,16 @@ namespace pgn
         [[nodiscard]] std::uint16_t plyCount() const
         {
             const std::string_view tag = detail::findTagValue(m_tagSection, "PlyCount"sv);
+            return detail::parseUInt16(tag);
+        }
+
+        [[nodiscard]] std::uint16_t plyCount(std::uint16_t def) const
+        {
+            const std::string_view tag = detail::findTagValue(m_tagSection, "PlyCount"sv);
+            if (tag.empty())
+            {
+                return def;
+            }
             return detail::parseUInt16(tag);
         }
 

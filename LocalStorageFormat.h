@@ -762,7 +762,7 @@ namespace persistence
                     // TODO: get plies from PlyCount.
                     // NOTE: we cannot do this after loading the positions
                     //       because this function may be called in parallel.
-                    const std::uint32_t gameIdx = m_header.addGame(game, 0);
+                    const std::uint32_t gameIdx = m_header.addGame(game);
 
                     std::size_t numPositionsInGame = 0;
                     for (auto& pos : game.positions())
@@ -928,7 +928,7 @@ namespace persistence
 
                         const GameResult result = convertResult(pgnResult);
 
-                        const std::uint32_t gameIdx = m_header.addGame(game, 0);
+                        const std::uint32_t gameIdx = m_header.addGame(game);
 
                         std::size_t numPositionsInGame = 0;
                         for (auto& pos : game.positions())
