@@ -198,8 +198,8 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
 
 int main()
 {
-    //persistence::LocalStorageFormat e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
-    persistence::LocalStorageFormat e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    //persistence::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     e.importPgns(std::execution::par_unseq, {
         {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Human},
@@ -216,7 +216,7 @@ int main()
         }, 2u * 1024u * 1024u * 1024u);
         
     /*
-    persistence::LocalStorageFormat e("w:/catobase/.tmp");
+    persistence::Database e("w:/catobase/.tmp");
     e.importPgns({
         "data/lichess_db_standard_rated_2013-01.pgn"
         }, GameLevel::Human, 2u * 1024u * 1024u * 1024u);

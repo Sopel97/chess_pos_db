@@ -17,6 +17,7 @@ struct Date
         m_month(month),
         m_day(day)
     {
+        ASSERT(m_year <= 9999);
         ASSERT(m_month <= 12);
         ASSERT(m_day <= 31);
     }
@@ -30,7 +31,7 @@ struct Date
         else if (lhs.m_month > rhs.m_month) return false;
 
         if (lhs.m_day < rhs.m_day) return true;
-        else if (lhs.m_day > rhs.m_day) return false;
+        else return false;
     }
 
     [[nodiscard]] std::string toString() const
