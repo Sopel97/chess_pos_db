@@ -114,102 +114,11 @@ namespace ext
         {
             using NativeFileHandle = std::FILE*;
 
-            File(std::filesystem::path path, std::string openmode) :
-                m_path(std::move(path)),
-                m_openmode(std::move(openmode)),
-                m_poolEntry(pool().noneEntry()),
-                m_timesOpened(0)
-            {
-            }
-
-            File(const File&) = delete;
-            File(File&&) = default;
-            File& operator=(const File&) = delete;
-            File& operator=(File&&) = default;
-
-            ~File()
-            {
-                pool().close(*this);
-            }
-
-            [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept
-            {
-                return &lhs == &rhs;
-            }
-
-            [[nodiscard]] const std::filesystem::path& path() const
-            {
-                return m_path;
-            }
-
-            [[nodiscard]] const std::string& openmode() const
-            {
-                return m_openmode;
-            }
-
-            [[nodiscard]] bool isOpen()
-            {
-                return m_poolEntry != pool().noneEntry();
-            }
-
-            [[nodiscard]] auto size()
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    const auto originalPos = std::ftell(handle);
-                    std::fseek(handle, 0, SEEK_END);
-                    const std::size_t s = std::ftell(handle);
-                    std::fseek(handle, originalPos, SEEK_SET);
-                    return s;
-                });
-            }
-
-            void seekset(std::size_t offset)
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    std::fseek(handle, static_cast<long>(offset), SEEK_SET);
-                });
-            }
-
-            void seekToEnd()
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    std::fseek(handle, 0, SEEK_END);
-                });
-            }
-
-            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count)
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    std::fseek(handle, static_cast<long>(offset), SEEK_SET);
-                    return std::fread(static_cast<void*>(destination), elementSize, count, handle);
-                });
-            }
-
-            [[nodiscard]] std::size_t write(const std::byte* source, std::size_t elementSize, std::size_t count)
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    return std::fwrite(static_cast<const void*>(source), elementSize, count, handle);
-                });
-            }
-
-            void flush()
-            {
-                withHandle([&](NativeFileHandle handle) {
-                    std::fflush(handle);
-                });
-            }
-
         private:
-            std::filesystem::path m_path;
-            std::string m_openmode;
 
-            // used by the pool
             using FilePoolEntry = std::pair<FileHandle, File*>;
             using FilePoolEntries = std::list<std::pair<FileHandle, File*>>;
             using FilePoolEntryIter = typename FilePoolEntries::iterator;
-            FilePoolEntryIter m_poolEntry;
-            // times opened is NOT concurrent opens but sequential opens
-            std::size_t m_timesOpened;
 
             template <typename FuncT>
             decltype(auto) withHandle(FuncT&& func)
@@ -327,6 +236,102 @@ namespace ext
                 static FilePool s_pool;
                 return s_pool;
             }
+
+        public:
+
+            File(std::filesystem::path path, std::string openmode) :
+                m_path(std::move(path)),
+                m_openmode(std::move(openmode)),
+                m_poolEntry(pool().noneEntry()),
+                m_timesOpened(0)
+            {
+            }
+
+            File(const File&) = delete;
+            File(File&&) = default;
+            File& operator=(const File&) = delete;
+            File& operator=(File&&) = default;
+
+            ~File()
+            {
+                pool().close(*this);
+            }
+
+            [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept
+            {
+                return &lhs == &rhs;
+            }
+
+            [[nodiscard]] const std::filesystem::path& path() const
+            {
+                return m_path;
+            }
+
+            [[nodiscard]] const std::string& openmode() const
+            {
+                return m_openmode;
+            }
+
+            [[nodiscard]] bool isOpen()
+            {
+                return m_poolEntry != pool().noneEntry();
+            }
+
+            [[nodiscard]] auto size()
+            {
+                return withHandle([&](NativeFileHandle handle) {
+                    const auto originalPos = std::ftell(handle);
+                    std::fseek(handle, 0, SEEK_END);
+                    const std::size_t s = std::ftell(handle);
+                    std::fseek(handle, originalPos, SEEK_SET);
+                    return s;
+                });
+            }
+
+            void seekset(std::size_t offset)
+            {
+                return withHandle([&](NativeFileHandle handle) {
+                    std::fseek(handle, static_cast<long>(offset), SEEK_SET);
+                });
+            }
+
+            void seekToEnd()
+            {
+                return withHandle([&](NativeFileHandle handle) {
+                    std::fseek(handle, 0, SEEK_END);
+                });
+            }
+
+            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count)
+            {
+                return withHandle([&](NativeFileHandle handle) {
+                    std::fseek(handle, static_cast<long>(offset), SEEK_SET);
+                    return std::fread(static_cast<void*>(destination), elementSize, count, handle);
+                });
+            }
+
+            [[nodiscard]] std::size_t write(const std::byte* source, std::size_t elementSize, std::size_t count)
+            {
+                return withHandle([&](NativeFileHandle handle) {
+                    return std::fwrite(static_cast<const void*>(source), elementSize, count, handle);
+                });
+            }
+
+            void flush()
+            {
+                withHandle([&](NativeFileHandle handle) {
+                    std::fflush(handle);
+                });
+            }
+
+        private:
+            std::filesystem::path m_path;
+            std::string m_openmode;
+
+            // used by the pool
+            FilePoolEntryIter m_poolEntry;
+            // times opened is NOT concurrent opens but sequential opens
+            std::size_t m_timesOpened;
         };
     }
 
@@ -440,7 +445,7 @@ namespace ext
             flush();
             ImmutableBinaryFile f(m_file->path());
             m_file.reset();
-            return std::move(f);
+            return f;
         }
 
         void flush()
@@ -513,7 +518,7 @@ namespace ext
             flush();
             ImmutableBinaryFile f(m_file->path());
             m_file.reset();
-            return std::move(f);
+            return f;
         }
 
         void flush()
@@ -917,7 +922,7 @@ namespace ext
             return m_begin == m_end;
         }
 
-        [[nodiscard]] void read(T* destination, std::size_t offset, std::size_t count) const
+        void read(T* destination, std::size_t offset, std::size_t count) const
         {
             const std::size_t elementsRead = m_file.read(
                 reinterpret_cast<std::byte*>(destination),
@@ -1222,7 +1227,7 @@ namespace ext
             return m_size == 0;
         }
 
-        [[nodiscard]] void read(T* destination, std::size_t offset, std::size_t count) const
+        void read(T* destination, std::size_t offset, std::size_t count) const
         {
             flushBuffer();
 
@@ -2065,43 +2070,1033 @@ namespace ext
         return detail::sort::sort_assess_work(aux.memory, in);
     }
 
-    // TODO: optimize for disk access
-    namespace detail::upper_bound
+    template <typename KeyType>
+    struct RangeIndexEntry
     {
-        template<typename IterT, typename T, typename CompT>
-        [[nodiscard]] auto upper_bound_impl(IterT first, IterT last, const T& value, CompT cmp = CompT{})
+        std::size_t low;
+        std::size_t high;
+        KeyType lowValue;
+        KeyType highValue;
+
+        template <typename KeyType, typename V>
+        [[nodiscard]] friend bool operator<(const RangeIndexEntry<KeyType>& lhs, const RangeIndexEntry<V>& rhs) noexcept
         {
-            return std::upper_bound(first, last, value, cmp);
+            return lhs.highValue < rhs.lowValue;
+        }
+
+        template <typename KeyType, typename V>
+        [[nodiscard]] friend bool operator<(const RangeIndexEntry<KeyType>& lhs, const V& rhs) noexcept
+        {
+            return lhs.highValue < rhs;
+        }
+
+        template <typename KeyType, typename V>
+        [[nodiscard]] friend bool operator<(const KeyType& lhs, const RangeIndexEntry<V>& rhs) noexcept
+        {
+            return lhs < rhs.lowValue;
+        }
+    };
+
+    template <typename KeyType>
+    struct RangeIndex
+    {
+        RangeIndex() = default;
+
+        RangeIndex(std::vector<RangeIndexEntry<KeyType>>&& entries) :
+            m_entries(std::move(entries))
+        {
+        }
+
+        [[nodiscard]] auto begin() const
+        {
+            return m_entries.cbegin();
+        }
+
+        [[nodiscard]] auto end() const
+        {
+            return m_entries.cend();
+        }
+
+        [[nodiscard]] auto cbegin() const
+        {
+            return m_entries.cbegin();
+        }
+
+        [[nodiscard]] auto cend() const
+        {
+            return m_entries.cend();
+        }
+
+    private:
+        std::vector<RangeIndexEntry<KeyType>> m_entries;
+    };
+
+    namespace detail::equal_range
+    {
+        [[nodiscard]] std::pair<std::size_t, std::size_t> neighbourhood(
+            std::size_t begin, 
+            std::size_t end, 
+            std::size_t mid, 
+            std::size_t size
+        )
+        {
+            const std::size_t leftSize = static_cast<std::size_t>(mid - begin);
+            const std::size_t rightSize = static_cast<std::size_t>(end - mid);
+            const std::size_t count = rightSize + leftSize;
+            if (count <= size)
+            {
+                return { begin, end };
+            }
+
+            const std::size_t radius = size / 2u;
+
+            // here count > size so only we know there is enough space for radius elements
+            // at least on one side
+            if (leftSize < radius)
+            {
+                // align to left and span the rest
+                end = begin + size;
+            }
+            else if (rightSize < radius)
+            {
+                // align to right and span the rest
+                begin = end - size;
+            }
+            else
+            {
+                // both sides are big enough
+                begin = mid - radius;
+                end = mid + radius;
+            }
+
+            return { begin, end };
+        }
+
+        struct Identity
+        {
+            template <typename T>
+            [[nodiscard]] auto operator()(T v) const
+            {
+                return v;
+            }
+        };
+
+        template <typename T, std::size_t I>
+        struct Box : T { Box(T&& t) : T(std::forward<T>(t)) {} };
+
+        template <typename ToArithmeticT = Identity, typename ToSizeTT = Identity>
+        struct Interpolate : Box<ToArithmeticT, 0>, Box<ToSizeTT, 1>
+        {
+            Interpolate(ToArithmeticT&& f0 = ToArithmeticT{}, ToSizeTT&& f1 = ToSizeTT{}) :
+                Box<ToArithmeticT, 0>(std::forward<ToArithmeticT>(f0)),
+                Box<ToSizeTT, 1>(std::forward<ToSizeTT>(f1))
+            {
+            }
+
+            template <typename T>
+            [[nodiscard]] auto operator()(
+                std::size_t low, 
+                std::size_t high,
+                const T& lowValue, 
+                const T& highValue, 
+                const T& key
+                ) const
+            {
+                ASSERT(low != high);
+
+                using IntType = decltype(std::declval<ToArithmeticT>()(key));
+
+                const auto b_lowValue = Box<ToArithmeticT, 0>::operator()(lowValue);
+                const auto b_highValue = Box<ToArithmeticT, 0>::operator()(highValue);
+                const auto b_key = Box<ToArithmeticT, 0>::operator()(key);
+                const auto b_s = Box<ToArithmeticT, 0>::operator()(high - low - 1u);
+                const auto d = Box<ToSizeTT, 1>::operator()((b_key - b_lowValue) * b_s / (b_highValue - b_lowValue));
+                const auto mid = low + d;
+                return mid;
+            }
+        };
+
+        template <typename ToArithmeticT, typename ToSizeT>
+        auto makeInterpolator(ToArithmeticT&& a, ToSizeT&& b)
+        {
+            return detail::equal_range::Interpolate(
+                std::forward<ToArithmeticT>(a), 
+                std::forward<ToSizeT>(b)
+            );
+        }
+
+        struct Binary
+        {
+            template <typename T>
+            [[nodiscard]] auto operator()(
+                std::size_t low, 
+                std::size_t high,
+                const T& lowValue, 
+                const T& highValue, 
+                const T& key
+                ) const
+            {
+                ASSERT(low != high);
+
+                const auto d = (high - low) / 2u;
+                const auto mid = low + d;
+                return mid;
+            }
+        };
+
+        template <typename RandomIterT, typename T = typename RandomIterT::value_type>
+        struct IterValuePair
+        {
+            RandomIterT it;
+            T value;
+        };
+
+        struct DoCrossUpdates {};
+        struct NoCrossUpdates {};
+
+        template <typename KeyType>
+        using Range = std::vector<std::pair<IterValuePair<std::size_t, KeyType>, IterValuePair<std::size_t, KeyType>>>;
+
+        // EntryType must be convertible to KeyType - values of type KeyType are stored for further reference
+        template <
+            typename CrossT, 
+            typename EntryType, 
+            typename KeyType, 
+            typename KeyExtractorT, 
+            typename CompareT = std::less<>, 
+            typename MiddleT = Interpolate<>
+        >
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
+            CrossT,
+            const ImmutableSpan<EntryType>& data,
+            Range<KeyType>&& iters,
+            const std::vector<KeyType>& keys,
+            KeyExtractorT extractKey,
+            CompareT cmp = CompareT{},
+            MiddleT middle = MiddleT{})
+        {
+            // 32KiB should be abount how much we can read using 'constant' time.
+            constexpr std::size_t maxSeqReadSize = 32 * 1024;
+            constexpr std::size_t maxNumSeqReadElements = std::max(static_cast<std::size_t>(3), maxSeqReadSize / sizeof(EntryType));
+            static_assert(maxNumSeqReadElements >= 3, "We need at least 3 values at once to properly narrow the search");
+
+            const std::size_t end = data.size();
+
+            Buffer<EntryType> buffer(maxNumSeqReadElements);
+
+            auto readToBuffer = [&](std::size_t begin, std::size_t end) {
+                ASSERT(begin != end);
+                ASSERT(end - begin <= maxNumSeqReadElements);
+
+                data.read(buffer.data(), begin, end - begin);
+
+                return end - begin;
+            };
+
+            std::vector<std::uint8_t> isCompleted(keys.size(), false);
+            std::vector<std::pair<std::size_t, std::size_t>> results;
+            results.reserve(keys.size());
+
+            for (std::size_t i = 0; i < keys.size(); ++i)
+            {
+                auto crossUpdateRange = [&](std::size_t a, std::size_t b, const EntryType* values)
+                {
+                    if constexpr (std::is_same_v<CrossT, DoCrossUpdates>)
+                    {
+                        // Try to use values already present in memory to narrow the search
+                        // for ranges that are not being actively searched right now.
+                        const std::size_t count = b - a;
+                        ASSERT(count > 0);
+
+                        for (std::size_t j = i + 1; j < keys.size(); ++j)
+                        {
+                            if (isCompleted[j]) continue;
+
+                            const auto& key = keys[j];
+                            auto& [aa, bb] = iters[j];
+                            auto& [low, lowValue] = aa;
+                            auto& [high, highValue] = bb;
+
+                            const auto [lbx, ubx] = std::equal_range(values, values + count, key);
+                            const std::size_t lb = a + static_cast<std::size_t>(std::distance(values, lbx));
+                            const std::size_t ub = a + static_cast<std::size_t>(std::distance(values, ubx));
+
+                            if (lb != a && ub != b)
+                            {
+                                if (lb == ub)
+                                {
+                                    // the range is empty
+                                    low = end;
+                                    high = end;
+                                    isCompleted[j] = true;
+                                    continue;
+                                }
+                                else
+                                {
+                                    // we found the whole range
+                                    low = lb;
+                                    high = ub;
+                                    isCompleted[j] = true;
+                                    continue;
+                                }
+                            }
+
+                            if (lb != a || ub != b)
+                            {
+                                // try to narrow from sides
+                                // exactly one if will be executed as
+                                // the case when we can narrow from both sides
+                                // was handled above
+                                // NOTE: we can safely access *lbx and *(ubx - 1) because we have sentinels
+                                if (lb != a && lb > low)
+                                {
+                                    low = lb;
+                                    lowValue = extractKey(*lbx);
+                                }
+                                if (ub != b && ub < high)
+                                {
+                                    high = ub;
+                                    highValue = extractKey(*(ubx - 1));
+                                }
+                            }
+                        }
+                    }
+                };
+
+                auto accessAndCrossUpdateRange = [&](std::size_t low, std::size_t high)
+                {
+                    ASSERT(low != high);
+
+                    const std::size_t count = readToBuffer(low, high);
+                    if (count > 2)
+                    {
+                        // updating needs access to one before and one after the buffer
+                        crossUpdateRange(low + 1, high - 1, buffer.data() + 1);
+                    }
+                    return std::make_pair(buffer.data(), count);
+                };
+
+                auto accessAndCrossUpdateRangeWithSentinels = [&](std::size_t low, std::size_t high, std::size_t numSentinels)
+                {
+                    const std::size_t count = readToBuffer(low, high);
+
+                    ASSERT(count > numSentinels * 2);
+
+                    // updating needs access to one before and one after the buffer
+                    crossUpdateRange(low + 1, high - 1, buffer.data() + 1);
+                    return std::make_pair(buffer.data() + numSentinels, count - numSentinels * 2);
+                };
+
+                auto access = [&](std::size_t it)
+                {
+                    return data[it];
+                };
+
+                const auto& [a, b] = iters[i];
+                std::size_t low = a.it;
+                std::size_t high = b.it;
+
+                // handle a situation that can arise from cross updates
+                // or we just have an empty range - in that case lowValue and highValue are placeholders
+                if (low == high || isCompleted[i])
+                {
+                    isCompleted[i] = true;
+                    results.emplace_back(low, high);
+                    continue;
+                }
+
+                KeyType lowValue = a.value;
+                KeyType highValue = b.value;
+                const KeyType& key = keys[i];
+
+                while ((lowValue != highValue) && (key >= lowValue) && (key <= highValue))
+                {
+                    ASSERT(low < high);
+
+                    {
+                        // If we can load the whole range into memory then do that.
+                        const std::size_t count = high - low;
+                        if (count <= maxNumSeqReadElements)
+                        {
+                            const auto [buf, count] = accessAndCrossUpdateRange(low, high);
+
+                            const auto [lbx, ubx] = std::equal_range(buf, buf + count, key);
+                            const std::size_t lb = low + static_cast<std::size_t>(std::distance(buf, lbx));
+                            const std::size_t ub = low + static_cast<std::size_t>(std::distance(buf, ubx));
+
+                            isCompleted[i] = true;
+                            results.emplace_back(lb, ub);
+
+                            break;
+                        }
+                    }
+
+                    std::size_t mid = middle(low, high, lowValue, highValue, key);
+
+                    ASSERT(mid >= low);
+                    ASSERT(mid < high);
+
+                    {
+                        // this procedure is similar to crossUpdateRange but here
+                        // we can actually push the result already
+                        // and we also have to know whether to continue or not
+
+                        auto [a, b] = neighbourhood(low, high, mid, maxNumSeqReadElements);
+
+                        // We always have more than 2 values because we always speculativly search through 3
+                        const auto [buf, count] = accessAndCrossUpdateRangeWithSentinels(a, b, 1);
+                        a += 1;
+                        b -= 1;
+
+                        const auto [lbx, ubx] = std::equal_range(buf, buf + count, key);
+                        const std::size_t lb = a + static_cast<std::size_t>(std::distance(buf, lbx));
+                        const std::size_t ub = a + static_cast<std::size_t>(std::distance(buf, ubx));
+
+                        if (lb != a && ub != b)
+                        {
+                            // if we're in the middle
+                            if (lb == ub)
+                            {
+                                isCompleted[i] = true;
+                                results.emplace_back(end, end);
+                                break;
+                            }
+                            else
+                            {
+                                // we found the range
+                                isCompleted[i] = true;
+                                results.emplace_back(lb, ub);
+                                break;
+                            }
+                        }
+
+                        if (lb != a || ub != b)
+                        {
+                            // if we can narrow search from at least one side
+                            // NOTE: we can safely access *lbx and *(ubx - 1) because we have sentinels
+                            if (lb != a)
+                            {
+                                low = lb;
+                                lowValue = extractKey(*lbx);
+                            }
+                            if (ub != b)
+                            {
+                                high = ub;
+                                highValue = extractKey(*(ubx - 1));
+                            }
+                            continue;
+                        }
+                    }
+
+                    // *mid == key here
+                    // we increase mid to point to after the element equal to key
+                    // this is so if *mid is the last value equal to key we
+                    // can still properly find the lower bound
+                    ++mid;
+
+                    // if we cannot narrow the search from any side that means
+                    // that mid contains the key value and it spans
+                    // too far to reach with the buffer size
+                    {
+                        // Find the lower bound by increasing the search window starting from mid.
+                        std::size_t count = mid - low;
+
+                        {
+                            std::size_t rc = maxNumSeqReadElements;
+                            auto last = mid;
+                            while (rc < count)
+                            {
+                                if (extractKey(access(mid - rc)) < key)
+                                {
+                                    low = mid - rc;
+                                    mid = last;
+                                    count = mid - low;
+                                    break;
+                                }
+                                last = mid - rc;
+                                rc *= 2;
+                            }
+                        }
+
+                        // Move low to point to lower_bound
+                        while (count > 0)
+                        {
+                            if (count <= maxNumSeqReadElements)
+                            {
+                                const auto [buf, _] = accessAndCrossUpdateRange(low, low + count);
+
+                                ASSERT(count == _);
+
+                                const auto lbx = std::lower_bound(buf, buf + count, key);
+                                low += static_cast<std::size_t>(std::distance(buf, lbx));
+
+                                break;
+                            }
+                            else
+                            {
+                                auto it = low;
+                                const std::size_t step = count / 2;
+                                it += step;
+                                if (extractKey(access(it)) < key) {
+                                    low = ++it;
+                                    count -= step + 1;
+                                }
+                                else
+                                {
+                                    count = step;
+                                }
+                            }
+                        }
+                    }
+
+                    {
+                        // Find the upper bound by increasing the search window starting from mid.
+                        std::size_t count = high - mid;
+
+                        {
+                            std::size_t rc = maxNumSeqReadElements;
+                            auto last = mid;
+                            while (rc < count)
+                            {
+                                if (key < extractKey(access(mid + rc)))
+                                {
+                                    high = mid + rc;
+                                    mid = last;
+                                    count = high - mid;
+                                    break;
+                                }
+                                last = mid + rc;
+                                rc *= 2;
+                            }
+                        }
+
+                        // Move mid to point to upper_bound
+                        while (count > 0)
+                        {
+                            if (count <= maxNumSeqReadElements)
+                            {
+                                const auto [buf, _] = accessAndCrossUpdateRange(mid, mid + count);
+
+                                ASSERT(count == _);
+
+                                const auto ubx = std::upper_bound(buf, buf + count, key);
+                                mid += static_cast<std::size_t>(std::distance(buf, ubx));
+
+                                break;
+                            }
+                            else
+                            {
+                                auto it = mid;
+                                const std::size_t step = count / 2;
+                                it += step;
+                                if (!(key < extractKey(access(it)))) {
+                                    mid = ++it;
+                                    count -= step + 1;
+                                }
+                                else
+                                {
+                                    count = step;
+                                }
+                            }
+                        }
+                    }
+
+                    ASSERT(low < mid); // There should be at least one value
+
+                    isCompleted[i] = true;
+                    results.emplace_back(low, mid);
+                    break;
+                }
+
+                if (!isCompleted[i])
+                {
+                    ASSERT(low != high);
+
+                    if (key == lowValue)
+                    {
+                        results.emplace_back(low, high);
+                    }
+                    else
+                    {
+                        results.emplace_back(end, end);
+                    }
+                }
+            }
+
+            return results;
+        }
+
+        template <
+            typename CrossT, 
+            typename EntryType, 
+            typename KeyType, 
+            typename KeyExtractorT,
+            typename CompareT = std::less<>, 
+            typename MiddleT = Interpolate<>
+        >
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_impl(
+            CrossT,
+            const ImmutableSpan<EntryType>& data,
+            const std::vector<KeyType>& keys,
+            const RangeIndex<KeyType>& index,
+            KeyExtractorT extractKey,
+            CompareT cmp = CompareT{},
+            MiddleT middle = MiddleT{})
+        {
+            std::size_t begin = 0;
+            std::size_t end = data.size();
+
+            if (begin == end) return std::vector<std::pair<std::size_t, std::size_t>>(keys.size(), { end, end });
+
+            Range<KeyType> ranges;
+            ranges.reserve(keys.size());
+            for (int i = 0; i < keys.size(); ++i)
+            {
+                auto [a, b] = std::equal_range(index.begin(), index.end(), keys[i]);
+
+                KeyType lowValue{}, highValue{};
+                std::size_t low = end;
+                std::size_t high = end;
+
+                if (b == index.begin() || a == index.end())
+                {
+                    // All values are greater (or lower).
+                    // We keep the low and high pointing to end - this skips the search.
+                }
+                else
+                {
+                    // a can equal b. It's perfectly fine.
+
+                    auto& e0 = *a;
+                    auto& e1 = *(b - 1);
+                    low = e0.low;
+                    lowValue = static_cast<KeyType>(e0.lowValue);
+                    high = e1.high + 1;
+                    highValue = static_cast<KeyType>(e1.highValue);
+                }
+
+                IterValuePair<std::size_t, KeyType> aa{ low, lowValue };
+                IterValuePair<std::size_t, KeyType> bb{ high, highValue };
+                ranges.emplace_back(aa, bb);
+            }
+
+            return equal_range_multiple_impl(
+                CrossT{}, 
+                data, 
+                std::move(ranges), 
+                keys, 
+                std::move(extractKey), 
+                cmp, 
+                middle
+            );
+        }
+
+        template <
+            typename CrossT, 
+            typename EntryType, 
+            typename KeyType, 
+            typename KeyExtractorT, 
+            typename CompareT = std::less<>, 
+            typename MiddleT = Interpolate<>
+        >
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
+            CrossT,
+            const ImmutableSpan<EntryType>& data,
+            const std::vector<KeyType>& keys,
+            KeyExtractorT extractKey,
+            CompareT cmp = CompareT{},
+            MiddleT middle = MiddleT{})
+        {
+            std::size_t begin = 0;
+            std::size_t end = data.size();
+
+            if (begin == end) return std::vector<std::pair<std::size_t, std::size_t>>(keys.size(), { end, end });
+
+            Range<KeyType> ranges;
+            ranges.reserve(keys.size());
+            const KeyType lowValue = extractKey(data[begin]);
+            const KeyType highValue = (end - begin == 1) ? lowValue : extractKey(data[end - 1u]);
+            for (int i = 0; i < keys.size(); ++i)
+            {
+                IterValuePair<std::size_t, KeyType> aa{ begin, lowValue };
+                IterValuePair<std::size_t, KeyType> bb{ end, highValue };
+                ranges.emplace_back(aa, bb);
+            }
+
+            return equal_range_multiple_impl(
+                CrossT{},
+                data, 
+                std::move(ranges), 
+                keys, 
+                std::move(extractKey), 
+                std::move(cmp),
+                std::move(middle)
+            );
         }
     }
 
-    template<typename T, typename CompT = std::less<>>
-    [[nodiscard]] auto upper_bound(const ImmutableSpan<T> & in, const T & value, CompT cmp = CompT{})
+    template <
+        typename EntryType, 
+        typename KeyType, 
+        typename KeyExtractorT, 
+        typename ToArithmeticT, 
+        typename ToSizeTT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        KeyExtractorT extractKey,
+        ToArithmeticT toArithmetic,
+        ToSizeTT toSizeT,
+        CompareT cmp = CompareT{}
+    )
     {
-        return detail::upper_bound::upper_bound_impl(in.begin_rand(), in.end_rand(), value, cmp);
-    }
-
-    namespace detail::lower_bound
-    {
-        template<typename IterT, typename T, typename CompT>
-        [[nodiscard]] auto lower_bound_impl(IterT first, IterT last, const T& value, CompT cmp = CompT{})
-        {
-            return std::lower_bound(first, last, value, cmp);
-        }
-    }
-
-    template<typename T, typename CompT = std::less<>>
-    [[nodiscard]] auto lower_bound(const ImmutableSpan<T> & in, const T & value, CompT cmp = CompT{})
-    {
-        return detail::lower_bound::lower_bound_impl(in.begin_rand(), in.end_rand(), value, cmp);
-    }
-
-    template<typename T, typename CompT = std::less<>>
-    [[nodiscard]] auto equal_range(const ImmutableSpan<T> & in, const T & value, CompT cmp = CompT{})
-    {
-        return IterRange(
-            lower_bound(in, value, cmp),
-            upper_bound(in, value, cmp)
+        return detail::equal_range::equal_range_multiple_impl(
+            detail::equal_range::NoCrossUpdates{}, 
+            data, 
+            keys, 
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::makeInterpolator(
+                std::move(toArithmetic), 
+                std::move(toSizeT)
+            )
         );
+    }
+
+    template <
+        typename EntryType,
+        typename KeyType,
+        typename KeyExtractorT,
+        typename ToArithmeticT, 
+        typename ToSizeTT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_cross(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        KeyExtractorT extractKey,
+        ToArithmeticT toArithmetic,
+        ToSizeTT toSizeT,
+        CompareT cmp = CompareT{}
+    )
+    {
+        return detail::equal_range::equal_range_multiple_impl(
+            detail::equal_range::DoCrossUpdates{},
+            data, 
+            keys,
+            std::move(extractKey), 
+            std::move(cmp),
+            detail::equal_range::makeInterpolator(
+                std::move(toArithmetic),
+                std::move(toSizeT)
+            )
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename KeyType,
+        typename KeyExtractorT,
+        typename ToArithmeticT, 
+        typename ToSizeTT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        const RangeIndex<KeyType>& index,
+        KeyExtractorT extractKey,
+        ToArithmeticT toArithmetic,
+        ToSizeTT toSizeT,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::NoCrossUpdates{}, 
+            data, 
+            keys,
+            index, 
+            std::move(extractKey),
+            std::move(cmp),
+            detail::equal_range::makeInterpolator(
+                std::move(toArithmetic), 
+                std::move(toSizeT)
+            )
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename KeyType,
+        typename KeyExtractorT,
+        typename ToArithmeticT,
+        typename ToSizeTT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_cross(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        const RangeIndex<KeyType>& index,
+        KeyExtractorT extractKey,
+        ToArithmeticT toArithmetic,
+        ToSizeTT toSizeT,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::NoCrossUpdates{},
+            data, 
+            keys,
+            index, 
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::makeInterpolator(
+                std::move(toArithmetic), 
+                std::move(toSizeT)
+            )
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename KeyType, 
+        typename KeyExtractorT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_iterp(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{}
+    )
+    {
+        return detail::equal_range::equal_range_multiple_impl(
+            detail::equal_range::NoCrossUpdates{},
+            data,
+            keys, 
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::Interpolate{}
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename KeyType,
+        typename KeyExtractorT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_iterp(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        const RangeIndex<KeyType>& index,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::NoCrossUpdates{},
+            data, 
+            keys, 
+            index, 
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::Interpolate{}
+        );
+    }
+
+    template <
+        typename EntryType,
+        typename KeyType,
+        typename KeyExtractorT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_impl(
+            detail::equal_range::NoCrossUpdates{}, 
+            data,
+            keys,
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::Binary{}
+        );
+    }
+
+    template <
+        typename EntryType,
+        typename KeyType, 
+        typename KeyExtractorT,
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_bin(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        const RangeIndex<KeyType>& index,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::NoCrossUpdates{}, 
+            data,
+            keys,
+            index, 
+            std::move(extractKey),
+            std::move(cmp), 
+            detail::equal_range::Binary{}
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename KeyType, 
+        typename KeyExtractorT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_iterp_cross(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_impl(
+            detail::equal_range::DoCrossUpdates{}, 
+            data, 
+            keys,
+            std::move(extractKey),
+            std::move(cmp), 
+            detail::equal_range::Interpolate{}
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename KeyType, 
+        typename KeyExtractorT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_iterp_cross(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        const RangeIndex<KeyType>& index,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::DoCrossUpdates{}, 
+            data, 
+            keys, 
+            index, 
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::Interpolate{}
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename KeyType,
+        typename KeyExtractorT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_cross(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_impl(
+            detail::equal_range::DoCrossUpdates{},
+            data,
+            keys, 
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::Binary{}
+        );
+    }
+
+    template <
+        typename EntryType,
+        typename KeyType,
+        typename KeyExtractorT, 
+        typename CompareT = std::less<>
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_bin_cross(
+        const ImmutableSpan<EntryType>& data,
+        const std::vector<KeyType>& keys,
+        const RangeIndex<KeyType>& index,
+        KeyExtractorT extractKey,
+        CompareT cmp = CompareT{})
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::DoCrossUpdates{}, 
+            data, 
+            keys, 
+            index, 
+            std::move(extractKey), 
+            std::move(cmp), 
+            detail::equal_range::Binary{}
+        );
+    }
+
+    template <typename EntryType, typename KeyExtractT>
+    auto makeIndex(const std::vector<EntryType>& values, std::size_t size, KeyExtractT key)
+    {
+        using KeyType = decltype(key(std::declval<EntryType>()));
+
+        ASSERT(values.size() > 0);
+
+        if (size == 0)
+        {
+            RangeIndexEntry<KeyType> e{ 
+                0, values.size() - 1u,
+                key(values.front()), key(values.back()) 
+            };
+            return RangeIndex<KeyType>({ e });
+        }
+
+        std::vector<RangeIndexEntry<KeyType>> iters;
+        iters.reserve(size);
+
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            // We look at values at equally spaced points and look
+            // for the first occurence.
+            // This guarantees that there is either one entry every N values
+            // or that there's a long span of identical values - index
+            // entry will hold bounds of the whole span.
+            const std::size_t idx = values.size() * i / size;
+
+            // duplicates are unwanted
+            if (i == 0 || key(values[idx]) != iters.back().lowValue)
+            {
+                const auto it = std::lower_bound(values.begin(), values.begin() + (idx + 1u), values[idx]);
+                std::size_t idxx = static_cast<std::size_t>(std::distance(values.begin(), it));
+                RangeIndexEntry<KeyType> e{ idxx, idxx, key(*it) };
+                iters.emplace_back(e);
+            }
+        }
+
+        ASSERT(!iters.empty());
+
+        for (std::size_t i = 1; i < iters.size(); ++i)
+        {
+            const auto& e = iters[i];
+            auto& pe = iters[i - 1];
+            pe.high = e.low - 1;
+            pe.highValue = key(values[pe.high]);
+        }
+        iters.back().high = values.size() - 1u;
+        iters.back().highValue = key(values.back());
+
+        ASSERT(iters.front().low == 0);
+        ASSERT(iters.back().high == values.size() - 1u);
+        ASSERT(iters.front().lowValue == key(values.front()));
+        ASSERT(iters.back().highValue == key(values.back()));
+
+        return RangeIndex<KeyType>(std::move(iters));
     }
 }
