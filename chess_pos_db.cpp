@@ -198,8 +198,9 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
 
 int main()
 {
-    //persistence::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    //persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
     persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    /*
     e.importPgns(std::execution::par_unseq, {
         {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Human},
@@ -213,6 +214,21 @@ int main()
         {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Human}
+        }, 2u * 1024u * 1024u * 1024u);
+        */
+    e.importPgns(std::execution::par_unseq, {
+        {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-04.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-05.pgn", GameLevel::Engine},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-06.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-07.pgn", GameLevel::Engine},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-08.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-09.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Engine},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine}
         }, 2u * 1024u * 1024u * 1024u);
         
     /*

@@ -201,6 +201,8 @@ namespace persistence
                 auto buffer = std::move(m_bufferQueue.front());
                 m_bufferQueue.pop();
 
+                buffer.clear();
+
                 return buffer;
             }
 
@@ -783,7 +785,6 @@ namespace persistence
                             if (bucket.size() == bucket.capacity())
                             {
                                 store(pipeline, bucket, level, result, partitionIdx);
-                                bucket.clear();
                             }
                         }
 
@@ -882,6 +883,10 @@ namespace persistence
                         blocks.emplace_back(Block{ start, paths.end(), nextIds });
                     }
 
+                    ASSERT(blocks.size() <= numBlocks);
+
+                    blocks.resize(numBlocks);
+
                     ASSERT(blocks.size() == numBlocks);
                 }
 
@@ -897,7 +902,7 @@ namespace persistence
                 std::size_t numThreads
             )
             {
-                auto blocks = divideIntoBlocks(paths, level, bufferSize, numThreads);
+                const auto blocks = divideIntoBlocks(paths, level, bufferSize, numThreads);
 
                 // Here almost everything is as in the sequential algorithm.
                 // Synchronization is handled in deeper layers.
@@ -954,7 +959,6 @@ namespace persistence
                                     // all files before the next already present id.
                                     auto& nextId = nextIds[result][partitionIdx];
                                     store(pipeline, bucket, level, result, partitionIdx, nextId++);
-                                    bucket.clear();
                                 }
                             }
 
@@ -976,15 +980,25 @@ namespace persistence
 
                 // Schedule the work
                 std::vector<std::future<ImportStats>> futureStats;
-                futureStats.reserve(numThreads);
-                for (int i = 0; i < numThreads - 1u; ++i)
+                futureStats.reserve(blocks.size());
+                for (int i = 1; i < blocks.size(); ++i)
                 {
-                    futureStats.emplace_back(std::async(std::launch::async, work, blocks[i]));
+                    const auto& block = blocks[i];
+                    if (block.begin == block.end)
+                    {
+                        continue;
+                    }
+                    futureStats.emplace_back(std::async(std::launch::async, work, block));
                 }
 
+                ImportStats totalStats{};
                 // and wait for completion, gather stats.
                 // One worker is run in the main thread.
-                ImportStats totalStats = work(blocks[numThreads - 1u]);
+                if (!blocks.empty())
+                {
+                    totalStats += work(blocks.front());
+                }
+
                 for (auto& f : futureStats)
                 {
                     totalStats += f.get();
