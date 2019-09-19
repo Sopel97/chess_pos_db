@@ -2070,39 +2070,61 @@ namespace ext
         return detail::sort::sort_assess_work(aux.memory, in);
     }
 
-    template <typename KeyType>
+    template <typename KeyType, typename CompareT>
     struct RangeIndexEntry
     {
+        static_assert(std::is_empty_v<CompareT>);
+
         std::size_t low;
         std::size_t high;
         KeyType lowValue;
         KeyType highValue;
 
         template <typename KeyType, typename V>
-        [[nodiscard]] friend bool operator<(const RangeIndexEntry<KeyType>& lhs, const RangeIndexEntry<V>& rhs) noexcept
+        [[nodiscard]] friend bool operator<(const RangeIndexEntry<KeyType, CompareT>& lhs, const RangeIndexEntry<V, CompareT>& rhs) noexcept
         {
-            return lhs.highValue < rhs.lowValue;
+            return CompareT{}(lhs.highValue, rhs.lowValue);
         }
 
         template <typename KeyType, typename V>
-        [[nodiscard]] friend bool operator<(const RangeIndexEntry<KeyType>& lhs, const V& rhs) noexcept
+        [[nodiscard]] friend bool operator<(const RangeIndexEntry<KeyType, CompareT>& lhs, const V& rhs) noexcept
         {
-            return lhs.highValue < rhs;
+            return CompareT{}(lhs.highValue, rhs);
         }
 
         template <typename KeyType, typename V>
-        [[nodiscard]] friend bool operator<(const KeyType& lhs, const RangeIndexEntry<V>& rhs) noexcept
+        [[nodiscard]] friend bool operator<(const KeyType& lhs, const RangeIndexEntry<V, CompareT>& rhs) noexcept
         {
-            return lhs < rhs.lowValue;
+            return CompareT{}(lhs, rhs.lowValue);
+        }
+
+        template <typename KeyType, typename V>
+        [[nodiscard]] friend bool operator>(const RangeIndexEntry<KeyType, CompareT>& lhs, const RangeIndexEntry<V, CompareT>& rhs) noexcept
+        {
+            return CompareT{}(rhs.lowValue, lhs.highValue);
+        }
+
+        template <typename KeyType, typename V>
+        [[nodiscard]] friend bool operator>(const RangeIndexEntry<KeyType, CompareT>& lhs, const V& rhs) noexcept
+        {
+            return CompareT{}(rhs, lhs.highValue);
+        }
+
+        template <typename KeyType, typename V>
+        [[nodiscard]] friend bool operator>(const KeyType& lhs, const RangeIndexEntry<V, CompareT>& rhs) noexcept
+        {
+            return CompareT{}(rhs.lowValue, lhs);
         }
     };
 
-    template <typename KeyType>
+    template <typename KeyType, typename CompareT>
     struct RangeIndex
     {
+        static_assert(std::is_empty_v<CompareT>);
+
         RangeIndex() = default;
 
-        RangeIndex(std::vector<RangeIndexEntry<KeyType>>&& entries) :
+        RangeIndex(std::vector<RangeIndexEntry<KeyType, CompareT>>&& entries) :
             m_entries(std::move(entries))
         {
         }
@@ -2128,7 +2150,7 @@ namespace ext
         }
 
     private:
-        std::vector<RangeIndexEntry<KeyType>> m_entries;
+        std::vector<RangeIndexEntry<KeyType, CompareT>> m_entries;
     };
 
     namespace detail::equal_range
@@ -2204,13 +2226,13 @@ namespace ext
             {
                 ASSERT(low != high);
 
-                using IntType = decltype(std::declval<ToArithmeticT>()(key));
-
                 const auto b_lowValue = Box<ToArithmeticT, 0>::operator()(lowValue);
                 const auto b_highValue = Box<ToArithmeticT, 0>::operator()(highValue);
                 const auto b_key = Box<ToArithmeticT, 0>::operator()(key);
                 const auto b_s = Box<ToArithmeticT, 0>::operator()(high - low - 1u);
-                const auto d = Box<ToSizeTT, 1>::operator()((b_key - b_lowValue) * b_s / (b_highValue - b_lowValue));
+                const auto d = b_lowValue < b_highValue ?
+                    Box<ToSizeTT, 1>::operator()((b_key - b_lowValue) * b_s / (b_highValue - b_lowValue))
+                    : Box<ToSizeTT, 1>::operator()((b_lowValue - b_key) * b_s / (b_lowValue - b_highValue));
                 const auto mid = low + d;
                 return mid;
             }
@@ -2262,8 +2284,8 @@ namespace ext
             typename CrossT, 
             typename EntryType, 
             typename KeyType, 
-            typename KeyExtractorT, 
-            typename CompareT = std::less<>, 
+            typename CompareT = std::less<>,
+            typename KeyExtractorT = Identity,
             typename MiddleT = Interpolate<>
         >
         [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
@@ -2271,9 +2293,10 @@ namespace ext
             const ImmutableSpan<EntryType>& data,
             Range<KeyType>&& iters,
             const std::vector<KeyType>& keys,
-            KeyExtractorT extractKey,
             CompareT cmp = CompareT{},
-            MiddleT middle = MiddleT{})
+            KeyExtractorT extractKey = KeyExtractorT{},
+            MiddleT middle = MiddleT{}
+        )
         {
             // 32KiB should be abount how much we can read using 'constant' time.
             constexpr std::size_t maxSeqReadSize = 32 * 1024;
@@ -2317,7 +2340,7 @@ namespace ext
                             auto& [low, lowValue] = aa;
                             auto& [high, highValue] = bb;
 
-                            const auto [lbx, ubx] = std::equal_range(values, values + count, key);
+                            const auto [lbx, ubx] = std::equal_range(values, values + count, key, cmp);
                             const std::size_t lb = a + static_cast<std::size_t>(std::distance(values, lbx));
                             const std::size_t ub = a + static_cast<std::size_t>(std::distance(values, ubx));
 
@@ -2409,7 +2432,7 @@ namespace ext
                 KeyType highValue = b.value;
                 const KeyType& key = keys[i];
 
-                while ((lowValue != highValue) && (key >= lowValue) && (key <= highValue))
+                while (cmp(lowValue, highValue) && !cmp(key, lowValue) && !cmp(highValue, key))
                 {
                     ASSERT(low < high);
 
@@ -2420,7 +2443,7 @@ namespace ext
                         {
                             const auto [buf, count] = accessAndCrossUpdateRange(low, high);
 
-                            const auto [lbx, ubx] = std::equal_range(buf, buf + count, key);
+                            const auto [lbx, ubx] = std::equal_range(buf, buf + count, key, cmp);
                             const std::size_t lb = low + static_cast<std::size_t>(std::distance(buf, lbx));
                             const std::size_t ub = low + static_cast<std::size_t>(std::distance(buf, ubx));
 
@@ -2448,7 +2471,7 @@ namespace ext
                         a += 1;
                         b -= 1;
 
-                        const auto [lbx, ubx] = std::equal_range(buf, buf + count, key);
+                        const auto [lbx, ubx] = std::equal_range(buf, buf + count, key, cmp);
                         const std::size_t lb = a + static_cast<std::size_t>(std::distance(buf, lbx));
                         const std::size_t ub = a + static_cast<std::size_t>(std::distance(buf, ubx));
 
@@ -2486,6 +2509,8 @@ namespace ext
                             }
                             continue;
                         }
+
+                        ASSERT(extractKey(buf[mid - a]) == key);
                     }
 
                     // *mid == key here
@@ -2506,7 +2531,7 @@ namespace ext
                             auto last = mid;
                             while (rc < count)
                             {
-                                if (extractKey(access(mid - rc)) < key)
+                                if (cmp(extractKey(access(mid - rc)), key))
                                 {
                                     low = mid - rc;
                                     mid = last;
@@ -2527,7 +2552,7 @@ namespace ext
 
                                 ASSERT(count == _);
 
-                                const auto lbx = std::lower_bound(buf, buf + count, key);
+                                const auto lbx = std::lower_bound(buf, buf + count, key, cmp);
                                 low += static_cast<std::size_t>(std::distance(buf, lbx));
 
                                 break;
@@ -2537,7 +2562,8 @@ namespace ext
                                 auto it = low;
                                 const std::size_t step = count / 2;
                                 it += step;
-                                if (extractKey(access(it)) < key) {
+                                if (cmp(extractKey(access(it)), key))
+                                {
                                     low = ++it;
                                     count -= step + 1;
                                 }
@@ -2558,7 +2584,7 @@ namespace ext
                             auto last = mid;
                             while (rc < count)
                             {
-                                if (key < extractKey(access(mid + rc)))
+                                if (cmp(key, extractKey(access(mid + rc))))
                                 {
                                     high = mid + rc;
                                     mid = last;
@@ -2579,7 +2605,7 @@ namespace ext
 
                                 ASSERT(count == _);
 
-                                const auto ubx = std::upper_bound(buf, buf + count, key);
+                                const auto ubx = std::upper_bound(buf, buf + count, key, cmp);
                                 mid += static_cast<std::size_t>(std::distance(buf, ubx));
 
                                 break;
@@ -2589,7 +2615,7 @@ namespace ext
                                 auto it = mid;
                                 const std::size_t step = count / 2;
                                 it += step;
-                                if (!(key < extractKey(access(it)))) {
+                                if (!cmp(key, extractKey(access(it)))) {
                                     mid = ++it;
                                     count -= step + 1;
                                 }
@@ -2612,7 +2638,7 @@ namespace ext
                 {
                     ASSERT(low != high);
 
-                    if (key == lowValue)
+                    if (!cmp(key, lowValue) && !cmp(lowValue, key))
                     {
                         results.emplace_back(low, high);
                     }
@@ -2630,18 +2656,19 @@ namespace ext
             typename CrossT, 
             typename EntryType, 
             typename KeyType, 
-            typename KeyExtractorT,
-            typename CompareT = std::less<>, 
+            typename CompareT = std::less<>,
+            typename KeyExtractorT = Identity,
             typename MiddleT = Interpolate<>
         >
         [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_impl(
             CrossT,
             const ImmutableSpan<EntryType>& data,
+            const RangeIndex<KeyType, CompareT>& index,
             const std::vector<KeyType>& keys,
-            const RangeIndex<KeyType>& index,
-            KeyExtractorT extractKey,
             CompareT cmp = CompareT{},
-            MiddleT middle = MiddleT{})
+            KeyExtractorT extractKey = KeyExtractorT{},
+            MiddleT middle = MiddleT{}
+        )
         {
             std::size_t begin = 0;
             std::size_t end = data.size();
@@ -2652,6 +2679,10 @@ namespace ext
             ranges.reserve(keys.size());
             for (int i = 0; i < keys.size(); ++i)
             {
+                // Find a range entry that contains keys[i] or, if there is none, get
+                // the next range.
+                // NOTE: we don't use cmp here because we're comparing index entries,
+                // not data values.
                 auto [a, b] = std::equal_range(index.begin(), index.end(), keys[i]);
 
                 KeyType lowValue{}, highValue{};
@@ -2666,13 +2697,24 @@ namespace ext
                 else
                 {
                     // a can equal b. It's perfectly fine.
+                    const auto& e0 = *a;
+                    const auto& e1 = *(b - 1);
+                    lowValue = e0.lowValue;
+                    highValue = e1.highValue;
 
-                    auto& e0 = *a;
-                    auto& e1 = *(b - 1);
-                    low = e0.low;
-                    lowValue = static_cast<KeyType>(e0.lowValue);
-                    high = e1.high + 1;
-                    highValue = static_cast<KeyType>(e1.highValue);
+                    // If no range entry in the index contains the key then
+                    // the key doesn't exist in the data.
+                    // This check let's us remove unneeded reads later in the search algorithm.
+                    if (cmp(keys[i], lowValue) || cmp(highValue, keys[i]))
+                    {
+                        low = end;
+                        high = end;
+                    }
+                    else
+                    {
+                        low = e0.low;
+                        high = e1.high + 1;
+                    }
                 }
 
                 IterValuePair<std::size_t, KeyType> aa{ low, lowValue };
@@ -2685,9 +2727,9 @@ namespace ext
                 data, 
                 std::move(ranges), 
                 keys, 
-                std::move(extractKey), 
-                cmp, 
-                middle
+                std::move(cmp),
+                std::move(extractKey),
+                std::move(middle)
             );
         }
 
@@ -2695,16 +2737,16 @@ namespace ext
             typename CrossT, 
             typename EntryType, 
             typename KeyType, 
-            typename KeyExtractorT, 
-            typename CompareT = std::less<>, 
+            typename CompareT = std::less<>,
+            typename KeyExtractorT = Identity,
             typename MiddleT = Interpolate<>
         >
         [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
             CrossT,
             const ImmutableSpan<EntryType>& data,
             const std::vector<KeyType>& keys,
-            KeyExtractorT extractKey,
             CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{},
             MiddleT middle = MiddleT{})
         {
             std::size_t begin = 0;
@@ -2728,8 +2770,8 @@ namespace ext
                 data, 
                 std::move(ranges), 
                 keys, 
-                std::move(extractKey), 
                 std::move(cmp),
+                std::move(extractKey),
                 std::move(middle)
             );
         }
@@ -2738,26 +2780,26 @@ namespace ext
     template <
         typename EntryType, 
         typename KeyType, 
-        typename KeyExtractorT, 
-        typename ToArithmeticT, 
-        typename ToSizeTT, 
-        typename CompareT = std::less<>
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity,
+        typename ToArithmeticT = detail::equal_range::Identity,
+        typename ToSizeTT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple(
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp(
         const ImmutableSpan<EntryType>& data,
         const std::vector<KeyType>& keys,
-        KeyExtractorT extractKey,
-        ToArithmeticT toArithmetic,
-        ToSizeTT toSizeT,
-        CompareT cmp = CompareT{}
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{},
+        ToArithmeticT toArithmetic = ToArithmeticT{},
+        ToSizeTT toSizeT = ToSizeTT{}
     )
     {
         return detail::equal_range::equal_range_multiple_impl(
             detail::equal_range::NoCrossUpdates{}, 
             data, 
             keys, 
-            std::move(extractKey), 
-            std::move(cmp), 
+            std::move(cmp),
+            std::move(extractKey),
             detail::equal_range::makeInterpolator(
                 std::move(toArithmetic), 
                 std::move(toSizeT)
@@ -2768,26 +2810,26 @@ namespace ext
     template <
         typename EntryType,
         typename KeyType,
-        typename KeyExtractorT,
-        typename ToArithmeticT, 
-        typename ToSizeTT, 
-        typename CompareT = std::less<>
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity,
+        typename ToArithmeticT = detail::equal_range::Identity,
+        typename ToSizeTT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_cross(
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_cross(
         const ImmutableSpan<EntryType>& data,
         const std::vector<KeyType>& keys,
-        KeyExtractorT extractKey,
-        ToArithmeticT toArithmetic,
-        ToSizeTT toSizeT,
-        CompareT cmp = CompareT{}
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{},
+        ToArithmeticT toArithmetic = ToArithmeticT{},
+        ToSizeTT toSizeT = ToSizeTT{}
     )
     {
         return detail::equal_range::equal_range_multiple_impl(
             detail::equal_range::DoCrossUpdates{},
             data, 
             keys,
-            std::move(extractKey), 
             std::move(cmp),
+            std::move(extractKey),
             detail::equal_range::makeInterpolator(
                 std::move(toArithmetic),
                 std::move(toSizeT)
@@ -2796,224 +2838,111 @@ namespace ext
     }
 
     template <
-        typename EntryType, 
+        typename EntryType,
         typename KeyType,
-        typename KeyExtractorT,
-        typename ToArithmeticT, 
-        typename ToSizeTT, 
-        typename CompareT = std::less<>
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity,
+        typename ToArithmeticT = detail::equal_range::Identity,
+        typename ToSizeTT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed(
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_indexed(
         const ImmutableSpan<EntryType>& data,
+        const RangeIndex<KeyType, CompareT>& index,
         const std::vector<KeyType>& keys,
-        const RangeIndex<KeyType>& index,
-        KeyExtractorT extractKey,
-        ToArithmeticT toArithmetic,
-        ToSizeTT toSizeT,
-        CompareT cmp = CompareT{})
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{},
+        ToArithmeticT toArithmetic = ToArithmeticT{},
+        ToSizeTT toSizeT = ToSizeTT{}
+    )
     {
         return detail::equal_range::equal_range_multiple_indexed_impl(
             detail::equal_range::NoCrossUpdates{}, 
-            data, 
-            keys,
-            index, 
-            std::move(extractKey),
-            std::move(cmp),
-            detail::equal_range::makeInterpolator(
-                std::move(toArithmetic), 
-                std::move(toSizeT)
-            )
-        );
-    }
-
-    template <
-        typename EntryType, 
-        typename KeyType,
-        typename KeyExtractorT,
-        typename ToArithmeticT,
-        typename ToSizeTT, 
-        typename CompareT = std::less<>
-    >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_cross(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        const RangeIndex<KeyType>& index,
-        KeyExtractorT extractKey,
-        ToArithmeticT toArithmetic,
-        ToSizeTT toSizeT,
-        CompareT cmp = CompareT{})
-    {
-        return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::NoCrossUpdates{},
-            data, 
-            keys,
-            index, 
-            std::move(extractKey), 
-            std::move(cmp), 
-            detail::equal_range::makeInterpolator(
-                std::move(toArithmetic), 
-                std::move(toSizeT)
-            )
-        );
-    }
-
-    template <
-        typename EntryType, 
-        typename KeyType, 
-        typename KeyExtractorT, 
-        typename CompareT = std::less<>
-    >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_iterp(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{}
-    )
-    {
-        return detail::equal_range::equal_range_multiple_impl(
-            detail::equal_range::NoCrossUpdates{},
             data,
-            keys, 
-            std::move(extractKey), 
-            std::move(cmp), 
-            detail::equal_range::Interpolate{}
-        );
-    }
-
-    template <
-        typename EntryType, 
-        typename KeyType,
-        typename KeyExtractorT, 
-        typename CompareT = std::less<>
-    >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_iterp(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        const RangeIndex<KeyType>& index,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{})
-    {
-        return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::NoCrossUpdates{},
-            data, 
-            keys, 
-            index, 
-            std::move(extractKey), 
-            std::move(cmp), 
-            detail::equal_range::Interpolate{}
+            index,
+            keys,
+            std::move(cmp),
+            std::move(extractKey),
+            detail::equal_range::makeInterpolator(
+                std::move(toArithmetic), 
+                std::move(toSizeT)
+            )
         );
     }
 
     template <
         typename EntryType,
         typename KeyType,
-        typename KeyExtractorT, 
-        typename CompareT = std::less<>
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity,
+        typename ToArithmeticT = detail::equal_range::Identity,
+        typename ToSizeTT = detail::equal_range::Identity
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_indexed_cross(
+        const ImmutableSpan<EntryType>& data,
+        const RangeIndex<KeyType, CompareT>& index,
+        const std::vector<KeyType>& keys,
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{},
+        ToArithmeticT toArithmetic = ToArithmeticT{},
+        ToSizeTT toSizeT = ToSizeTT{}
+    )
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::DoCrossUpdates{},
+            data,
+            index,
+            keys,
+            std::move(cmp),
+            std::move(extractKey),
+            detail::equal_range::makeInterpolator(
+                std::move(toArithmetic), 
+                std::move(toSizeT)
+            )
+        );
+    }
+
+    template <
+        typename EntryType,
+        typename KeyType,
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity
     >
     [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin(
         const ImmutableSpan<EntryType>& data,
         const std::vector<KeyType>& keys,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{})
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{}
+    )
     {
         return detail::equal_range::equal_range_multiple_impl(
             detail::equal_range::NoCrossUpdates{}, 
             data,
             keys,
-            std::move(extractKey), 
-            std::move(cmp), 
+            std::move(cmp),
+            std::move(extractKey),
             detail::equal_range::Binary{}
         );
     }
 
     template <
         typename EntryType,
-        typename KeyType, 
-        typename KeyExtractorT,
-        typename CompareT = std::less<>
-    >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_bin(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        const RangeIndex<KeyType>& index,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{})
-    {
-        return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::NoCrossUpdates{}, 
-            data,
-            keys,
-            index, 
-            std::move(extractKey),
-            std::move(cmp), 
-            detail::equal_range::Binary{}
-        );
-    }
-
-    template <
-        typename EntryType, 
-        typename KeyType, 
-        typename KeyExtractorT, 
-        typename CompareT = std::less<>
-    >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_iterp_cross(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{})
-    {
-        return detail::equal_range::equal_range_multiple_impl(
-            detail::equal_range::DoCrossUpdates{}, 
-            data, 
-            keys,
-            std::move(extractKey),
-            std::move(cmp), 
-            detail::equal_range::Interpolate{}
-        );
-    }
-
-    template <
-        typename EntryType, 
-        typename KeyType, 
-        typename KeyExtractorT, 
-        typename CompareT = std::less<>
-    >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_iterp_cross(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        const RangeIndex<KeyType>& index,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{})
-    {
-        return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::DoCrossUpdates{}, 
-            data, 
-            keys, 
-            index, 
-            std::move(extractKey), 
-            std::move(cmp), 
-            detail::equal_range::Interpolate{}
-        );
-    }
-
-    template <
-        typename EntryType, 
         typename KeyType,
-        typename KeyExtractorT, 
-        typename CompareT = std::less<>
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity
     >
     [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_cross(
         const ImmutableSpan<EntryType>& data,
         const std::vector<KeyType>& keys,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{})
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{}
+    )
     {
         return detail::equal_range::equal_range_multiple_impl(
             detail::equal_range::DoCrossUpdates{},
             data,
-            keys, 
-            std::move(extractKey), 
-            std::move(cmp), 
+            keys,
+            std::move(cmp),
+            std::move(extractKey),
             detail::equal_range::Binary{}
         );
     }
@@ -3021,29 +2950,64 @@ namespace ext
     template <
         typename EntryType,
         typename KeyType,
-        typename KeyExtractorT, 
-        typename CompareT = std::less<>
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_bin_cross(
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_indexed(
         const ImmutableSpan<EntryType>& data,
+        const RangeIndex<KeyType, CompareT>& index,
         const std::vector<KeyType>& keys,
-        const RangeIndex<KeyType>& index,
-        KeyExtractorT extractKey,
-        CompareT cmp = CompareT{})
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{}
+    )
     {
         return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::DoCrossUpdates{}, 
-            data, 
-            keys, 
-            index, 
-            std::move(extractKey), 
-            std::move(cmp), 
+            detail::equal_range::NoCrossUpdates{}, 
+            data,
+            index,
+            keys,
+            std::move(cmp),
+            std::move(extractKey),
             detail::equal_range::Binary{}
         );
     }
 
-    template <typename EntryType, typename KeyExtractT>
-    auto makeIndex(const std::vector<EntryType>& values, std::size_t size, KeyExtractT key)
+    template <
+        typename EntryType,
+        typename KeyType,
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity
+    >
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_indexed_cross(
+        const ImmutableSpan<EntryType>& data,
+        const RangeIndex<KeyType, CompareT>& index,
+        const std::vector<KeyType>& keys,
+        CompareT cmp = CompareT{},
+        KeyExtractorT extractKey = KeyExtractorT{}
+    )
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::DoCrossUpdates{}, 
+            data,
+            index,
+            keys, 
+            std::move(cmp),
+            std::move(extractKey),
+            detail::equal_range::Binary{}
+        );
+    }
+
+    template <
+        typename EntryType, 
+        typename CompareT = std::less<>,
+        typename KeyExtractT = detail::equal_range::Identity
+    >
+    auto makeIndex(
+        const std::vector<EntryType> & values, 
+        std::size_t size,
+        CompareT cmp = CompareT{},
+        KeyExtractT key = KeyExtractT{}
+    )
     {
         using KeyType = decltype(key(std::declval<EntryType>()));
 
@@ -3051,14 +3015,14 @@ namespace ext
 
         if (size == 0)
         {
-            RangeIndexEntry<KeyType> e{ 
+            RangeIndexEntry<KeyType, CompareT> e{
                 0, values.size() - 1u,
                 key(values.front()), key(values.back()) 
             };
-            return RangeIndex<KeyType>({ e });
+            return RangeIndex<KeyType, CompareT>({ e });
         }
 
-        std::vector<RangeIndexEntry<KeyType>> iters;
+        std::vector<RangeIndexEntry<KeyType, CompareT>> iters;
         iters.reserve(size);
 
         for (std::size_t i = 0; i < size; ++i)
@@ -3071,11 +3035,11 @@ namespace ext
             const std::size_t idx = values.size() * i / size;
 
             // duplicates are unwanted
-            if (i == 0 || key(values[idx]) != iters.back().lowValue)
+            if (i == 0 || cmp(iters.back().lowValue, key(values[idx])))
             {
-                const auto it = std::lower_bound(values.begin(), values.begin() + (idx + 1u), values[idx]);
+                const auto it = std::lower_bound(values.begin(), values.begin() + (idx + 1u), values[idx], cmp);
                 std::size_t idxx = static_cast<std::size_t>(std::distance(values.begin(), it));
-                RangeIndexEntry<KeyType> e{ idxx, idxx, key(*it) };
+                RangeIndexEntry<KeyType, CompareT> e{ idxx, idxx, key(values[idx]) };
                 iters.emplace_back(e);
             }
         }
@@ -3097,6 +3061,6 @@ namespace ext
         ASSERT(iters.front().lowValue == key(values.front()));
         ASSERT(iters.back().highValue == key(values.back()));
 
-        return RangeIndex<KeyType>(std::move(iters));
+        return RangeIndex<KeyType, CompareT>(std::move(iters));
     }
 }
