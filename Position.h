@@ -324,14 +324,17 @@ public:
         }
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool leavesKingInCheck(Move move, Color color) const
+    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnKing(Move move, Color color) const
     {
         // checks whether by doing a move we uncover our king to a check
         // doesn't verify castlings as it is supposed to only cover undiscovered checks
 
         ASSERT(move.from.isOk() && move.to.isOk());
+        ASSERT(move.type != MoveType::Castle);
 
         const Square ksq = kingSquare(color);
+
+        ASSERT(ksq != move.from);
 
         if (!bb::pseudoAttacks<PieceType::Queen>(ksq).isSet(move.from))
         {
@@ -371,6 +374,78 @@ public:
         const Bitboard opponentRookLikePieces = (piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens) & ~captured;
         const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
         return (rookAttacks & opponentRookLikePieces).any();
+    }
+
+    [[nodiscard]] INTRIN_CONSTEXPR bool createsAttackOnKing(Move move, Color color) const
+    {
+        // checks whether by doing a move our king ends up being attacked
+        // does not support castling moves
+
+        ASSERT(move.from.isOk() && move.to.isOk());
+        ASSERT(move.type != MoveType::Castle);
+
+        Square ksq = kingSquare(color);
+        if (ksq == move.from)
+        {
+            ksq = move.to;
+            // We just have to check whether the king walks into an attacked square
+
+            {
+                // Check attacks by sliders just as we do in createsDiscoveredAttackOnKing
+                const Bitboard occupied = (piecesBB() ^ move.from) | move.to;
+                Bitboard captured = Bitboard::none();
+
+                if (m_pieces[move.to] != Piece::none())
+                {
+                    // A capture happened.
+                    // We have to exclude the captured piece.
+                    captured |= move.to;
+                }
+
+                if (bb::pseudoAttacks<PieceType::Queen>(ksq).isSet(move.from))
+                {
+                    const Bitboard opponentQueens = piecesBB(Piece(PieceType::Queen, !color));
+
+                    const Bitboard opponentBishopLikePieces = (piecesBB(Piece(PieceType::Bishop, !color)) | opponentQueens) & ~captured;
+                    const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(ksq, occupied);
+                    if ((bishopAttacks & opponentBishopLikePieces).any())
+                    {
+                        return true;
+                    }
+
+                    const Bitboard opponentRookLikePieces = (piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens) & ~captured;
+                    const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
+                    if ((rookAttacks & opponentRookLikePieces).any())
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            if (bb::pseudoAttacks<PieceType::King>(ksq).isSet(kingSquare(!color)))
+            {
+                // Kings 'touch'
+                return true;
+            }
+
+            if ((bb::pseudoAttacks<PieceType::Knight>(ksq) & m_pieceBB[Piece(PieceType::Knight, !color)]).any())
+            {
+                // Walked into a knigh attack
+                return true;
+            }
+
+            {
+                // Check pawn attacks. Nothing else can attack the king at this point.
+                const Bitboard pawns = m_pieceBB[Piece(PieceType::Pawn, !color)];
+                const Bitboard pawnAttacks = bb::pawnAttacks(pawns, !color);
+
+                return pawnAttacks.isSet(ksq);
+            }
+        }
+        else
+        {
+            return createsDiscoveredAttackOnKing(move, color);
+        }
     }
 
     [[nodiscard]] constexpr Piece pieceAt(Square sq) const
@@ -493,9 +568,13 @@ struct Position : public Board
         return m_sideToMove;
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool leavesKingInCheck(Move move) const
+    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnKing(Move move) const
     {
-        return BaseType::leavesKingInCheck(move, m_sideToMove);
+        return BaseType::createsDiscoveredAttackOnKing(move, m_sideToMove);
+    }
+    [[nodiscard]] INTRIN_CONSTEXPR bool createsAttackOnKing(Move move) const
+    {
+        return BaseType::createsAttackOnKing(move, m_sideToMove);
     }
 
     [[nodiscard]] constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept

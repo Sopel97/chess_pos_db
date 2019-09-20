@@ -373,7 +373,7 @@ namespace san
             for (Square fromSq : candidates)
             {
                 const Move move{ fromSq, toSq };
-                if (!pos.leavesKingInCheck(move))
+                if (!pos.createsDiscoveredAttackOnKing(move))
                 {
                     ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
 

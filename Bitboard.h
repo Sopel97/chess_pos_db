@@ -794,6 +794,20 @@ namespace bb
         }
     }
 
+    [[nodiscard]] constexpr Bitboard pawnAttacks(Bitboard pawns, Color color)
+    {
+        if (color == Color::White)
+        {
+            pawns |= (pawns + Offset{ 1, -1 }) | (pawns + Offset{ -1, -1 });
+        }
+        else
+        {
+            pawns |= (pawns + Offset{ 1, 1 }) | (pawns + Offset{ -1, 1 });
+        }
+
+        return pawns;
+    }
+
     // random test cases generated with stockfish
 
 #if defined(USE_CONSTEXPR_INTRINSICS)

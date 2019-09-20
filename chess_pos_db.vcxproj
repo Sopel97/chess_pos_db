@@ -252,6 +252,7 @@
     <ClInclude Include="GameClassification.h" />
     <ClInclude Include="Intrinsics.h" />
     <ClInclude Include="LocalStorageFormat.h" />
+    <ClInclude Include="MoveGenerator.h" />
     <ClInclude Include="Pgn.h" />
     <ClInclude Include="Position.h" />
     <ClInclude Include="PositionSignature.h" />
