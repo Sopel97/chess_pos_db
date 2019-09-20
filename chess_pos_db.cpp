@@ -22,6 +22,7 @@
 #include "Position.h"
 #include "PositionSignature.h"
 #include "San.h"
+#include "MoveGenerator.h"
 #include "External.h"
 
 #include "lib/xxhash/xxhash_cpp.h"

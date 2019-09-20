@@ -20,7 +20,7 @@ namespace movegen
     namespace detail
     {
         // move has to be pseudo-legal
-        bool isLegal(const Position& pos, Move move)
+        [[nodiscard]] inline bool isLegal(const Position& pos, Move move)
         {
             if (move.type == MoveType::Castle)
             {
@@ -32,25 +32,108 @@ namespace movegen
     }
 
     template <PieceType PieceTypeV>
-    void generatePseudoLegalMoves(const Position& pos, std::vector<Move>& moves)
+    inline void generatePseudoLegalMoves(const Position& pos, std::vector<Move>& moves)
     {
         static_assert(PieceTypeV != PieceType::None);
         static_assert(PieceTypeV != PieceType::Pawn);
+
+        const Color sideToMove = pos.sideToMove();
+        const Bitboard ourPieces = pos.piecesBB(sideToMove);
+        const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+        const Bitboard occupied = ourPieces | theirPieces;
+        const Bitboard pieces = pos.piecesBB(Piece(PieceTypeV, sideToMove));
+        for (Square fromSq : pieces)
+        {
+            const Bitboard attacks = bb::attacks<PieceTypeV>(fromSq, occupied) & ~ourPieces;
+            for (Square toSq : attacks)
+            {
+                Move move{ fromSq, toSq };
+                moves.emplace_back(move);
+            }
+        }
     }
 
     template <>
-    void generatePseudoLegalMoves<PieceType::Pawn>(const Position& pos, std::vector<Move>& moves)
+    inline void generatePseudoLegalMoves<PieceType::Pawn>(const Position& pos, std::vector<Move>& moves)
     {
+        const Color sideToMove = pos.sideToMove();
+        const Bitboard ourPieces = pos.piecesBB(sideToMove);
+        const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+        const Bitboard occupied = ourPieces | theirPieces;
+        const Bitboard pawns = pos.piecesBB(Piece(PieceType::Pawn, sideToMove));
 
+        auto generate = [&](Square fromSq)
+        {
+            const Bitboard attacks = bb::pawnAttacks(Bitboard::square(fromSq), sideToMove) & theirPieces;
+
+            const Rank startRank = sideToMove == Color::White ? rank2 : rank7;
+            const Rank secondToLastRank = sideToMove == Color::White ? rank7 : rank2;
+            const Offset forward = Offset{ 0, (sideToMove == Color::White ? 1 : -1) };
+
+            if (fromSq.rank() == secondToLastRank)
+            {
+                for (Square toSq : attacks)
+                {
+                    for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
+                    {
+                        Move move{ fromSq, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
+                        moves.emplace_back(move);
+                    }
+                }
+
+                const Square toSq = fromSq + forward;
+                if (!occupied.isSet(toSq))
+                {
+                    for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
+                    {
+                        Move move{ fromSq, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
+                        moves.emplace_back(move);
+                    }
+                }
+            }
+            else
+            {
+                for (Square toSq : attacks)
+                {
+                    Move move{ fromSq, toSq };
+                    moves.emplace_back(move);
+                }
+
+                const Square toSq = fromSq + forward;
+
+                if (!occupied.isSet(toSq))
+                {
+                    if (fromSq.rank() == startRank)
+                    {
+                        const Square toSq2 = toSq + forward;
+                        if (!occupied.isSet(toSq2))
+                        {
+                            Move move{ fromSq, toSq2 };
+                            moves.emplace_back(move);
+                        }
+                    }
+
+                    Move move{ fromSq, toSq };
+                    moves.emplace_back(move);
+                }
+            }
+
+            // TODO: en passant
+        };
+
+        for (Square fromSq : pawns)
+        {
+            generate(fromSq);
+        }
     }
 
-    void generateCastlingMoves(const Position& pos, std::vector<Move>& moves)
+    inline void generateCastlingMoves(const Position& pos, std::vector<Move>& moves)
     {
 
     }
 
     // pos must not have a 'king capture' available
-    std::vector<Move> generateAllPseudoLegalMoves(const Position& pos)
+    inline std::vector<Move> generateAllPseudoLegalMoves(const Position& pos)
     {
         std::vector<Move> moves;
 
@@ -65,7 +148,7 @@ namespace movegen
         return moves;
     }
 
-    std::vector<Move> generateAllLegalMoves(const Position& pos)
+    inline std::vector<Move> generateAllLegalMoves(const Position& pos)
     {
         std::vector<Move> moves = generateAllPseudoLegalMoves(pos);
 
