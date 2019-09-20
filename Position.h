@@ -9,11 +9,133 @@
 #include <iterator>
 #include <string>
 
+enum struct CastlingRights : std::uint8_t
+{
+    None = 0x0,
+    WhiteKingSide = 0x1,
+    WhiteQueenSide = 0x2,
+    BlackKingSide = 0x4,
+    BlackQueenSide = 0x8,
+    All = WhiteKingSide | WhiteQueenSide | BlackKingSide | BlackQueenSide
+};
+
+[[nodiscard]] constexpr CastlingRights operator|(CastlingRights lhs, CastlingRights rhs)
+{
+    return static_cast<CastlingRights>(static_cast<std::uint8_t>(lhs) | static_cast<std::uint8_t>(rhs));
+}
+
+[[nodiscard]] constexpr CastlingRights operator&(CastlingRights lhs, CastlingRights rhs)
+{
+    return static_cast<CastlingRights>(static_cast<std::uint8_t>(lhs) & static_cast<std::uint8_t>(rhs));
+}
+
+[[nodiscard]] constexpr CastlingRights operator~(CastlingRights lhs)
+{
+    return static_cast<CastlingRights>(~static_cast<std::uint8_t>(lhs) & static_cast<std::uint8_t>(CastlingRights::All));
+}
+
+constexpr CastlingRights& operator|=(CastlingRights& lhs, CastlingRights rhs)
+{
+    lhs = static_cast<CastlingRights>(static_cast<std::uint8_t>(lhs) | static_cast<std::uint8_t>(rhs));
+    return lhs;
+}
+
+constexpr CastlingRights& operator&=(CastlingRights& lhs, CastlingRights rhs)
+{
+    lhs = static_cast<CastlingRights>(static_cast<std::uint8_t>(lhs) & static_cast<std::uint8_t>(rhs));
+    return lhs;
+}
+
+// checks whether lhs contains rhs
+[[nodiscard]] constexpr bool contains(CastlingRights lhs, CastlingRights rhs)
+{
+    return (lhs & rhs) == rhs;
+}
+
+template <>
+struct EnumTraits<CastlingRights>
+{
+    using IdType = int;
+    using EnumType = CastlingRights;
+
+    static constexpr int cardinality = 4;
+    static constexpr bool isNaturalIndex = false;
+
+    static constexpr std::array<EnumType, cardinality> values{
+        CastlingRights::WhiteKingSide,
+        CastlingRights::WhiteQueenSide,
+        CastlingRights::BlackKingSide,
+        CastlingRights::BlackQueenSide
+    };
+
+    [[nodiscard]] static constexpr int ordinal(EnumType c) noexcept
+    {
+        return static_cast<IdType>(c);
+    }
+
+    [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
+    {
+        return static_cast<EnumType>(id);
+    }
+};
+
+namespace detail
+{
+    [[nodiscard]] constexpr Rank parseRank(char c)
+    {
+        ASSERT(isRank(c));
+
+        return fromOrdinal<Rank>(c - '1');
+    }
+
+    [[nodiscard]] constexpr File parseFile(char c)
+    {
+        ASSERT(isFile(c));
+
+        return fromOrdinal<File>(c - 'a');
+    }
+
+    [[nodiscard]] constexpr Square parseSquare(const char* s)
+    {
+        const File file = parseFile(s[0]);
+        const Rank rank = parseRank(s[1]);
+        return Square(file, rank);
+    }
+
+    [[nodiscard]] constexpr CastlingRights readCastlingRights(const char*& s)
+    {
+        CastlingRights rights = CastlingRights::None;
+
+        while (*s != ' ')
+        {
+            switch (*s)
+            {
+            case 'K':
+                rights |= CastlingRights::WhiteKingSide;
+                break;
+            case 'Q':
+                rights |= CastlingRights::WhiteQueenSide;
+                break;
+            case 'k':
+                rights |= CastlingRights::BlackKingSide;
+                break;
+            case 'q':
+                rights |= CastlingRights::BlackQueenSide;
+                break;
+            }
+
+            ++s;
+        }
+
+        return rights;
+    }
+}
+
 struct Board
 {
 private:
-    static constexpr EnumMap2<Color, bool, Square> m_rookCastleDestinations = { { {{ D1, F1 }}, {{ D8, F8 }} } };
-    static constexpr EnumMap2<Color, bool, Square> m_kingCastleDestinations = { { {{ C1, G1 }}, {{ C8, G8 }} } };
+    static constexpr EnumMap2<Color, CastleType, Square> m_rookCastleDestinations = { { {{ F1, D1 }}, {{ F8, D8 }} } };
+    static constexpr EnumMap2<Color, CastleType, Square> m_kingCastleDestinations = { { {{ G1, C1 }}, {{ G8, C8 }} } };
 
 public:
 
@@ -25,7 +147,7 @@ public:
     }
 
     // returns side to move
-    [[nodiscard]] constexpr Color set(const char* fen)
+    [[nodiscard]] constexpr const char* set(const char* fen)
     {
         ASSERT(fen != nullptr);
 
@@ -117,7 +239,7 @@ public:
             ++current;
         }
 
-        return *(current + 1) == 'w' ? Color::White : Color::Black;
+        return current;
     }
 
     [[nodiscard]] constexpr friend bool operator==(const Board& lhs, const Board& rhs) noexcept
@@ -227,10 +349,10 @@ public:
             const Piece rook = m_pieces[rookFromSq];
             const Piece king = m_pieces[kingFromSq];
             const Color color = king.color();
-            const bool isShort = rookFromSq.file() == fileH;
+            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = m_rookCastleDestinations[color][isShort];
-            const Square kingToSq = m_kingCastleDestinations[color][isShort];
+            const Square rookToSq = m_rookCastleDestinations[color][castleType];
+            const Square kingToSq = m_kingCastleDestinations[color][castleType];
 
             // 4 squares are involved
             m_pieces[rookFromSq] = Piece::none();
@@ -296,10 +418,10 @@ public:
             const Square kingFromSq = move.from;
 
             const Color color = move.to.rank() == rank1 ? Color::White : Color::Black;
-            const bool isShort = rookFromSq.file() == fileH;
+            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = m_rookCastleDestinations[color][isShort];
-            const Square kingToSq = m_kingCastleDestinations[color][isShort];
+            const Square rookToSq = m_rookCastleDestinations[color][castleType];
+            const Square kingToSq = m_kingCastleDestinations[color][castleType];
 
             const Piece rook = m_pieces[rookToSq];
             const Piece king = m_pieces[kingToSq];
@@ -372,6 +494,41 @@ public:
         );
     }
 
+    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor, Bitboard occupied, Bitboard captured) const
+    {
+        if ((bb::pseudoAttacks<PieceType::Queen>(sq) & m_pieceBB[Piece(PieceType::Queen, attackerColor)] & ~captured).any())
+        {
+            if (bb::isAttackedBySlider(
+                sq,
+                piecesBB(Piece(PieceType::Bishop, attackerColor)) & ~captured,
+                piecesBB(Piece(PieceType::Rook, attackerColor)) & ~captured,
+                piecesBB(Piece(PieceType::Queen, attackerColor)) & ~captured,
+                occupied
+            ))
+            {
+                return true;
+            }
+        }
+
+        if (bb::pseudoAttacks<PieceType::King>(sq).isSet(kingSquare(attackerColor)))
+        {
+            // Kings 'touch'
+            return true;
+        }
+
+        if ((bb::pseudoAttacks<PieceType::Knight>(sq) & m_pieceBB[Piece(PieceType::Knight, attackerColor)] & ~captured).any())
+        {
+            // Walked into a knigh attack
+            return true;
+        }
+
+        // Check pawn attacks. Nothing else can attack the king at this point.
+        const Bitboard pawns = m_pieceBB[Piece(PieceType::Pawn, attackerColor)] & ~captured;
+        const Bitboard pawnAttacks = bb::pawnAttacks(pawns, attackerColor);
+
+        return pawnAttacks.isSet(sq);
+    }
+
     [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
     {
         // checks whether by doing a move our king ends up being attacked
@@ -399,10 +556,10 @@ public:
 
             const Piece king = m_pieces[kingFromSq];
             const Color color = king.color();
-            const bool isShort = rookFromSq.file() == fileH;
+            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = m_rookCastleDestinations[color][isShort];
-            const Square kingToSq = m_kingCastleDestinations[color][isShort];
+            const Square rookToSq = m_rookCastleDestinations[color][castleType];
+            const Square kingToSq = m_kingCastleDestinations[color][castleType];
 
             occupied ^= rookFromSq;
             occupied |= kingToSq;
@@ -415,39 +572,14 @@ public:
             captured |= move.to;
         }
 
-        if (bb::pseudoAttacks<PieceType::Queen>(sq).isSet(move.from))
-        {
-            if (bb::isAttackedBySlider(
-                sq,
-                piecesBB(Piece(PieceType::Bishop, attackerColor)) & ~captured,
-                piecesBB(Piece(PieceType::Rook, attackerColor)) & ~captured,
-                piecesBB(Piece(PieceType::Queen, attackerColor)) & ~captured,
-                occupied
-            ))
-            {
-                return true;
-            }
-        }
+        return isSquareAttacked(sq, attackerColor, occupied, captured);
+    }
 
-        if (bb::pseudoAttacks<PieceType::King>(sq).isSet(kingSquare(attackerColor)))
-        {
-            // Kings 'touch'
-            return true;
-        }
+    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor) const
+    {
+        ASSERT(move.from.isOk() && move.to.isOk());
 
-        if ((bb::pseudoAttacks<PieceType::Knight>(sq) & m_pieceBB[Piece(PieceType::Knight, attackerColor)] & ~captured).any())
-        {
-            // Walked into a knigh attack
-            return true;
-        }
-
-        {
-            // Check pawn attacks. Nothing else can attack the king at this point.
-            const Bitboard pawns = m_pieceBB[Piece(PieceType::Pawn, attackerColor)] & ~captured;
-            const Bitboard pawnAttacks = bb::pawnAttacks(pawns, attackerColor);
-
-            return pawnAttacks.isSet(sq);
-        }
+        return isSquareAttacked(sq, attackerColor, piecesBB(), Bitboard::none());
     }
 
     [[nodiscard]] constexpr Piece pieceAt(Square sq) const
@@ -528,13 +660,24 @@ struct Position : public Board
 
     constexpr Position() noexcept :
         Board(),
-        m_sideToMove(Color::White)
+        m_sideToMove(Color::White),
+        m_epSquare(Square::none()),
+        m_castlingRights(CastlingRights::All)
     {
     }
 
     constexpr void set(const char* fen)
     {
-        m_sideToMove = BaseType::set(fen);
+        const char* s = BaseType::set(fen);
+
+        s += 1;
+        m_sideToMove = (*s == 'w') ? Color::White : Color::Black;
+
+        s += 2;
+        m_castlingRights = detail::readCastlingRights(s);
+
+        s += 1;
+        m_epSquare = (*s == '-') ? Square::none() : detail::parseSquare(s);
     }
 
     [[nodiscard]] static constexpr Position fromFen(const char* fen)
@@ -585,9 +728,24 @@ struct Position : public Board
         return BaseType::isSquareAttackedAfterMove(sq, move, attackerColor);
     }
 
+    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor) const
+    {
+        return BaseType::isSquareAttacked(sq, attackerColor);
+    }
+
     [[nodiscard]] INTRIN_CONSTEXPR bool isCheck(Move move) const
     {
         return BaseType::isSquareAttackedAfterMove(kingSquare(!m_sideToMove), move, m_sideToMove);
+    }
+
+    [[nodiscard]] Square epSquare() const
+    {
+        return m_epSquare;
+    }
+
+    [[nodiscard]] CastlingRights castlingRights() const
+    {
+        return m_castlingRights;
     }
 
     [[nodiscard]] constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept
@@ -617,6 +775,8 @@ struct Position : public Board
 
 private:
     Color m_sideToMove;
+    Square m_epSquare; // TODO: proper updates and use in hash
+    CastlingRights m_castlingRights;
 };
 
 static_assert(Position::startPosition().afterMove(Move{ A2, A4 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR b KQkq -"));

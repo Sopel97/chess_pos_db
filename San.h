@@ -476,6 +476,7 @@ namespace san
 
     enum struct SanSpec : std::uint8_t
     {
+        None = 0x0,
         Capture = 0x1,
         Check = 0x2,
 

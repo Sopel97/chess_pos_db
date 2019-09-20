@@ -57,6 +57,7 @@ namespace movegen
     inline void generatePseudoLegalMoves<PieceType::Pawn>(const Position& pos, std::vector<Move>& moves)
     {
         const Color sideToMove = pos.sideToMove();
+        const Square epSquare = pos.epSquare();
         const Bitboard ourPieces = pos.piecesBB(sideToMove);
         const Bitboard theirPieces = pos.piecesBB(!sideToMove);
         const Bitboard occupied = ourPieces | theirPieces;
@@ -64,7 +65,11 @@ namespace movegen
 
         auto generate = [&](Square fromSq)
         {
-            const Bitboard attacks = bb::pawnAttacks(Bitboard::square(fromSq), sideToMove) & theirPieces;
+            Bitboard attacks = bb::pawnAttacks(Bitboard::square(fromSq), sideToMove) & theirPieces;
+            if (epSquare != Square::none())
+            {
+                attacks |= epSquare;
+            }
 
             const Rank startRank = sideToMove == Color::White ? rank2 : rank7;
             const Rank secondToLastRank = sideToMove == Color::White ? rank7 : rank2;
@@ -95,7 +100,7 @@ namespace movegen
             {
                 for (Square toSq : attacks)
                 {
-                    Move move{ fromSq, toSq };
+                    Move move{ fromSq, toSq, (toSq == epSquare) ? MoveType::EnPassant : MoveType::Normal };
                     moves.emplace_back(move);
                 }
 
@@ -117,8 +122,6 @@ namespace movegen
                     moves.emplace_back(move);
                 }
             }
-
-            // TODO: en passant
         };
 
         for (Square fromSq : pawns)
@@ -129,7 +132,84 @@ namespace movegen
 
     inline void generateCastlingMoves(const Position& pos, std::vector<Move>& moves)
     {
+        // all square on a castling path must be empty
+        constexpr EnumMap2<Color, CastleType, Bitboard> castlingPaths = { 
+            { 
+                {{ Bitboard::square(F1) | G1, Bitboard::square(B1) | C1 | D1 }},
+                {{ Bitboard::square(F8) | G8, Bitboard::square(B8) | C8 | D8 }}
+            } 
+        };
 
+        // this square must not be attacked by the enemy
+        constexpr EnumMap2<Color, CastleType, Square> squarePassedByKing = {
+            {
+                {{ F1, B1 }},
+                {{ F8, B8 }}
+            }
+        };
+
+        // we can't use CastlingRights directly as it is a flag set
+        constexpr EnumMap2<Color, CastleType, CastlingRights> castlingRightsMap = {
+            {
+                {{ CastlingRights::WhiteKingSide, CastlingRights::WhiteQueenSide }},
+                {{ CastlingRights::BlackKingSide, CastlingRights::BlackQueenSide }}
+            }
+        };
+
+        CastlingRights rights = pos.castlingRights();
+        if (rights == CastlingRights::None)
+        {
+            return;
+        }
+
+        const Color sideToMove = pos.sideToMove();
+        const Bitboard ourPieces = pos.piecesBB(sideToMove);
+        const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+        const Bitboard occupied = ourPieces | theirPieces;
+
+        // we first reduce the set of legal castlings by checking the paths for pieces
+        if ((castlingPaths[Color::White][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::WhiteKingSide;
+        if ((castlingPaths[Color::White][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::WhiteQueenSide;
+        if ((castlingPaths[Color::Black][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::BlackKingSide;
+        if ((castlingPaths[Color::Black][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::BlackQueenSide;
+
+        if (rights == CastlingRights::None)
+        {
+            return;
+        }
+
+        // King must not be in check. Done here because it is quite expensive.
+        const Square ksq = pos.kingSquare(sideToMove);
+        if (pos.isSquareAttacked(ksq, !sideToMove))
+        {
+            return;
+        }
+
+        // Loop through all possible castlings.
+        for (Color color : values<Color>())
+        {
+            for (CastleType castlingType : values<CastleType>())
+            {
+                const CastlingRights right = castlingRightsMap[color][castlingType];
+
+                if (!contains(rights, right))
+                {
+                    continue;
+                }
+
+                // If we have this castling right
+                // we check whether the king passes an attacked square.
+                const Square passedSquare = squarePassedByKing[color][castlingType];
+                if (pos.isSquareAttacked(passedSquare, !sideToMove))
+                {
+                    continue;
+                }
+
+                // If not we can castle.
+                Move move = Move::castle(castlingType, sideToMove);
+                moves.emplace_back(move);
+            }
+        }
     }
 
     // pos must not have a 'king capture' available
