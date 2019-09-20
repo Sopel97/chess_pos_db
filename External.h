@@ -1577,6 +1577,28 @@ namespace ext
     }
 
     template <typename T>
+    std::vector<T> readFile(const std::filesystem::path& path)
+    {
+        const std::string pathString = path.string();
+        auto file = std::fopen(pathString.c_str(), "rb");
+        if (file == nullptr)
+        {
+            throw Exception("Cannot open file.");
+        }
+
+        std::fseek(file, 0, SEEK_END);
+        const std::size_t count = std::ftell(file) / sizeof(T);
+        std::fseek(file, 0, SEEK_SET);
+
+        std::vector<T> entries(count);
+
+        std::fread(entries.data(), sizeof(T), count, file);
+        std::fclose(file);
+
+        return entries;
+    }
+
+    template <typename T>
     void copy(const ImmutableSpan<T>& in, BinaryOutputFile& outFile)
     {
         withBackInserter<T>(outFile, [&](BackInserter<T>& out) {
@@ -2122,6 +2144,8 @@ namespace ext
     {
         static_assert(std::is_empty_v<CompareT>);
 
+        using EntryType = RangeIndexEntry<KeyType, CompareT>;
+
         RangeIndex() = default;
 
         RangeIndex(std::vector<RangeIndexEntry<KeyType, CompareT>>&& entries) :
@@ -2147,6 +2171,16 @@ namespace ext
         [[nodiscard]] auto cend() const
         {
             return m_entries.cend();
+        }
+
+        [[nodiscard]] const RangeIndexEntry<KeyType, CompareT>* data() const
+        {
+            return m_entries.data();
+        }
+
+        [[nodiscard]] std::size_t size() const
+        {
+            return m_entries.size();
         }
 
     private:

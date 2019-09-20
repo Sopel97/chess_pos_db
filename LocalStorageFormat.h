@@ -29,6 +29,8 @@ namespace persistence
 {
     namespace local
     {
+        static constexpr bool useIndex = true;
+
         struct Entry
         {
             Entry() = default;
@@ -64,7 +66,7 @@ namespace persistence
                 return m_positionSignature.hash()[0] % d;
             }
 
-            const PositionSignature& positionSignature() const
+            [[nodiscard]] const PositionSignature& positionSignature() const
             {
                 return m_positionSignature;
             }
@@ -75,6 +77,31 @@ namespace persistence
         };
 
         static_assert(sizeof(Entry) == 20);
+
+        using Index = ext::RangeIndex<PositionSignature, std::less<>>;
+        
+        [[nodiscard]] Index readIndexFor(std::filesystem::path path)
+        {
+            if constexpr (useIndex)
+            {
+                path += "_index";
+                Index idx(ext::readFile<typename Index::EntryType>(path));
+                return idx;
+            }
+            else
+            {
+                return Index{};
+            }
+        }
+
+        void writeIndexFor(std::filesystem::path path, const Index& index)
+        {
+            if constexpr (useIndex)
+            {
+                path += "_index";
+                ext::writeFile<typename Index::EntryType>(path, index.data(), index.size());
+            }
+        }
 
         auto extractEntryKey = [](const Entry& entry) {
             return entry.positionSignature();
@@ -97,7 +124,60 @@ namespace persistence
             return value.toUnsignedLongLong();
         };
 
-        struct File;
+        struct QueryResult;
+
+        struct File
+        {
+            File(std::filesystem::path path) :
+                m_entries(std::move(path)),
+                m_index(readIndexFor(m_entries.path())),
+                m_id(std::stoi(m_entries.path().filename().string()))
+            {
+            }
+
+            File(ext::ImmutableSpan<Entry>&& entries) :
+                m_entries(std::move(entries)),
+                m_index(readIndexFor(m_entries.path())),
+                m_id(std::stoi(m_entries.path().filename().string()))
+            {
+            }
+
+            File(std::filesystem::path path, Index&& index) :
+                m_entries(std::move(path)),
+                m_index(std::move(index)),
+                m_id(std::stoi(m_entries.path().filename().string()))
+            {
+            }
+
+            File(ext::ImmutableSpan<Entry>&& entries, Index&& index) :
+                m_entries(std::move(entries)),
+                m_index(std::move(index)),
+                m_id(std::stoi(m_entries.path().filename().string()))
+            {
+            }
+
+            [[nodiscard]] friend bool operator<(const File& lhs, const File& rhs) noexcept
+            {
+                return lhs.m_id < rhs.m_id;
+            }
+
+            [[nodiscard]] std::uint32_t id() const
+            {
+                return m_id;
+            }
+
+            [[nodiscard]] const std::filesystem::path& path() const
+            {
+                return m_entries.path();
+            }
+
+            void queryRanges(QueryResult& results, const std::vector<PositionSignature>& keys) const;
+
+        private:
+            ext::ImmutableSpan<Entry> m_entries;
+            Index m_index;
+            std::uint32_t m_id;
+        };
 
         struct QueryTarget
         {
@@ -114,27 +194,27 @@ namespace persistence
             {
             }
 
-            const File& partition() const
+            [[nodiscard]] const File& partition() const
             {
                 return *m_file;
             }
 
-            std::size_t begin() const
+            [[nodiscard]] std::size_t begin() const
             {
                 return m_begin;
             }
 
-            std::size_t end() const
+            [[nodiscard]] std::size_t end() const
             {
                 return m_end;
             }
 
             void print() const
             {
-                std::cout << static_cast<const void*>(m_file) << ' ' << m_begin << ' ' << m_end << '\n';
+                std::cout << m_file->path() << ' ' << m_begin << ' ' << m_end << '\n';
             }
 
-            std::size_t count() const
+            [[nodiscard]] std::size_t count() const
             {
                 return m_end - m_begin;
             }
@@ -162,7 +242,7 @@ namespace persistence
                 std::cout << '\n';
             }
 
-            std::size_t count() const
+            [[nodiscard]] std::size_t count() const
             {
                 std::size_t c = 0;
                 for (auto&& range : m_ranges)
@@ -175,57 +255,47 @@ namespace persistence
         private:
             std::vector<QueryResultRange> m_ranges;
         };
-
-        struct File
+        
+        void File::queryRanges(QueryResult& results, const std::vector<PositionSignature>& keys) const
         {
-            File(std::filesystem::path path) :
-                m_entries(std::move(path)),
-                m_id(std::stoi(m_entries.path().filename().string()))
-            {
-            }
-
-            File(ext::ImmutableSpan<Entry>&& entries) :
-                m_entries(std::move(entries)),
-                m_id(std::stoi(m_entries.path().filename().string()))
-            {
-            }
-
-            [[nodiscard]] friend bool operator<(const File& lhs, const File& rhs) noexcept
-            {
-                return lhs.m_id < rhs.m_id;
-            }
-
-            [[nodiscard]] std::uint32_t id() const
-            {
-                return m_id;
-            }
-
-            const std::filesystem::path& path() const
-            {
-                return m_entries.path();
-            }
-
-            void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const
-            {
-                auto searchResults = ext::equal_range_multiple_interp_cross(m_entries, keys, std::less<>{}, extractEntryKey, entryKeyToArithmetic, entryKeyArithmeticToSizeT);
-                for (int i = 0; i < searchResults.size(); ++i)
+            auto searchResults = [this, &keys]() {
+                if constexpr (useIndex)
                 {
-                    const auto& result = searchResults[i];
-                    const auto count = result.second - result.first;
-                    if (count == 0) continue;
-
-                    results[i].emplaceRange(*this, result.first, result.second);
+                    return ext::equal_range_multiple_interp_indexed_cross(
+                        m_entries, 
+                        m_index, 
+                        keys, 
+                        std::less<>{}, 
+                        extractEntryKey, 
+                        entryKeyToArithmetic, 
+                        entryKeyArithmeticToSizeT
+                    );
                 }
-            }
+                else
+                {
+                    return ext::equal_range_multiple_interp_cross(
+                        m_entries, 
+                        keys, 
+                        std::less<>{}, 
+                        extractEntryKey, 
+                        entryKeyToArithmetic, 
+                        entryKeyArithmeticToSizeT
+                    );
+                }
+            }();
+            for (int i = 0; i < searchResults.size(); ++i)
+            {
+                const auto& result = searchResults[i];
+                const auto count = result.second - result.first;
+                if (count == 0) continue;
 
-        private:
-            ext::ImmutableSpan<Entry> m_entries;
-            std::uint32_t m_id;
-        };
+                results.emplaceRange(*this, result.first, result.second);
+            }
+        }
 
         struct FutureFile
         {
-            FutureFile(std::future<void>&& future, std::filesystem::path path) :
+            FutureFile(std::future<Index>&& future, std::filesystem::path path) :
                 m_future(std::move(future)),
                 m_path(std::move(path)),
                 m_id(std::stoi(m_path.filename().string()))
@@ -244,12 +314,12 @@ namespace persistence
 
             [[nodiscard]] File get()
             {
-                m_future.get();
-                return { m_path };
+                Index index = m_future.get();
+                return { m_path, std::move(index) };
             }
 
         private:
-            std::future<void> m_future;
+            std::future<Index> m_future;
             std::filesystem::path m_path;
             std::uint32_t m_id;
         };
@@ -259,7 +329,7 @@ namespace persistence
         private:
             struct Job
             {
-                Job(std::filesystem::path path, std::vector<Entry>&& buffer, std::promise<void>&& promise) :
+                Job(std::filesystem::path path, std::vector<Entry>&& buffer, std::promise<Index>&& promise) :
                     path(std::move(path)),
                     buffer(std::move(buffer)),
                     promise(std::move(promise))
@@ -268,7 +338,7 @@ namespace persistence
 
                 std::filesystem::path path;
                 std::vector<Entry> buffer;
-                std::promise<void> promise;
+                std::promise<Index> promise;
             };
 
         public:
@@ -299,12 +369,12 @@ namespace persistence
                 waitForCompletion();
             }
 
-            std::future<void> scheduleUnordered(const std::filesystem::path& path, std::vector<Entry>&& elements)
+            [[nodiscard]] std::future<Index> scheduleUnordered(const std::filesystem::path& path, std::vector<Entry>&& elements)
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
-                std::promise<void> promise;
-                std::future<void> future = promise.get_future();
+                std::promise<Index> promise;
+                std::future<Index> future = promise.get_future();
                 m_sortQueue.emplace(path, std::move(elements), std::move(promise));
 
                 lock.unlock();
@@ -313,12 +383,12 @@ namespace persistence
                 return future;
             }
 
-            std::future<void> scheduleOrdered(const std::filesystem::path& path, std::vector<Entry>&& elements)
+            [[nodiscard]] std::future<Index> scheduleOrdered(const std::filesystem::path& path, std::vector<Entry>&& elements)
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
-                std::promise<void> promise;
-                std::future<void> future = promise.get_future();
+                std::promise<Index> promise;
+                std::future<Index> future = promise.get_future();
                 m_sortQueue.emplace(path, std::move(elements), std::move(promise));
 
                 lock.unlock();
@@ -327,7 +397,7 @@ namespace persistence
                 return future;
             }
 
-            std::vector<Entry> getEmptyBuffer()
+            [[nodiscard]] std::vector<Entry> getEmptyBuffer()
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
@@ -423,7 +493,11 @@ namespace persistence
 
                     lock.unlock();
 
+                    const std::size_t indexSize = std::max(std::size_t{ 1 }, job.buffer.size() / 1024u);
+                    Index index = ext::makeIndex(job.buffer, indexSize, std::less<>{}, extractEntryKey);
                     ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
+                    writeIndexFor(job.path, index);
+
                     job.buffer.clear();
 
                     lock.lock();
@@ -431,7 +505,7 @@ namespace persistence
                     lock.unlock();
 
                     m_bufferQueueNotEmpty.notify_one();
-                    job.promise.set_value();
+                    job.promise.set_value(std::move(index));
                 }
             }
         };
@@ -447,7 +521,7 @@ namespace persistence
                 setPath(std::move(path));
             }
 
-            void queryRanges(std::vector<QueryResult>& result, const std::vector<PositionSignature>& keys) const
+            void queryRanges(QueryResult& result, const std::vector<PositionSignature>& keys) const
             {
                 for (auto&& file : m_files)
                 {
@@ -527,7 +601,7 @@ namespace persistence
                 return 0;
             }
 
-            const std::filesystem::path path() const
+            [[nodiscard]] const std::filesystem::path path() const
             {
                 return m_path;
             }
@@ -564,6 +638,11 @@ namespace persistence
                         continue;
                     }
 
+                    if (entry.path().filename().string().find("index") != std::string::npos)
+                    {
+                        continue;
+                    }
+
                     m_files.emplace_back(entry.path());
                 }
 
@@ -572,7 +651,7 @@ namespace persistence
         };
 
         template <typename T>
-        std::vector<std::vector<T>> createBuffers(std::size_t numBuffers, std::size_t size)
+        [[nodiscard]] std::vector<std::vector<T>> createBuffers(std::size_t numBuffers, std::size_t size)
         {
             ASSERT(size > 0);
 
@@ -612,17 +691,17 @@ namespace persistence
             {
             }
 
-            const auto& path() const &
+            [[nodiscard]] const auto& path() const &
             {
                 return m_path;
             }
 
-            PgnFilePath path() &&
+            [[nodiscard]] PgnFilePath path() &&
             {
                 return std::move(m_path);
             }
 
-            GameLevel level() const
+            [[nodiscard]] GameLevel level() const
             {
                 return m_level;
             }
@@ -634,7 +713,7 @@ namespace persistence
 
         using PgnFiles = std::vector<PgnFile>;
 
-        EnumMap<GameLevel, PgnFilePaths> partitionPathsByLevel(PgnFiles files)
+        [[nodiscard]] EnumMap<GameLevel, PgnFilePaths> partitionPathsByLevel(PgnFiles files)
         {
             EnumMap<GameLevel, PgnFilePaths> partitioned;
             for (auto&& file : files)
@@ -683,6 +762,25 @@ namespace persistence
 
         public:
 
+            static const std::vector<QueryTarget>& allQueryTargets()
+            {
+                static const std::vector<QueryTarget> s_allQueryTargets = []() {
+                    std::vector<QueryTarget> s_allQueryTargets;
+
+                    for (auto level : values<GameLevel>())
+                    {
+                        for (auto result : values<GameResult>())
+                        {
+                            s_allQueryTargets.emplace_back(QueryTarget{ level, result });
+                        }
+                    }
+
+                    return s_allQueryTargets;
+                }();
+
+                return s_allQueryTargets;
+            }
+
             Database(std::filesystem::path path, std::size_t headerBufferMemory) :
                 m_path(path),
                 m_header(path, headerBufferMemory)
@@ -695,7 +793,7 @@ namespace persistence
                 return m_name;
             }
 
-            std::vector<QueryResult> queryRanges(QueryTarget target, const std::vector<Position>& positions) const
+            [[nodiscard]] QueryResult queryRanges(QueryTarget target, const std::vector<Position>& positions) const
             {
                 std::vector<PositionSignature> keys;
                 keys.reserve(positions.size());
@@ -704,12 +802,37 @@ namespace persistence
                     keys.emplace_back(position);
                 }
 
-                std::vector<QueryResult> results(positions.size());
+                QueryResult result;
                 for (auto&& partition : m_partitions[target.level][target.result])
                 {
-                    partition.queryRanges(results, keys);
+                    partition.queryRanges(result, keys);
+                }
+                return result;
+            }
+
+            [[nodiscard]] EnumMap2<GameLevel, GameResult, QueryResult> queryRanges(const std::vector<QueryTarget>& targets, const std::vector<Position>& positions) const
+            {
+                std::vector<PositionSignature> keys;
+                keys.reserve(positions.size());
+                for (auto&& position : positions)
+                {
+                    keys.emplace_back(position);
+                }
+
+                EnumMap2<GameLevel, GameResult, QueryResult> results;
+                for (auto&& [level, result] : targets)
+                {
+                    for (auto&& partition : m_partitions[level][result])
+                    {
+                        partition.queryRanges(results[level][result], keys);
+                    }
                 }
                 return results;
+            }
+
+            [[nodiscard]] EnumMap2<GameLevel, GameResult, QueryResult> queryRanges(const std::vector<Position>& positions) const
+            {
+                return queryRanges(allQueryTargets(), positions);
             }
 
             ImportStats importPgns(
@@ -975,7 +1098,7 @@ namespace persistence
                 PerPartitionWithSpecificGameLevel<std::uint32_t> nextIds;
             };
 
-            std::vector<Block> divideIntoBlocks(
+            [[nodiscard]] std::vector<Block> divideIntoBlocks(
                 const PgnFilePaths& paths,
                 GameLevel level,
                 std::size_t bufferSize,

@@ -198,7 +198,7 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
 
 void build()
 {
-    persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
     //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     /*
     e.importPgns(std::execution::par_unseq, {
@@ -242,24 +242,24 @@ void buildsmall()
 
 void query()
 {
-    persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    std::cout << "Loading db\n";
+    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
+    std::cout << "Loaded db\n";
 
     std::vector<Position> positions;
     positions.emplace_back(Position::startPosition());
 
+    auto results = e.queryRanges(positions);
     auto count = 0;
     {
         for (GameLevel level : values<GameLevel>())
         {
             for (GameResult result : values<GameResult>())
             {
-                auto results = e.queryRanges({ level, result }, positions);
-                for (auto&& r : results)
-                {
-                    r.print();
-                    std::cout << "\n\n";
-                    count += r.count();
-                }
+                auto& r = results[level][result];
+                r.print();
+                std::cout << "\n\n";
+                count += r.count();
             }
         }
     }
@@ -268,6 +268,7 @@ void query()
 
 int main()
 {
+    //build();
     //buildsmall();
     query();
     return 0;
