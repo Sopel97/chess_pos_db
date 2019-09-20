@@ -324,7 +324,7 @@ public:
         }
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnKing(Move move, Color color) const
+    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnOwnKing(Move move, Color color) const
     {
         // checks whether by doing a move we uncover our king to a check
         // doesn't verify castlings as it is supposed to only cover undiscovered checks
@@ -354,6 +354,7 @@ public:
         {
             const Square capturedPieceSq(move.to.file(), move.from.rank());
             occupied ^= capturedPieceSq;
+            // We don't update captured becuase it only affects pawns - we don't care.
         }
         else if (m_pieces[move.to] != Piece::none())
         {
@@ -362,89 +363,90 @@ public:
             captured |= move.to;
         }
 
-        const Bitboard opponentQueens = piecesBB(Piece(PieceType::Queen, !color));
-
-        const Bitboard opponentBishopLikePieces = (piecesBB(Piece(PieceType::Bishop, !color)) | opponentQueens) & ~captured;
-        const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(ksq, occupied);
-        if ((bishopAttacks & opponentBishopLikePieces).any())
-        {
-            return true;
-        }
-
-        const Bitboard opponentRookLikePieces = (piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens) & ~captured;
-        const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
-        return (rookAttacks & opponentRookLikePieces).any();
+        return bb::isAttackedBySlider(
+            ksq,
+            piecesBB(Piece(PieceType::Bishop, !color)) & ~captured,
+            piecesBB(Piece(PieceType::Rook, !color)) & ~captured,
+            piecesBB(Piece(PieceType::Queen, !color)) & ~captured,
+            occupied
+        );
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool createsAttackOnKing(Move move, Color color) const
+    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
     {
         // checks whether by doing a move our king ends up being attacked
         // does not support castling moves
 
         ASSERT(move.from.isOk() && move.to.isOk());
-        ASSERT(move.type != MoveType::Castle);
 
-        Square ksq = kingSquare(color);
-        if (ksq == move.from)
+        // Check attacks by sliders just as we do in createsDiscoveredAttackOnOwnKing
+        Bitboard occupied = (piecesBB() ^ move.from) | move.to;
+        Bitboard captured = Bitboard::none();
+
+        if (move.type == MoveType::EnPassant)
         {
-            ksq = move.to;
-            // We just have to check whether the king walks into an attacked square
+            const Square capturedPieceSq(move.to.file(), move.from.rank());
+            occupied ^= capturedPieceSq;
+            captured |= capturedPieceSq;
+        }
+        else if (move.type == MoveType::Castle)
+        {
+            // occupied hold the original board but only without a king
+            // as if we did occupied ^= kingFromSq
 
+            const Square rookFromSq = move.to;
+            const Square kingFromSq = move.from;
+
+            const Piece king = m_pieces[kingFromSq];
+            const Color color = king.color();
+            const bool isShort = rookFromSq.file() == fileH;
+
+            const Square rookToSq = m_rookCastleDestinations[color][isShort];
+            const Square kingToSq = m_kingCastleDestinations[color][isShort];
+
+            occupied ^= rookFromSq;
+            occupied |= kingToSq;
+            occupied |= rookToSq;
+        }
+        else if (m_pieces[move.to] != Piece::none())
+        {
+            // A capture happened.
+            // We have to exclude the captured piece.
+            captured |= move.to;
+        }
+
+        if (bb::pseudoAttacks<PieceType::Queen>(sq).isSet(move.from))
+        {
+            if (bb::isAttackedBySlider(
+                sq,
+                piecesBB(Piece(PieceType::Bishop, attackerColor)) & ~captured,
+                piecesBB(Piece(PieceType::Rook, attackerColor)) & ~captured,
+                piecesBB(Piece(PieceType::Queen, attackerColor)) & ~captured,
+                occupied
+            ))
             {
-                // Check attacks by sliders just as we do in createsDiscoveredAttackOnKing
-                const Bitboard occupied = (piecesBB() ^ move.from) | move.to;
-                Bitboard captured = Bitboard::none();
-
-                if (m_pieces[move.to] != Piece::none())
-                {
-                    // A capture happened.
-                    // We have to exclude the captured piece.
-                    captured |= move.to;
-                }
-
-                if (bb::pseudoAttacks<PieceType::Queen>(ksq).isSet(move.from))
-                {
-                    const Bitboard opponentQueens = piecesBB(Piece(PieceType::Queen, !color));
-
-                    const Bitboard opponentBishopLikePieces = (piecesBB(Piece(PieceType::Bishop, !color)) | opponentQueens) & ~captured;
-                    const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(ksq, occupied);
-                    if ((bishopAttacks & opponentBishopLikePieces).any())
-                    {
-                        return true;
-                    }
-
-                    const Bitboard opponentRookLikePieces = (piecesBB(Piece(PieceType::Rook, !color)) | opponentQueens) & ~captured;
-                    const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(ksq, occupied);
-                    if ((rookAttacks & opponentRookLikePieces).any())
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            if (bb::pseudoAttacks<PieceType::King>(ksq).isSet(kingSquare(!color)))
-            {
-                // Kings 'touch'
                 return true;
-            }
-
-            if ((bb::pseudoAttacks<PieceType::Knight>(ksq) & m_pieceBB[Piece(PieceType::Knight, !color)]).any())
-            {
-                // Walked into a knigh attack
-                return true;
-            }
-
-            {
-                // Check pawn attacks. Nothing else can attack the king at this point.
-                const Bitboard pawns = m_pieceBB[Piece(PieceType::Pawn, !color)];
-                const Bitboard pawnAttacks = bb::pawnAttacks(pawns, !color);
-
-                return pawnAttacks.isSet(ksq);
             }
         }
-        else
+
+        if (bb::pseudoAttacks<PieceType::King>(sq).isSet(kingSquare(attackerColor)))
         {
-            return createsDiscoveredAttackOnKing(move, color);
+            // Kings 'touch'
+            return true;
+        }
+
+        if ((bb::pseudoAttacks<PieceType::Knight>(sq) & m_pieceBB[Piece(PieceType::Knight, attackerColor)] & ~captured).any())
+        {
+            // Walked into a knigh attack
+            return true;
+        }
+
+        {
+            // Check pawn attacks. Nothing else can attack the king at this point.
+            const Bitboard pawns = m_pieceBB[Piece(PieceType::Pawn, attackerColor)] & ~captured;
+            const Bitboard pawnAttacks = bb::pawnAttacks(pawns, attackerColor);
+
+            return pawnAttacks.isSet(sq);
         }
     }
 
@@ -568,13 +570,24 @@ struct Position : public Board
         return m_sideToMove;
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnKing(Move move) const
+    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnOwnKing(Move move) const
     {
-        return BaseType::createsDiscoveredAttackOnKing(move, m_sideToMove);
+        return BaseType::createsDiscoveredAttackOnOwnKing(move, m_sideToMove);
     }
-    [[nodiscard]] INTRIN_CONSTEXPR bool createsAttackOnKing(Move move) const
+
+    [[nodiscard]] INTRIN_CONSTEXPR bool createsAttackOnOwnKing(Move move) const
     {
-        return BaseType::createsAttackOnKing(move, m_sideToMove);
+        return BaseType::isSquareAttackedAfterMove(kingSquare(m_sideToMove), move, !m_sideToMove);
+    }
+
+    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
+    {
+        return BaseType::isSquareAttackedAfterMove(sq, move, attackerColor);
+    }
+
+    [[nodiscard]] INTRIN_CONSTEXPR bool isCheck(Move move) const
+    {
+        return BaseType::isSquareAttackedAfterMove(kingSquare(!m_sideToMove), move, m_sideToMove);
     }
 
     [[nodiscard]] constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept

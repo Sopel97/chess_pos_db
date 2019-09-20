@@ -234,20 +234,20 @@ void build()
 
 void buildsmall()
 {
-    persistence::local::Database e("w:/catobase/.tmp_small", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("w:/catobase/.tmp2_indexed", 4ull * 1024ull * 1024ull);
     e.importPgns(std::execution::par_unseq, {
-        {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Human}
+        {"w:/catobase/data/Server Games LiChess 2019-1.pgn", GameLevel::Human}
         }, 2u * 1024u * 1024u * 1024u);
 }
 
 void query()
 {
     std::cout << "Loading db\n";
-    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("w:/catobase/.tmp2_indexed", 4ull * 1024ull * 1024ull);
     std::cout << "Loaded db\n";
 
     std::vector<Position> positions;
-    positions.emplace_back(Position::startPosition());
+    positions.emplace_back(Position::startPosition().afterMove({ E2, E4 }));
 
     auto results = e.queryRanges(positions);
     auto count = 0;

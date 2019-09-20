@@ -808,6 +808,26 @@ namespace bb
         return pawns;
     }
 
+    [[nodiscard]] constexpr bool isAttackedBySlider(
+        Square sq, 
+        Bitboard bishops, 
+        Bitboard rooks, 
+        Bitboard queens, 
+        Bitboard occupied
+    )
+    {
+        const Bitboard opponentBishopLikePieces = (bishops | queens);
+        const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(sq, occupied);
+        if ((bishopAttacks & opponentBishopLikePieces).any())
+        {
+            return true;
+        }
+
+        const Bitboard opponentRookLikePieces = (rooks | queens);
+        const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(sq, occupied);
+        return (rookAttacks & opponentRookLikePieces).any();
+    }
+
     // random test cases generated with stockfish
 
 #if defined(USE_CONSTEXPR_INTRINSICS)

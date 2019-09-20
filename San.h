@@ -74,6 +74,12 @@ namespace san
             return Square(file, rank);
         }
 
+        [[nodiscard]] inline void appendSquareToString(Square sq, std::string& str)
+        {
+            str += static_cast<char>('a' + ordinal(sq.file()));
+            str += static_cast<char>('a' + ordinal(sq.rank()));
+        }
+
         [[nodiscard]] constexpr bool contains(std::string_view s, char c)
         {
             return s.find(c) != std::string::npos;
@@ -177,6 +183,26 @@ namespace san
 
             ASSERT(false);
             return PieceType::None;
+        }
+
+        [[nodiscard]] constexpr char pieceTypeToChar(PieceType pt)
+        {
+            switch (pt)
+            {
+            case PieceType::Knight:
+                return 'N';
+            case PieceType::Bishop:
+                return 'B';
+            case PieceType::Rook:
+                return 'R';
+            case PieceType::Queen:
+                return 'Q';
+            case PieceType::King:
+                return 'K';
+            }
+
+            ASSERT(false);
+            return '\0';
         }
 
         [[nodiscard]] constexpr Move sanToMove_Pawn(const Position& pos, std::string_view san)
@@ -373,7 +399,7 @@ namespace san
             for (Square fromSq : candidates)
             {
                 const Move move{ fromSq, toSq };
-                if (!pos.createsDiscoveredAttackOnKing(move))
+                if (!pos.createsDiscoveredAttackOnOwnKing(move))
                 {
                     ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
 
@@ -446,6 +472,78 @@ namespace san
         default:
             return detail::sanToMove_Pawn(pos, std::string_view(san, length));
         }
+    }
+
+    enum struct SanSpec : std::uint8_t
+    {
+        Capture = 0x1,
+        Check = 0x2,
+
+        // not yet supported
+        // Mate = 0x4, 
+        // Compact = 0x8
+    };
+
+    [[nodiscard]] constexpr SanSpec operator|(SanSpec lhs, SanSpec rhs)
+    {
+        return static_cast<SanSpec>(static_cast<std::uint8_t>(lhs) | static_cast<std::uint8_t>(rhs));
+    }
+
+    [[nodiscard]] constexpr SanSpec operator&(SanSpec lhs, SanSpec rhs)
+    {
+        return static_cast<SanSpec>(static_cast<std::uint8_t>(lhs) & static_cast<std::uint8_t>(rhs));
+    }
+
+    // checks whether lhs contains rhs
+    [[nodiscard]] constexpr bool contains(SanSpec lhs, SanSpec rhs)
+    {
+        return (lhs & rhs) == rhs;
+    }
+
+    template <SanSpec SpecV>
+    [[nodiscard]] inline std::string moveToSan(const Position& pos, Move move)
+    {
+        std::string san;
+
+        const Piece piece = pos.pieceAt(move.from);
+
+        if (piece.type() != PieceType::Pawn)
+        {
+            san += detail::pieceTypeToChar(piece.type());
+        }
+
+        detail::appendSquareToString(move.from, san);
+
+        if constexpr (contains(SpecV, SanSpec::Capture))
+        {
+            const bool isCapture =
+                (move.type == MoveType::EnPassant)
+                ? true
+                : (pos.pieceAt(move.to) != Piece::none());
+
+            if (isCapture)
+            {
+                san += 'x';
+            }
+        }
+
+        detail::appendSquareToString(move.to, san);
+
+        if (move.promotedPiece != Piece::none())
+        {
+            san += '=';
+            san += detail::pieceTypeToChar(move.promotedPiece.type());
+        }
+
+        if constexpr (contains(SpecV), SanSpec::Check)
+        {
+            if (pos.isCheck(move))
+            {
+                san += '+';
+            }
+        }
+
+        return san;
     }
 
     constexpr std::array<bool, 256> validStart = []() {

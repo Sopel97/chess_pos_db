@@ -27,7 +27,7 @@ namespace movegen
                 return true;
             }
 
-            return !pos.createsAttackOnKing(move);
+            return !pos.createsAttackOnOwnKing(move);
         }
     }
 

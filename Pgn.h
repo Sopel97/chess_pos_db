@@ -344,6 +344,11 @@ namespace pgn
 
             const UnparsedPositionsIterator& operator++()
             {
+                // TODO: Indicate somehow that there was an error and the position
+                //       stream is ending abruptly.
+                //       For example when a move is missing "22.Ba3 -- 23.a6 b4"
+                //       we want to propagate that to the importer so the game can be skipped.
+
                 detail::seekNextMove(m_moveSection);
                 if (m_moveSection.empty())
                 {
