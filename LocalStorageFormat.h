@@ -23,6 +23,8 @@
 #include <utility>
 #include <vector>
 
+#include "lib/infint/InfInt.h"
+
 namespace persistence
 {
     namespace local
@@ -47,9 +49,24 @@ namespace persistence
                 return lhs.m_positionSignature < rhs.m_positionSignature;
             }
 
+            [[nodiscard]] friend bool operator<(const Entry& lhs, const PositionSignature& rhs) noexcept
+            {
+                return lhs.m_positionSignature < rhs;
+            }
+
+            [[nodiscard]] friend bool operator<(const PositionSignature& lhs, const Entry& rhs) noexcept
+            {
+                return lhs < rhs.m_positionSignature;
+            }
+
             [[nodiscard]] std::uint32_t hashMod(std::uint32_t d) const
             {
                 return m_positionSignature.hash()[0] % d;
+            }
+
+            const PositionSignature& positionSignature() const
+            {
+                return m_positionSignature;
             }
 
         private:
@@ -58,6 +75,106 @@ namespace persistence
         };
 
         static_assert(sizeof(Entry) == 20);
+
+        auto extractEntryKey = [](const Entry& entry) {
+            return entry.positionSignature();
+        };
+
+        auto entryKeyToArithmetic = [](const PositionSignature& sig) {
+            static InfInt base(std::numeric_limits<std::uint32_t>::max());
+
+            InfInt value = sig.hash()[0];
+            value *= base;
+            value += sig.hash()[1];
+            value *= base;
+            value += sig.hash()[2];
+            value *= base;
+            value += sig.hash()[3];
+            return value;
+        };
+
+        auto entryKeyArithmeticToSizeT = [](const InfInt& value) {
+            return value.toUnsignedLongLong();
+        };
+
+        struct File;
+
+        struct QueryTarget
+        {
+            GameLevel level;
+            GameResult result;
+        };
+
+        struct QueryResultRange
+        {
+            QueryResultRange(const File& file, std::size_t begin, std::size_t end) :
+                m_file(&file),
+                m_begin(begin),
+                m_end(end)
+            {
+            }
+
+            const File& partition() const
+            {
+                return *m_file;
+            }
+
+            std::size_t begin() const
+            {
+                return m_begin;
+            }
+
+            std::size_t end() const
+            {
+                return m_end;
+            }
+
+            void print() const
+            {
+                std::cout << static_cast<const void*>(m_file) << ' ' << m_begin << ' ' << m_end << '\n';
+            }
+
+            std::size_t count() const
+            {
+                return m_end - m_begin;
+            }
+
+        private:
+            const File* m_file;
+            std::size_t m_begin;
+            std::size_t m_end;
+        };
+
+        struct QueryResult
+        {
+            template <typename... ArgsTs>
+            void emplaceRange(ArgsTs&& ... args)
+            {
+                m_ranges.emplace_back(std::forward<ArgsTs>(args)...);
+            }
+
+            void print() const
+            {
+                for (auto&& range : m_ranges)
+                {
+                    range.print();
+                }
+                std::cout << '\n';
+            }
+
+            std::size_t count() const
+            {
+                std::size_t c = 0;
+                for (auto&& range : m_ranges)
+                {
+                    c += range.count();
+                }
+                return c;
+            }
+
+        private:
+            std::vector<QueryResultRange> m_ranges;
+        };
 
         struct File
         {
@@ -81,6 +198,24 @@ namespace persistence
             [[nodiscard]] std::uint32_t id() const
             {
                 return m_id;
+            }
+
+            const std::filesystem::path& path() const
+            {
+                return m_entries.path();
+            }
+
+            void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const
+            {
+                auto searchResults = ext::equal_range_multiple_interp_cross(m_entries, keys, std::less<>{}, extractEntryKey, entryKeyToArithmetic, entryKeyArithmeticToSizeT);
+                for (int i = 0; i < searchResults.size(); ++i)
+                {
+                    const auto& result = searchResults[i];
+                    const auto count = result.second - result.first;
+                    if (count == 0) continue;
+
+                    results[i].emplaceRange(*this, result.first, result.second);
+                }
             }
 
         private:
@@ -312,6 +447,14 @@ namespace persistence
                 setPath(std::move(path));
             }
 
+            void queryRanges(std::vector<QueryResult>& result, const std::vector<PositionSignature>& keys) const
+            {
+                for (auto&& file : m_files)
+                {
+                    file.queryRanges(result, keys);
+                }
+            }
+
             void setPath(std::filesystem::path path)
             {
                 ASSERT(m_futureFiles.empty());
@@ -382,6 +525,11 @@ namespace persistence
                 }
 
                 return 0;
+            }
+
+            const std::filesystem::path path() const
+            {
+                return m_path;
             }
 
         private:
@@ -545,6 +693,23 @@ namespace persistence
             [[nodiscard]] const std::string& name() const
             {
                 return m_name;
+            }
+
+            std::vector<QueryResult> queryRanges(QueryTarget target, const std::vector<Position>& positions) const
+            {
+                std::vector<PositionSignature> keys;
+                keys.reserve(positions.size());
+                for (auto&& position : positions)
+                {
+                    keys.emplace_back(position);
+                }
+
+                std::vector<QueryResult> results(positions.size());
+                for (auto&& partition : m_partitions[target.level][target.result])
+                {
+                    partition.queryRanges(results, keys);
+                }
+                return results;
             }
 
             ImportStats importPgns(

@@ -196,10 +196,10 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
     return numPositions;
 }
 
-int main()
+void build()
 {
-    //persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
-    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     /*
     e.importPgns(std::execution::par_unseq, {
         {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
@@ -230,14 +230,53 @@ int main()
         {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine}
         }, 2u * 1024u * 1024u * 1024u);
-        
+}
+
+void buildsmall()
+{
+    persistence::local::Database e("w:/catobase/.tmp_small", 4ull * 1024ull * 1024ull);
+    e.importPgns(std::execution::par_unseq, {
+        {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Human}
+        }, 2u * 1024u * 1024u * 1024u);
+}
+
+void query()
+{
+    persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+
+    std::vector<Position> positions;
+    positions.emplace_back(Position::startPosition());
+
+    auto count = 0;
+    {
+        for (GameLevel level : values<GameLevel>())
+        {
+            for (GameResult result : values<GameResult>())
+            {
+                auto results = e.queryRanges({ level, result }, positions);
+                for (auto&& r : results)
+                {
+                    r.print();
+                    std::cout << "\n\n";
+                    count += r.count();
+                }
+            }
+        }
+    }
+    std::cout << count << '\n';
+}
+
+int main()
+{
+    //buildsmall();
+    query();
+    return 0;
     /*
     persistence::Database e("w:/catobase/.tmp");
     e.importPgns({
         "data/lichess_db_standard_rated_2013-01.pgn"
         }, GameLevel::Human, 2u * 1024u * 1024u * 1024u);
         */
-    return 0;
     {
         auto t0 = std::chrono::high_resolution_clock::now();
         std::vector<std::filesystem::path> infiles = {

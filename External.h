@@ -2229,7 +2229,7 @@ namespace ext
                 const auto b_lowValue = Box<ToArithmeticT, 0>::operator()(lowValue);
                 const auto b_highValue = Box<ToArithmeticT, 0>::operator()(highValue);
                 const auto b_key = Box<ToArithmeticT, 0>::operator()(key);
-                const auto b_s = Box<ToArithmeticT, 0>::operator()(high - low - 1u);
+                const auto b_s = static_cast<decltype(b_key)>(high - low - 1u);
                 const auto d = b_lowValue < b_highValue ?
                     Box<ToSizeTT, 1>::operator()((b_key - b_lowValue) * b_s / (b_highValue - b_lowValue))
                     : Box<ToSizeTT, 1>::operator()((b_lowValue - b_key) * b_s / (b_lowValue - b_highValue));
