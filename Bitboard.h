@@ -225,7 +225,7 @@ public:
         }
         else if (offset.ranks < 0)
         {
-            m_squares >>= 8 * offset.ranks;
+            m_squares >>= -8 * offset.ranks;
         }
 
         if (offset.files > 0)
@@ -236,7 +236,7 @@ public:
         else if (offset.files < 0)
         {
             const Bitboard mask = Bitboard::betweenFiles(fromOrdinal<File>(-offset.files), fileH);
-            m_squares = (m_squares & mask.m_squares) >> offset.files;
+            m_squares = (m_squares & mask.m_squares) >> -offset.files;
         }
 
         return *this;
@@ -798,11 +798,11 @@ namespace bb
     {
         if (color == Color::White)
         {
-            pawns |= (pawns + Offset{ 1, -1 }) | (pawns + Offset{ -1, -1 });
+            pawns |= (pawns + Offset{ 1, 1 }) | (pawns + Offset{ -1, 1 });
         }
         else
         {
-            pawns |= (pawns + Offset{ 1, 1 }) | (pawns + Offset{ -1, 1 });
+            pawns |= (pawns + Offset{ 1, -1 }) | (pawns + Offset{ -1, -1 });
         }
 
         return pawns;

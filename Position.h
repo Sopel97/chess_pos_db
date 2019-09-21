@@ -458,12 +458,6 @@ public:
 
         ASSERT(ksq != move.from);
 
-        if (!bb::pseudoAttacks<PieceType::Queen>(ksq).isSet(move.from))
-        {
-            // if the square is not aligned with the king we don't have to check anything
-            return false;
-        }
-
         if (move.type == MoveType::Castle)
         {
             return false;
@@ -471,11 +465,13 @@ public:
 
         Bitboard occupied = (piecesBB() ^ move.from) | move.to;
         Bitboard captured = Bitboard::none();
+        Bitboard removed = Bitboard::square(move.from);
 
         if (move.type == MoveType::EnPassant)
         {
             const Square capturedPieceSq(move.to.file(), move.from.rank());
             occupied ^= capturedPieceSq;
+            removed |= capturedPieceSq;
             // We don't update captured becuase it only affects pawns - we don't care.
         }
         else if (m_pieces[move.to] != Piece::none())
@@ -485,24 +481,42 @@ public:
             captured |= move.to;
         }
 
+        const Bitboard allSliderPseudoAttacks = bb::pseudoAttacks<PieceType::Queen>(ksq);
+        if (!(allSliderPseudoAttacks & removed).any())
+        {
+            // if the square is not aligned with the king we don't have to check anything
+            return false;
+        }
+
+        const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, !color)) & ~captured;
+        const Bitboard rooks = piecesBB(Piece(PieceType::Rook, !color)) & ~captured;
+        const Bitboard queens = piecesBB(Piece(PieceType::Queen, !color)) & ~captured;
+        if (!(allSliderPseudoAttacks & (bishops | rooks | queens)).any())
+        {
+            return false;
+        }
+
         return bb::isAttackedBySlider(
             ksq,
-            piecesBB(Piece(PieceType::Bishop, !color)) & ~captured,
-            piecesBB(Piece(PieceType::Rook, !color)) & ~captured,
-            piecesBB(Piece(PieceType::Queen, !color)) & ~captured,
+            bishops,
+            rooks,
+            queens,
             occupied
         );
     }
 
     [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor, Bitboard occupied, Bitboard captured) const
     {
-        if ((bb::pseudoAttacks<PieceType::Queen>(sq) & m_pieceBB[Piece(PieceType::Queen, attackerColor)] & ~captured).any())
+        const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor)) & ~captured;
+        const Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor)) & ~captured;
+        const Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor)) & ~captured;
+        if ((bb::pseudoAttacks<PieceType::Queen>(sq) & (bishops | rooks | queens)).any())
         {
             if (bb::isAttackedBySlider(
                 sq,
-                piecesBB(Piece(PieceType::Bishop, attackerColor)) & ~captured,
-                piecesBB(Piece(PieceType::Rook, attackerColor)) & ~captured,
-                piecesBB(Piece(PieceType::Queen, attackerColor)) & ~captured,
+                bishops,
+                rooks,
+                queens,
                 occupied
             ))
             {
@@ -512,67 +526,19 @@ public:
 
         if (bb::pseudoAttacks<PieceType::King>(sq).isSet(kingSquare(attackerColor)))
         {
-            // Kings 'touch'
             return true;
         }
 
         if ((bb::pseudoAttacks<PieceType::Knight>(sq) & m_pieceBB[Piece(PieceType::Knight, attackerColor)] & ~captured).any())
         {
-            // Walked into a knigh attack
             return true;
         }
 
-        // Check pawn attacks. Nothing else can attack the king at this point.
+        // Check pawn attacks. Nothing else can attack the square at this point.
         const Bitboard pawns = m_pieceBB[Piece(PieceType::Pawn, attackerColor)] & ~captured;
         const Bitboard pawnAttacks = bb::pawnAttacks(pawns, attackerColor);
 
         return pawnAttacks.isSet(sq);
-    }
-
-    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
-    {
-        // checks whether by doing a move our king ends up being attacked
-        // does not support castling moves
-
-        ASSERT(move.from.isOk() && move.to.isOk());
-
-        // Check attacks by sliders just as we do in createsDiscoveredAttackOnOwnKing
-        Bitboard occupied = (piecesBB() ^ move.from) | move.to;
-        Bitboard captured = Bitboard::none();
-
-        if (move.type == MoveType::EnPassant)
-        {
-            const Square capturedPieceSq(move.to.file(), move.from.rank());
-            occupied ^= capturedPieceSq;
-            captured |= capturedPieceSq;
-        }
-        else if (move.type == MoveType::Castle)
-        {
-            // occupied hold the original board but only without a king
-            // as if we did occupied ^= kingFromSq
-
-            const Square rookFromSq = move.to;
-            const Square kingFromSq = move.from;
-
-            const Piece king = m_pieces[kingFromSq];
-            const Color color = king.color();
-            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
-
-            const Square rookToSq = m_rookCastleDestinations[color][castleType];
-            const Square kingToSq = m_kingCastleDestinations[color][castleType];
-
-            occupied ^= rookFromSq;
-            occupied |= kingToSq;
-            occupied |= rookToSq;
-        }
-        else if (m_pieces[move.to] != Piece::none())
-        {
-            // A capture happened.
-            // We have to exclude the captured piece.
-            captured |= move.to;
-        }
-
-        return isSquareAttacked(sq, attackerColor, occupied, captured);
     }
 
     [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor) const
@@ -580,6 +546,14 @@ public:
         ASSERT(move.from.isOk() && move.to.isOk());
 
         return isSquareAttacked(sq, attackerColor, piecesBB(), Bitboard::none());
+    }
+
+    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
+    {
+        // TODO: See whether this can be done better.
+        Board cpy(*this);
+        cpy.doMove(move);
+        return cpy.isSquareAttacked(sq, attackerColor);
     }
 
     [[nodiscard]] constexpr Piece pieceAt(Square sq) const
@@ -819,3 +793,24 @@ static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2,
 static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2, E1, MoveType::Promotion, blackRook }) == Position::fromFen("k7/8/8/8/8/8/8/K3r3 w - - 0 2"));
 static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2, E1, MoveType::Promotion, blackBishop }) == Position::fromFen("k7/8/8/8/8/8/8/K3b3 w - - 0 2"));
 static_assert(Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ E2, E1, MoveType::Promotion, blackKnight }) == Position::fromFen("k7/8/8/8/8/8/8/K3n3 w - - 0 2"));
+
+
+
+static_assert(Position::fromFen("k7/8/8/q2pP2K/8/8/8/8 w - d6 0 2").createsDiscoveredAttackOnOwnKing(Move{ E5, D6, MoveType::EnPassant }));
+static_assert(!Position::fromFen("k7/8/q7/3pP2K/8/8/8/8 w - d6 0 1").createsDiscoveredAttackOnOwnKing(Move{ E5, D6, MoveType::EnPassant }));
+static_assert(Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").createsDiscoveredAttackOnOwnKing(Move{ E5, D6, MoveType::EnPassant }));
+static_assert(!Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").createsDiscoveredAttackOnOwnKing(Move{ E5, E6 }));
+
+
+static_assert(Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isSquareAttacked(C6, Color::Black));
+static_assert(Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isSquareAttacked(E4, Color::Black));
+static_assert(Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isSquareAttacked(D5, Color::Black));
+static_assert(!Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isSquareAttacked(H1, Color::Black));
+static_assert(Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isSquareAttacked(D6, Color::White));
+static_assert(!Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttacked(H7, Color::Black));
+
+static_assert(!Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttackedAfterMove(G7, Move{ A8, B8 }, Color::Black));
+static_assert(Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttackedAfterMove(G7, Move{ A7, G1 }, Color::Black));
+static_assert(Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(H5, Move{ E5, D6, MoveType::EnPassant }, Color::Black));
+static_assert(Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(E4, Move{ E5, D6, MoveType::EnPassant }, Color::Black));
+static_assert(!Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(H1, Move{ E5, D6, MoveType::EnPassant }, Color::Black));
