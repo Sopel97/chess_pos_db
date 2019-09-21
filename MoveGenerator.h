@@ -143,8 +143,8 @@ namespace movegen
         // this square must not be attacked by the enemy
         constexpr EnumMap2<Color, CastleType, Square> squarePassedByKing = {
             {
-                {{ F1, B1 }},
-                {{ F8, B8 }}
+                {{ F1, D1 }},
+                {{ F8, D8 }}
             }
         };
 
@@ -186,29 +186,31 @@ namespace movegen
         }
 
         // Loop through all possible castlings.
-        for (Color color : values<Color>())
+        for (CastleType castlingType : values<CastleType>())
         {
-            for (CastleType castlingType : values<CastleType>())
+            const CastlingRights right = castlingRightsMap[sideToMove][castlingType];
+
+            if (!contains(rights, right))
             {
-                const CastlingRights right = castlingRightsMap[color][castlingType];
-
-                if (!contains(rights, right))
-                {
-                    continue;
-                }
-
-                // If we have this castling right
-                // we check whether the king passes an attacked square.
-                const Square passedSquare = squarePassedByKing[color][castlingType];
-                if (pos.isSquareAttacked(passedSquare, !sideToMove))
-                {
-                    continue;
-                }
-
-                // If not we can castle.
-                Move move = Move::castle(castlingType, sideToMove);
-                moves.emplace_back(move);
+                continue;
             }
+
+            // If we have this castling right
+            // we check whether the king passes an attacked square.
+            const Square passedSquare = squarePassedByKing[sideToMove][castlingType];
+            if (pos.isSquareAttacked(passedSquare, !sideToMove))
+            {
+                continue;
+            }
+
+            Move move = Move::castle(castlingType, sideToMove);
+            if (pos.createsAttackOnOwnKing(move))
+            {
+                continue;
+            }
+
+            // If not we can castle.
+            moves.emplace_back(move);
         }
     }
 
@@ -228,11 +230,30 @@ namespace movegen
         return moves;
     }
 
+    template <PieceType PieceTypeV>
+    inline void generateLegalMoves(const Position& pos, std::vector<Move>& moves)
+    {
+        std::vector<Move> m;
+        generatePseudoLegalMoves<PieceTypeV>(pos, m);
+
+        m.erase(std::remove_if(m.begin(), m.end(), [pos](Move move) { return !detail::isLegal(pos, move); }), m.end());
+        for (auto move : m)
+        {
+            moves.emplace_back(move);
+        }
+    }
+
     inline std::vector<Move> generateAllLegalMoves(const Position& pos)
     {
-        std::vector<Move> moves = generateAllPseudoLegalMoves(pos);
+        std::vector<Move> moves;
 
-        moves.erase(std::remove_if(moves.begin(), moves.end(), [pos](Move move) { return !detail::isLegal(pos, move); }), moves.end());
+        generateLegalMoves<PieceType::Pawn>(pos, moves);
+        generateLegalMoves<PieceType::Knight>(pos, moves);
+        generateLegalMoves<PieceType::Bishop>(pos, moves);
+        generateLegalMoves<PieceType::Rook>(pos, moves);
+        generateLegalMoves<PieceType::Queen>(pos, moves);
+        generateLegalMoves<PieceType::King>(pos, moves);
+        generateCastlingMoves(pos, moves);
 
         return moves;
     }

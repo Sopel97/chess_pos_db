@@ -81,6 +81,16 @@ struct EnumTraits<CastlingRights>
 
 namespace detail
 {
+    [[nodiscard]] constexpr bool isFile(char c)
+    {
+        return c >= 'a' && c <= 'h';
+    }
+
+    [[nodiscard]] constexpr bool isRank(char c)
+    {
+        return c >= '1' && c <= '8';
+    }
+
     [[nodiscard]] constexpr Rank parseRank(char c)
     {
         ASSERT(isRank(c));
@@ -507,6 +517,8 @@ public:
 
     [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor, Bitboard occupied, Bitboard captured) const
     {
+        ASSERT(sq.isOk());
+
         const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor)) & ~captured;
         const Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor)) & ~captured;
         const Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor)) & ~captured;
@@ -543,8 +555,6 @@ public:
 
     [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor) const
     {
-        ASSERT(move.from.isOk() && move.to.isOk());
-
         return isSquareAttacked(sq, attackerColor, piecesBB(), Bitboard::none());
     }
 
@@ -554,6 +564,14 @@ public:
         Board cpy(*this);
         cpy.doMove(move);
         return cpy.isSquareAttacked(sq, attackerColor);
+    }
+
+    [[nodiscard]] INTRIN_CONSTEXPR bool isKingAttackedAfterMove(Move move, Color kingColor) const
+    {
+        // TODO: See whether this can be done better.
+        Board cpy(*this);
+        cpy.doMove(move);
+        return cpy.isSquareAttacked(cpy.kingSquare(kingColor), !kingColor);
     }
 
     [[nodiscard]] constexpr Piece pieceAt(Square sq) const
@@ -694,7 +712,7 @@ struct Position : public Board
 
     [[nodiscard]] INTRIN_CONSTEXPR bool createsAttackOnOwnKing(Move move) const
     {
-        return BaseType::isSquareAttackedAfterMove(kingSquare(m_sideToMove), move, !m_sideToMove);
+        return BaseType::isKingAttackedAfterMove(move, m_sideToMove);
     }
 
     [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
@@ -814,3 +832,5 @@ static_assert(Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttacke
 static_assert(Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(H5, Move{ E5, D6, MoveType::EnPassant }, Color::Black));
 static_assert(Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(E4, Move{ E5, D6, MoveType::EnPassant }, Color::Black));
 static_assert(!Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(H1, Move{ E5, D6, MoveType::EnPassant }, Color::Black));
+
+static_assert(!Position::fromFen("rnb2k1r/pp1Pbppp/2p5/q7/2B5/8/PPPQNnPP/RNB1K2R w KQ - 0 1").createsAttackOnOwnKing(Move{ E1, H1, MoveType::Castle }));

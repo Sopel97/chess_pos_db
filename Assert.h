@@ -17,4 +17,4 @@
 
 #endif
 
-#define TEST_ASSERT(e) assert(e)
+#define TEST_ASSERT(e) if (!(e)) throw std::runtime_error("Test failed.");
