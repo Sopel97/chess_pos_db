@@ -43,11 +43,13 @@ namespace movegen
 
         auto generate = [&](Square fromSq)
         {
-            Bitboard attacks = bb::pawnAttacks(Bitboard::square(fromSq), sideToMove) & theirPieces;
+            Bitboard attackTargets = theirPieces;
             if (epSquare != Square::none())
             {
-                attacks |= epSquare;
+                attackTargets |= epSquare;
             }
+
+            const Bitboard attacks = bb::pawnAttacks(Bitboard::square(fromSq), sideToMove) & attackTargets;
 
             const Rank startRank = sideToMove == Color::White ? rank2 : rank7;
             const Rank secondToLastRank = sideToMove == Color::White ? rank7 : rank2;
@@ -230,6 +232,8 @@ namespace movegen
     template <typename FuncT>
     inline void forEachPseudoLegalMove(const Position& pos, FuncT&& func)
     {
+        if (!pos.isLegal()) return;
+
         forEachPseudoLegalPieceMove<PieceType::Pawn>(pos, func);
         forEachPseudoLegalPieceMove<PieceType::Knight>(pos, func);
         forEachPseudoLegalPieceMove<PieceType::Bishop>(pos, func);
@@ -242,6 +246,8 @@ namespace movegen
     template <typename FuncT>
     inline void forEachLegalMove(const Position& pos, FuncT&& func)
     {
+        if (!pos.isLegal()) return;
+
         auto funcIfLegal = [&](Move move) {
             if (detail::isLegal(pos, move))
             {
@@ -261,6 +267,8 @@ namespace movegen
     // pos must not have a 'king capture' available
     inline std::vector<Move> generatePseudoLegalMoves(const Position& pos)
     {
+        if (!pos.isLegal()) return {};
+
         std::vector<Move> moves;
 
         auto addMove = [&moves](Move move) {
@@ -274,6 +282,8 @@ namespace movegen
 
     inline std::vector<Move> generateLegalMoves(const Position& pos)
     {
+        if (!pos.isLegal()) return {};
+
         std::vector<Move> moves;
 
         auto addMove = [&moves](Move move) {

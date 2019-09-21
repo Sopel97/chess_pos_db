@@ -16,6 +16,8 @@ enum struct CastlingRights : std::uint8_t
     WhiteQueenSide = 0x2,
     BlackKingSide = 0x4,
     BlackQueenSide = 0x8,
+    White = WhiteKingSide | WhiteQueenSide,
+    Black = BlackKingSide | BlackQueenSide,
     All = WhiteKingSide | WhiteQueenSide | BlackKingSide | BlackQueenSide
 };
 
@@ -44,6 +46,15 @@ constexpr CastlingRights& operator&=(CastlingRights& lhs, CastlingRights rhs)
 {
     lhs = static_cast<CastlingRights>(static_cast<std::uint8_t>(lhs) & static_cast<std::uint8_t>(rhs));
     return lhs;
+}
+
+constexpr CastlingRights moveToCastlingType(Move move)
+{
+    if (move.to == H1) return CastlingRights::WhiteKingSide;
+    if (move.to == A1) return CastlingRights::WhiteQueenSide;
+    if (move.to == H8) return CastlingRights::WhiteKingSide;
+    if (move.to == A8) return CastlingRights::WhiteQueenSide;
+    return CastlingRights::None;
 }
 
 // checks whether lhs contains rhs
@@ -685,18 +696,56 @@ struct Position : public Board
         return pos;
     }
 
-    constexpr Piece doMove(Move move)
+    // TODO: if performance of setting special moves flags becomes 
+    //       a problem then make a separate function that doesn't set it
+    constexpr std::pair<Piece, CastlingRights> doMove(Move move)
     {
         ASSERT(move.from.isOk() && move.to.isOk());
 
+        m_epSquare = Square::none();
+        const PieceType movedPiece = pieceAt(move.from).type();
+        const CastlingRights oldCastlingRights = m_castlingRights;
+        if (movedPiece == PieceType::Pawn)
+        {
+            const int d = move.to.rank() - move.from.rank();
+            if (d == -2 || d == 2)
+            {
+                m_epSquare = Square(move.from.file(), move.from.rank() + d / 2);
+            }
+        }
+        else if (move.type == MoveType::Castle)
+        {
+            m_castlingRights = CastlingRights::None;
+        }
+        else
+        {
+            if (move.from == E1) m_castlingRights &= ~CastlingRights::White;
+            else if (move.from == E8) m_castlingRights &= ~CastlingRights::Black;
+            else if (move.from == H1) m_castlingRights &= ~CastlingRights::WhiteKingSide;
+            else if (move.from == A1) m_castlingRights &= ~CastlingRights::WhiteQueenSide;
+            else if (move.from == H8) m_castlingRights &= ~CastlingRights::BlackKingSide;
+            else if (move.from == A8) m_castlingRights &= ~CastlingRights::BlackQueenSide;
+        }
+
         const Piece captured = BaseType::doMove(move);
         m_sideToMove = !m_sideToMove;
-        return captured;
+        return { captured, oldCastlingRights };
     }
 
-    constexpr void undoMove(Move move, Piece capturedPiece)
+    constexpr void undoMove(Move move, Piece capturedPiece, CastlingRights castlingRights)
     {
         BaseType::undoMove(move, capturedPiece);
+
+        m_epSquare = Square::none();
+        if (move.type == MoveType::EnPassant)
+        {
+            m_epSquare = move.to;
+        }
+        else if (move.type == MoveType::Castle)
+        {
+            m_castlingRights = castlingRights;
+        }
+
         m_sideToMove = !m_sideToMove;
     }
 
@@ -725,6 +774,13 @@ struct Position : public Board
         return BaseType::isSquareAttacked(sq, attackerColor);
     }
 
+    [[nodiscard]] INTRIN_CONSTEXPR bool isLegal() const
+    {
+        return piecesBB(Piece(PieceType::King, Color::White)).count() == 1
+            && piecesBB(Piece(PieceType::King, Color::Black)).count() == 1
+            && !isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove);
+    }
+
     [[nodiscard]] INTRIN_CONSTEXPR bool isCheck(Move move) const
     {
         return BaseType::isSquareAttackedAfterMove(kingSquare(!m_sideToMove), move, m_sideToMove);
@@ -748,10 +804,10 @@ struct Position : public Board
     // these are supposed to be used only for testing
     // that's why there's this assert in afterMove
 
-    [[nodiscard]] constexpr Position beforeMove(Move move, Piece captured) const
+    [[nodiscard]] constexpr Position beforeMove(Move move, Piece captured, CastlingRights castlingRights) const
     {
         Position cpy(*this);
-        cpy.undoMove(move, captured);
+        cpy.undoMove(move, captured, castlingRights);
         return cpy;
     }
 
@@ -767,7 +823,7 @@ struct Position : public Board
 
 private:
     Color m_sideToMove;
-    Square m_epSquare; // TODO: proper updates and use in hash
+    Square m_epSquare; // TODO: use in hash
     CastlingRights m_castlingRights;
 };
 
