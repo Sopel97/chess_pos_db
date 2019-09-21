@@ -5,11 +5,34 @@
 #include "MoveGenerator.h"
 #include "Position.h"
 
+static std::size_t perft(const Position& pos, int depth)
+{
+    auto moves = movegen::generateLegalMoves(pos);
+    if (depth > 1)
+    {
+        std::size_t c = 0;
+        for (auto move : moves)
+        {
+            Position cpy(pos);
+            cpy.doMove(move);
+            c += perft(cpy, depth - 1);
+        }
+        return c;
+    }
+    else
+    {
+        return moves.size();
+    }
+}
+
 inline void testMoveGenerator()
 {
+    TEST_ASSERT(perft(Position::startPosition(), 4) == 197'281);
+    TEST_ASSERT(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ H2,H3 }).afterMove(Move{ A7, A5 })).size() == 19);
     TEST_ASSERT(movegen::generateLegalMoves(Position::startPosition()).size() == 20);
     TEST_ASSERT(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ E2, E4 })).size() == 20);
     TEST_ASSERT(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ E2, E4 }).afterMove(Move{ E7, E5 })).size() == 29);
+    TEST_ASSERT(movegen::generateLegalMoves(Position::fromFen("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")).size() == 31);
     TEST_ASSERT(movegen::generateLegalMoves(Position::fromFen("r6r/1b2k1bq/8/8/7B/8/8/R3K2R b QK - 3 2")).size() == 8);
     TEST_ASSERT(movegen::generateLegalMoves(Position::fromFen("8/8/8/2k5/2pP4/8/B7/4K3 b - d3 5 3")).size() == 8);
     TEST_ASSERT(movegen::generateLegalMoves(Position::fromFen("r1bqkbnr/pppppppp/n7/8/8/P7/1PPPPPPP/RNBQKBNR w QqKk - 2 2")).size() == 19);

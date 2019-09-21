@@ -159,7 +159,14 @@ public:
     {
         ASSERT(left <= right);
 
-        return Bitboard::fromBits(m_filesUpToBB[right - ordinal(left)] << ordinal(left));
+        if (left == fileA)
+        {
+            return Bitboard::fromBits(m_filesUpToBB[right]);
+        }
+        else
+        {
+            return Bitboard::fromBits(m_filesUpToBB[right] ^ m_filesUpToBB[left - 1]);
+        }
     }
 
     [[nodiscard]] constexpr bool isEmpty() const
@@ -219,6 +226,11 @@ public:
 
     constexpr Bitboard& operator+=(Offset offset)
     {
+        ASSERT(offset.files >= -7);
+        ASSERT(offset.ranks >= -7);
+        ASSERT(offset.files <= 7);
+        ASSERT(offset.ranks <= 7);
+
         if (offset.ranks > 0)
         {
             m_squares <<= 8 * offset.ranks;
@@ -230,12 +242,14 @@ public:
 
         if (offset.files > 0)
         {
-            const Bitboard mask = Bitboard::betweenFiles(fileA, fromOrdinal<File>(8 - offset.files));
+            const File endFile = fileH - offset.files;
+            const Bitboard mask = Bitboard::betweenFiles(fileA, endFile);
             m_squares = (m_squares & mask.m_squares) << offset.files;
         }
         else if (offset.files < 0)
         {
-            const Bitboard mask = Bitboard::betweenFiles(fromOrdinal<File>(-offset.files), fileH);
+            const File startFile = fileA - offset.files;
+            const Bitboard mask = Bitboard::betweenFiles(startFile, fileH);
             m_squares = (m_squares & mask.m_squares) >> -offset.files;
         }
 
@@ -883,3 +897,7 @@ namespace bb
     static_assert(attacks(PieceType::Queen, F7, 0xded20384ba4b0368_bb) == 0x705070a824020000_bb);
 #endif
 }
+
+static_assert(Bitboard::betweenFiles(fileA, fileG) == (Bitboard::all() ^ Bitboard::file(fileH)));
+static_assert(Bitboard::betweenFiles(fileB, fileG) == (Bitboard::all() ^ Bitboard::file(fileH) ^ Bitboard::file(fileA)));
+static_assert(Bitboard::betweenFiles(fileB, fileB) == (Bitboard::file(fileB)));

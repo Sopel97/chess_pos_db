@@ -268,6 +268,15 @@ void query()
     std::cout << count << '\n';
 }
 
+std::string toString(Square sq)
+{
+    std::string s;
+
+    s += static_cast<char>('a' + ordinal(sq.file()));
+    s += static_cast<char>('1' + ordinal(sq.rank()));
+
+    return s;
+}
 int main()
 {
     testMoveGenerator();
