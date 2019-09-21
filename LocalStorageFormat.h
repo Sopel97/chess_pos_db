@@ -820,8 +820,10 @@ namespace persistence
                 }
 
                 EnumMap2<GameLevel, GameResult, QueryResult> results;
-                for (auto&& [level, result] : targets)
+                for (auto&& target : targets)
                 {
+                    const GameLevel level = target.level;
+                    const GameResult result = target.result;
                     for (auto&& partition : m_partitions[level][result])
                     {
                         partition.queryRanges(results[level][result], keys);
@@ -1139,8 +1141,6 @@ namespace persistence
                     auto start = paths.begin();
                     for (int i = 0; i < paths.size(); ++i)
                     {
-                        auto& path = paths[i];
-
                         blockSize += fileSizes[i];
 
                         if (blockSize >= blockSizeThreshold)

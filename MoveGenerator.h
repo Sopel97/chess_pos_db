@@ -53,7 +53,7 @@ namespace movegen
 
             const Rank startRank = sideToMove == Color::White ? rank2 : rank7;
             const Rank secondToLastRank = sideToMove == Color::White ? rank7 : rank2;
-            const Offset forward = Offset{ 0, (sideToMove == Color::White ? 1 : -1) };
+            const Offset forward = Offset{ 0, static_cast<std::int8_t>(sideToMove == Color::White ? 1 : -1) };
 
             // promotions
             if (fromSq.rank() == secondToLastRank)

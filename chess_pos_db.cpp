@@ -39,7 +39,7 @@ void print(Bitboard bb)
     {
         for (File f = fileA; f <= fileH; ++f)
         {
-            std::cout << bb.isSet(Square(f, r)) ? 'X' : '.';
+            std::cout << (bb.isSet(Square(f, r)) ? 'X' : '.');
         }
         std::cout << '\n';
     }

@@ -105,7 +105,7 @@ namespace bit
 
     // this overload reuses storage allocated by `bs` and `compressed`
     template <typename CodingT, typename ValueT, typename BitStreamT, typename OtherBitStreamT>
-    [[nodiscard]] void compress(CodingT coding, const ValueT& value, BitStreamT& bs, Compressed<CodingT, ValueT, OtherBitStreamT>& compressed)
+    void compress(CodingT coding, const ValueT& value, BitStreamT& bs, Compressed<CodingT, ValueT, OtherBitStreamT>& compressed)
     {
         bs.clear();
 

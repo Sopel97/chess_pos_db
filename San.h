@@ -74,7 +74,7 @@ namespace san
             return Square(file, rank);
         }
 
-        [[nodiscard]] inline void appendSquareToString(Square sq, std::string& str)
+        inline void appendSquareToString(Square sq, std::string& str)
         {
             str += static_cast<char>('a' + ordinal(sq.file()));
             str += static_cast<char>('a' + ordinal(sq.rank()));

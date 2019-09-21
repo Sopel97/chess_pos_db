@@ -37,7 +37,7 @@ static std::size_t perft(const Position& pos, int depth)
     else
     {
         std::size_t c = 0;
-        movegen::forEachLegalMove(pos, [&pos, depth, &c](Move move) {
+        movegen::forEachLegalMove(pos, [&c](Move move) {
             c += 1;
         });
         return c;

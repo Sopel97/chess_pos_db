@@ -615,7 +615,7 @@ struct EnumTraits<Square>
     using IdType = int;
     using EnumType = Square;
 
-    static constexpr int cardinality = cardinality<Rank>() * cardinality<File>();
+    static constexpr int cardinality = ::cardinality<Rank>() * ::cardinality<File>();
     static constexpr bool isNaturalIndex = true;
 
     [[nodiscard]] static constexpr int ordinal(EnumType c) noexcept
