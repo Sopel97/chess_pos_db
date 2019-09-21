@@ -92,6 +92,9 @@
     <ClInclude Include="MoveGenerator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="MoveGeneratorTest.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="info.txt">

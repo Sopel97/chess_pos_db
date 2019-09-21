@@ -31,30 +31,8 @@ namespace movegen
         }
     }
 
-    template <PieceType PieceTypeV>
-    inline void generatePseudoLegalMoves(const Position& pos, std::vector<Move>& moves)
-    {
-        static_assert(PieceTypeV != PieceType::None);
-        static_assert(PieceTypeV != PieceType::Pawn);
-
-        const Color sideToMove = pos.sideToMove();
-        const Bitboard ourPieces = pos.piecesBB(sideToMove);
-        const Bitboard theirPieces = pos.piecesBB(!sideToMove);
-        const Bitboard occupied = ourPieces | theirPieces;
-        const Bitboard pieces = pos.piecesBB(Piece(PieceTypeV, sideToMove));
-        for (Square fromSq : pieces)
-        {
-            const Bitboard attacks = bb::attacks<PieceTypeV>(fromSq, occupied) & ~ourPieces;
-            for (Square toSq : attacks)
-            {
-                Move move{ fromSq, toSq };
-                moves.emplace_back(move);
-            }
-        }
-    }
-
-    template <>
-    inline void generatePseudoLegalMoves<PieceType::Pawn>(const Position& pos, std::vector<Move>& moves)
+    template <typename FuncT>
+    inline void forEachPseudoLegalPawnMove(const Position& pos, FuncT&& f)
     {
         const Color sideToMove = pos.sideToMove();
         const Square epSquare = pos.epSquare();
@@ -75,51 +53,57 @@ namespace movegen
             const Rank secondToLastRank = sideToMove == Color::White ? rank7 : rank2;
             const Offset forward = Offset{ 0, (sideToMove == Color::White ? 1 : -1) };
 
+            // promotions
             if (fromSq.rank() == secondToLastRank)
             {
+                // capture promotions
                 for (Square toSq : attacks)
                 {
                     for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
                     {
                         Move move{ fromSq, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
-                        moves.emplace_back(move);
+                        f(move);
                     }
                 }
 
+                // push promotions
                 const Square toSq = fromSq + forward;
                 if (!occupied.isSet(toSq))
                 {
                     for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
                     {
                         Move move{ fromSq, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
-                        moves.emplace_back(move);
+                        f(move);
                     }
                 }
             }
             else
             {
+                // captures
                 for (Square toSq : attacks)
                 {
                     Move move{ fromSq, toSq, (toSq == epSquare) ? MoveType::EnPassant : MoveType::Normal };
-                    moves.emplace_back(move);
+                    f(move);
                 }
 
                 const Square toSq = fromSq + forward;
 
+                // single push
                 if (!occupied.isSet(toSq))
                 {
                     if (fromSq.rank() == startRank)
                     {
+                        // double push
                         const Square toSq2 = toSq + forward;
                         if (!occupied.isSet(toSq2))
                         {
                             Move move{ fromSq, toSq2 };
-                            moves.emplace_back(move);
+                            f(move);
                         }
                     }
 
                     Move move{ fromSq, toSq };
-                    moves.emplace_back(move);
+                    f(move);
                 }
             }
         };
@@ -130,7 +114,36 @@ namespace movegen
         }
     }
 
-    inline void generateCastlingMoves(const Position& pos, std::vector<Move>& moves)
+    template <PieceType PieceTypeV, typename FuncT>
+    inline void forEachPseudoLegalPieceMove(const Position& pos, FuncT&& f)
+    {
+        static_assert(PieceTypeV != PieceType::None);
+
+        if constexpr (PieceTypeV == PieceType::Pawn)
+        {
+            forEachPseudoLegalPawnMove(pos, f);
+        }
+        else
+        {
+            const Color sideToMove = pos.sideToMove();
+            const Bitboard ourPieces = pos.piecesBB(sideToMove);
+            const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+            const Bitboard occupied = ourPieces | theirPieces;
+            const Bitboard pieces = pos.piecesBB(Piece(PieceTypeV, sideToMove));
+            for (Square fromSq : pieces)
+            {
+                const Bitboard attacks = bb::attacks<PieceTypeV>(fromSq, occupied) & ~ourPieces;
+                for (Square toSq : attacks)
+                {
+                    Move move{ fromSq, toSq };
+                    f(move);
+                }
+            }
+        }
+    }
+
+    template <typename FuncT>
+    inline void forEachCastlingMove(const Position& pos, FuncT&& f)
     {
         // all square on a castling path must be empty
         constexpr EnumMap2<Color, CastleType, Bitboard> castlingPaths = { 
@@ -210,50 +223,64 @@ namespace movegen
             }
 
             // If not we can castle.
-            moves.emplace_back(move);
+            f(move);
         }
     }
 
+    template <typename FuncT>
+    inline void forEachPseudoLegalMove(const Position& pos, FuncT&& func)
+    {
+        forEachPseudoLegalPieceMove<PieceType::Pawn>(pos, func);
+        forEachPseudoLegalPieceMove<PieceType::Knight>(pos, func);
+        forEachPseudoLegalPieceMove<PieceType::Bishop>(pos, func);
+        forEachPseudoLegalPieceMove<PieceType::Rook>(pos, func);
+        forEachPseudoLegalPieceMove<PieceType::Queen>(pos, func);
+        forEachPseudoLegalPieceMove<PieceType::King>(pos, func);
+        forEachCastlingMove(pos, func);
+    }
+
+    template <typename FuncT>
+    inline void forEachLegalMove(const Position& pos, FuncT&& func)
+    {
+        auto funcIfLegal = [&](Move move) {
+            if (detail::isLegal(pos, move))
+            {
+                func(move);
+            }
+        };
+
+        forEachPseudoLegalPieceMove<PieceType::Pawn>(pos, funcIfLegal);
+        forEachPseudoLegalPieceMove<PieceType::Knight>(pos, funcIfLegal);
+        forEachPseudoLegalPieceMove<PieceType::Bishop>(pos, funcIfLegal);
+        forEachPseudoLegalPieceMove<PieceType::Rook>(pos, funcIfLegal);
+        forEachPseudoLegalPieceMove<PieceType::Queen>(pos, funcIfLegal);
+        forEachPseudoLegalPieceMove<PieceType::King>(pos, funcIfLegal);
+        forEachCastlingMove(pos, func);
+    }
+
     // pos must not have a 'king capture' available
-    inline std::vector<Move> generateAllPseudoLegalMoves(const Position& pos)
+    inline std::vector<Move> generatePseudoLegalMoves(const Position& pos)
     {
         std::vector<Move> moves;
 
-        generatePseudoLegalMoves<PieceType::Pawn>(pos, moves);
-        generatePseudoLegalMoves<PieceType::Knight>(pos, moves);
-        generatePseudoLegalMoves<PieceType::Bishop>(pos, moves);
-        generatePseudoLegalMoves<PieceType::Rook>(pos, moves);
-        generatePseudoLegalMoves<PieceType::Queen>(pos, moves);
-        generatePseudoLegalMoves<PieceType::King>(pos, moves);
-        generateCastlingMoves(pos, moves);
+        auto addMove = [&moves](Move move) {
+            moves.emplace_back(move);
+        };
+        
+        forEachPseudoLegalMove(pos, addMove);
 
         return moves;
     }
 
-    template <PieceType PieceTypeV>
-    inline void generateLegalMoves(const Position& pos, std::vector<Move>& moves)
-    {
-        std::vector<Move> m;
-        generatePseudoLegalMoves<PieceTypeV>(pos, m);
-
-        m.erase(std::remove_if(m.begin(), m.end(), [pos](Move move) { return !detail::isLegal(pos, move); }), m.end());
-        for (auto move : m)
-        {
-            moves.emplace_back(move);
-        }
-    }
-
-    inline std::vector<Move> generateAllLegalMoves(const Position& pos)
+    inline std::vector<Move> generateLegalMoves(const Position& pos)
     {
         std::vector<Move> moves;
 
-        generateLegalMoves<PieceType::Pawn>(pos, moves);
-        generateLegalMoves<PieceType::Knight>(pos, moves);
-        generateLegalMoves<PieceType::Bishop>(pos, moves);
-        generateLegalMoves<PieceType::Rook>(pos, moves);
-        generateLegalMoves<PieceType::Queen>(pos, moves);
-        generateLegalMoves<PieceType::King>(pos, moves);
-        generateCastlingMoves(pos, moves);
+        auto addMove = [&moves](Move move) {
+            moves.emplace_back(move);
+        };
+
+        forEachLegalMove(pos, addMove);
 
         return moves;
     }
