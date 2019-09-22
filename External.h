@@ -1227,7 +1227,7 @@ namespace ext
             return m_size == 0;
         }
 
-        void read(T* destination, std::size_t offset, std::size_t count) const
+        [[nodiscard]] std::size_t readSome(T* destination, std::size_t offset, std::size_t count)
         {
             flushBuffer();
 
@@ -1238,19 +1238,28 @@ namespace ext
                 count
             );
 
+            return elementsRead;
+        }
+
+        void read(T* destination, std::size_t offset, std::size_t count)
+        {
+            flushBuffer();
+
+            const std::size_t elementsRead = readSome(destination, offset, count);
+
             if (elementsRead != count)
             {
                 throw Exception("Cannot read file.");
             }
         }
 
-        [[nodiscard]] std::size_t read(T* destination) const
+        [[nodiscard]] std::size_t read(T* destination)
         {
             read(destination, 0, size());
             return size();
         }
 
-        [[nodiscard]] T operator[](std::size_t i) const
+        [[nodiscard]] T operator[](std::size_t i)
         {
             ASSERT(i < size());
 
@@ -1260,14 +1269,14 @@ namespace ext
             return value;
         }
 
-        [[nodiscard]] T front() const
+        [[nodiscard]] T front()
         {
             ASSERT(!empty());
 
             return operator[](0);
         }
 
-        [[nodiscard]] T back() const
+        [[nodiscard]] T back()
         {
             ASSERT(!empty());
 

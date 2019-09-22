@@ -71,6 +71,11 @@ namespace persistence
                 return m_positionSignature;
             }
 
+            [[nodiscard]] std::uint32_t gameIdx() const
+            {
+                return m_gameIdx;
+            }
+
         private:
             PositionSignature m_positionSignature;
             std::uint32_t m_gameIdx;
@@ -171,6 +176,11 @@ namespace persistence
                 return m_entries.path();
             }
 
+            [[nodiscard]] Entry at(std::size_t idx) const
+            {
+                return m_entries[idx];
+            }
+
             void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const;
 
         private:
@@ -219,6 +229,12 @@ namespace persistence
                 return m_end - m_begin;
             }
 
+            // it must not be empty
+            [[nodiscard]] std::size_t firstGameIndex() const
+            {
+                return m_file->at(m_begin).gameIdx();
+            }
+
         private:
             const File* m_file;
             std::size_t m_begin;
@@ -250,6 +266,12 @@ namespace persistence
                     c += range.count();
                 }
                 return c;
+            }
+
+            // it must not be empty
+            [[nodiscard]] std::size_t firstGameIndex() const
+            {
+                return m_ranges.front().firstGameIndex();
             }
 
         private:
@@ -792,6 +814,11 @@ namespace persistence
             [[nodiscard]] const std::string& name() const
             {
                 return m_name;
+            }
+
+            [[nodiscard]] std::vector<HeaderEntry> queryHeaders(const std::vector<std::size_t>& indices)
+            {
+                return m_header.query(indices);
             }
 
             [[nodiscard]] std::vector<QueryResult> queryRanges(QueryTarget target, const std::vector<Position>& positions) const

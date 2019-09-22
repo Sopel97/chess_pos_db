@@ -284,8 +284,15 @@ void query(const Position& pos)
             {
                 auto& r = results[level][result].back();
                 const std::size_t thisCount = r.count();
-                std::cout << '\t' << static_cast<int>(level) << ' ' << static_cast<int>(result) << ' ' << thisCount << '\n';
+                std::cout << '\t' << static_cast<int>(level) << ' ' << static_cast<int>(result) << ' ' << thisCount;
                 total += thisCount;
+
+                if (thisCount != 0)
+                {
+                    auto h = e.queryHeaders({ results[level][result].back().firstGameIndex() })[0];
+                    std::cout << ": " << h.date().toString() << ' ' << h.eco().toString() << ' ' << h.event() << ' ' << h.white() << ' ' << h.black();
+                }
+                std::cout << '\n';
             }
         }
         std::cout << "Total: " << total;

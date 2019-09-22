@@ -8,12 +8,20 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <string_view>
 
 namespace persistence
 {
     struct HeaderEntry
     {
         static constexpr std::uint16_t unknownPlyCount = std::numeric_limits<std::uint16_t>::max();
+
+        HeaderEntry(ext::Vector<char>& headers, std::size_t offset)
+        {
+            // there may be garbage at the end
+            // we don't care because we have sizes serialized
+            (void)headers.readSome(reinterpret_cast<char*>(this), offset, sizeof(HeaderEntry));
+        }
 
         HeaderEntry(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
             m_date(game.date()),
@@ -36,6 +44,42 @@ namespace persistence
         [[nodiscard]] std::size_t size() const
         {
             return m_size;
+        }
+
+        [[nodiscard]] Date date() const
+        {
+            return m_date;
+        }
+
+        [[nodiscard]] Eco eco() const
+        {
+            return m_eco;
+        }
+
+        [[nodiscard]] std::uint16_t plyCount() const
+        {
+            return m_plyCount;
+        }
+
+        [[nodiscard]] std::string_view event() const
+        {
+            const std::uint8_t length = m_packedStrings[0];
+            return std::string_view(reinterpret_cast<const char*>(&m_packedStrings[1]), length);
+        }
+
+        [[nodiscard]] std::string_view white() const
+        {
+            const std::uint8_t length0 = m_packedStrings[0];
+            const std::uint8_t length = m_packedStrings[length0 + 1];
+            return std::string_view(reinterpret_cast<const char*>(&m_packedStrings[length0 + 2]), length);
+        }
+
+        [[nodiscard]] std::string_view black() const
+        {
+            const std::uint8_t length0 = m_packedStrings[0];
+            const std::uint8_t length1 = m_packedStrings[length0 + 1];
+            const std::uint8_t length = m_packedStrings[length0 + length1 + 2];
+            return std::string_view(reinterpret_cast<const char*>(&m_packedStrings[length0 + length1 + 3]), length);
         }
 
     private:
@@ -113,6 +157,19 @@ namespace persistence
         [[nodiscard]] std::uint32_t nextGameId() const
         {
             return static_cast<std::uint32_t>(m_index.size());
+        }
+
+        [[nodiscard]] std::vector<HeaderEntry> query(const std::vector<std::size_t>& indices)
+        {
+            std::vector<HeaderEntry> headers;
+            headers.reserve(indices.size());
+
+            for (std::size_t idx : indices)
+            {
+                headers.emplace_back(m_header, m_index[idx]);
+            }
+
+            return headers;
         }
 
     private:

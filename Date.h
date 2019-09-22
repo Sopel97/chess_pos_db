@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 struct Date 
@@ -45,10 +46,10 @@ struct Date
         else
         {
             auto year = m_year;
-            buf[3] = static_cast<char>(year /= 10) + '0';
-            buf[2] = static_cast<char>(year /= 10) + '0';
-            buf[1] = static_cast<char>(year /= 10) + '0';
-            buf[0] = static_cast<char>(year /= 10) + '0';
+            buf[3] = static_cast<char>(year % 10) + '0'; year /= 10;
+            buf[2] = static_cast<char>(year % 10) + '0'; year /= 10;
+            buf[1] = static_cast<char>(year % 10) + '0'; year /= 10;
+            buf[0] = static_cast<char>(year % 10) + '0';
         }
 
         if (m_month == 0)
@@ -58,8 +59,8 @@ struct Date
         else
         {
             auto month = m_month;
-            buf[6] = static_cast<char>(month /= 10) + '0';
-            buf[5] = static_cast<char>(month /= 10) + '0';
+            buf[6] = static_cast<char>(month % 10) + '0'; month /= 10;
+            buf[5] = static_cast<char>(month % 10) + '0';
         }
         buf[4] = '.';
 
@@ -70,8 +71,8 @@ struct Date
         else
         {
             auto day = m_day;
-            buf[9] = static_cast<char>(day /= 10) + '0';
-            buf[8] = static_cast<char>(day /= 10) + '0';
+            buf[9] = static_cast<char>(day % 10) + '0'; day /= 10;
+            buf[8] = static_cast<char>(day % 10) + '0';
         }
         buf[7] = '.';
 
