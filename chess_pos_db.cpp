@@ -242,39 +242,66 @@ void buildsmall()
         }, 2u * 1024u * 1024u * 1024u);
 }
 
-void query()
+void query(const Position& pos)
 {
     std::cout << "Loading db\n";
-    persistence::local::Database e("w:/catobase/.tmp2_indexed", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
+    //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     std::cout << "Loaded db\n";
 
+    Position basePosition = pos;
     std::vector<Position> positions;
-    positions.emplace_back(Position::startPosition().afterMove({ E2, E4 }));
+    std::vector<Move> moves;
+    movegen::forEachLegalMove(basePosition, [&](Move move) {
+        positions.emplace_back(basePosition.afterMove(move));
+        moves.emplace_back(move);
+    });
+    positions.emplace_back(basePosition);
 
     auto results = e.queryRanges(positions);
-    auto count = 0;
+    for (int i = 0; i < moves.size(); ++i)
     {
+        std::cout << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check>(basePosition, moves[i]) << '\n';
+        std::size_t total = 0;
         for (GameLevel level : values<GameLevel>())
         {
             for (GameResult result : values<GameResult>())
             {
-                auto& r = results[level][result];
-                r.print();
-                std::cout << "\n\n";
-                count += r.count();
+                auto& r = results[level][result][i];
+                const std::size_t thisCount = r.count();
+                std::cout << '\t' << static_cast<int>(level) << ' ' << static_cast<int>(result) << ' ' << thisCount << '\n';
+                total += thisCount;
             }
         }
+        std::cout << "Total: " << total << "\n\n";
     }
-    std::cout << count << '\n';
+    std::cout << "\nFor base position:\n";
+    {
+        std::size_t total = 0;
+        for (GameLevel level : values<GameLevel>())
+        {
+            for (GameResult result : values<GameResult>())
+            {
+                auto& r = results[level][result].back();
+                const std::size_t thisCount = r.count();
+                std::cout << '\t' << static_cast<int>(level) << ' ' << static_cast<int>(result) << ' ' << thisCount << '\n';
+                total += thisCount;
+            }
+        }
+        std::cout << "Total: " << total;
+    }
 }
 
 int main()
 {
-    testMoveGenerator();
-    return 0;
+    {
+        //std::vector<char>(4'000'000'000ull);
+    }
+    //testMoveGenerator();
+    //return 0;
     //build();
     //buildsmall();
-    query();
+    query(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
     return 0;
     /*
     persistence::Database e("w:/catobase/.tmp");

@@ -171,7 +171,7 @@ namespace persistence
                 return m_entries.path();
             }
 
-            void queryRanges(QueryResult& results, const std::vector<PositionSignature>& keys) const;
+            void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const;
 
         private:
             ext::ImmutableSpan<Entry> m_entries;
@@ -256,7 +256,7 @@ namespace persistence
             std::vector<QueryResultRange> m_ranges;
         };
         
-        void File::queryRanges(QueryResult& results, const std::vector<PositionSignature>& keys) const
+        void File::queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const
         {
             auto searchResults = [this, &keys]() {
                 if constexpr (useIndex)
@@ -289,7 +289,7 @@ namespace persistence
                 const auto count = result.second - result.first;
                 if (count == 0) continue;
 
-                results.emplaceRange(*this, result.first, result.second);
+                results[i].emplaceRange(*this, result.first, result.second);
             }
         }
 
@@ -521,11 +521,11 @@ namespace persistence
                 setPath(std::move(path));
             }
 
-            void queryRanges(QueryResult& result, const std::vector<PositionSignature>& keys) const
+            void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const
             {
                 for (auto&& file : m_files)
                 {
-                    file.queryRanges(result, keys);
+                    file.queryRanges(results, keys);
                 }
             }
 
@@ -728,7 +728,8 @@ namespace persistence
         private:
             static inline const std::string m_name = "local";
 
-            static constexpr std::uint32_t m_numPartitionsByHashModulo = 4;
+            // TODO: completely abolish that idea?
+            static constexpr std::uint32_t m_numPartitionsByHashModulo = 1;
 
             template <typename T>
             using PerPartition = EnumMap2<GameLevel, GameResult, std::array<T, m_numPartitionsByHashModulo>>;
@@ -793,7 +794,7 @@ namespace persistence
                 return m_name;
             }
 
-            [[nodiscard]] QueryResult queryRanges(QueryTarget target, const std::vector<Position>& positions) const
+            [[nodiscard]] std::vector<QueryResult> queryRanges(QueryTarget target, const std::vector<Position>& positions) const
             {
                 std::vector<PositionSignature> keys;
                 keys.reserve(positions.size());
@@ -802,15 +803,15 @@ namespace persistence
                     keys.emplace_back(position);
                 }
 
-                QueryResult result;
+                std::vector<QueryResult> results;
                 for (auto&& partition : m_partitions[target.level][target.result])
                 {
-                    partition.queryRanges(result, keys);
+                    partition.queryRanges(results, keys);
                 }
-                return result;
+                return results;
             }
 
-            [[nodiscard]] EnumMap2<GameLevel, GameResult, QueryResult> queryRanges(const std::vector<QueryTarget>& targets, const std::vector<Position>& positions) const
+            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(const std::vector<QueryTarget>& targets, const std::vector<Position>& positions) const
             {
                 std::vector<PositionSignature> keys;
                 keys.reserve(positions.size());
@@ -819,20 +820,21 @@ namespace persistence
                     keys.emplace_back(position);
                 }
 
-                EnumMap2<GameLevel, GameResult, QueryResult> results;
+                EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> results;
                 for (auto&& target : targets)
                 {
                     const GameLevel level = target.level;
                     const GameResult result = target.result;
                     for (auto&& partition : m_partitions[level][result])
                     {
+                        results[level][result].resize(positions.size());
                         partition.queryRanges(results[level][result], keys);
                     }
                 }
                 return results;
             }
 
-            [[nodiscard]] EnumMap2<GameLevel, GameResult, QueryResult> queryRanges(const std::vector<Position>& positions) const
+            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(const std::vector<Position>& positions) const
             {
                 return queryRanges(allQueryTargets(), positions);
             }

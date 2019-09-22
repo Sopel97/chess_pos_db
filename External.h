@@ -3036,12 +3036,12 @@ namespace ext
         typename CompareT = std::less<>,
         typename KeyExtractT = detail::equal_range::Identity
     >
-    auto makeIndex(
-        const std::vector<EntryType> & values, 
-        std::size_t size,
-        CompareT cmp = CompareT{},
-        KeyExtractT key = KeyExtractT{}
-    )
+        auto makeIndex(
+            const std::vector<EntryType> & values,
+            std::size_t size,
+            CompareT cmp = CompareT{},
+            KeyExtractT key = KeyExtractT{}
+        )
     {
         using KeyType = decltype(key(std::declval<EntryType>()));
 
@@ -3051,7 +3051,7 @@ namespace ext
         {
             RangeIndexEntry<KeyType, CompareT> e{
                 0, values.size() - 1u,
-                key(values.front()), key(values.back()) 
+                key(values.front()), key(values.back())
             };
             return RangeIndex<KeyType, CompareT>({ e });
         }
@@ -3059,37 +3059,39 @@ namespace ext
         std::vector<RangeIndexEntry<KeyType, CompareT>> iters;
         iters.reserve(size);
 
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            // We look at values at equally spaced points and look
-            // for the first occurence.
-            // This guarantees that there is either one entry every N values
-            // or that there's a long span of identical values - index
-            // entry will hold bounds of the whole span.
-            const std::size_t idx = values.size() * i / size;
+        const std::size_t minRangeSize = values.size() / size;
 
-            // duplicates are unwanted
-            if (i == 0 || cmp(iters.back().lowValue, key(values[idx])))
+        std::size_t idx = 0;
+        while (idx < values.size())
+        {
+            // we try to take as many equal values as possible
+            // or at least minRangeSize values
+            const auto [begin, end] = std::equal_range(values.begin(), values.end(), values[idx], cmp);
+            const std::size_t rangeSize = std::max(static_cast<std::size_t>(std::distance(begin, end)), minRangeSize);
+
+            // This can produce an anomaly where idxx is higher than previous idxy
+            // this is taken care of later
+            std::size_t idxx = static_cast<std::size_t>(std::distance(values.begin(), begin));
+            std::size_t idxy = idxx + rangeSize - 1u;
+
+            if (idxx < idx)
             {
-                const auto it = std::lower_bound(values.begin(), values.begin() + (idx + 1u), values[idx], cmp);
-                std::size_t idxx = static_cast<std::size_t>(std::distance(values.begin(), it));
-                RangeIndexEntry<KeyType, CompareT> e{ idxx, idxx, key(values[idx]) };
-                iters.emplace_back(e);
+                auto& prev = iters.back();
+                prev.high = idxx - 1u;
+                prev.highValue = key(values[prev.high]);
             }
+
+            if (idxy >= values.size())
+            {
+                idxy = values.size() - 1u;
+            }
+            RangeIndexEntry<KeyType, CompareT> e{ idxx, idxy, key(values[idxx]), key(values[idxy]) };
+            iters.emplace_back(e);
+
+            idx = idxy + 1u;
         }
 
         ASSERT(!iters.empty());
-
-        for (std::size_t i = 1; i < iters.size(); ++i)
-        {
-            const auto& e = iters[i];
-            auto& pe = iters[i - 1];
-            pe.high = e.low - 1;
-            pe.highValue = key(values[pe.high]);
-        }
-        iters.back().high = values.size() - 1u;
-        iters.back().highValue = key(values.back());
-
         ASSERT(iters.front().low == 0);
         ASSERT(iters.back().high == values.size() - 1u);
         ASSERT(iters.front().lowValue == key(values.front()));

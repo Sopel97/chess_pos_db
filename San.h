@@ -77,7 +77,7 @@ namespace san
         inline void appendSquareToString(Square sq, std::string& str)
         {
             str += static_cast<char>('a' + ordinal(sq.file()));
-            str += static_cast<char>('a' + ordinal(sq.rank()));
+            str += static_cast<char>('1' + ordinal(sq.rank()));
         }
 
         [[nodiscard]] constexpr bool contains(std::string_view s, char c)
@@ -506,37 +506,56 @@ namespace san
     {
         std::string san;
 
-        const Piece piece = pos.pieceAt(move.from);
-
-        if (piece.type() != PieceType::Pawn)
+        if (move.type == MoveType::Castle)
         {
-            san += detail::pieceTypeToChar(piece.type());
-        }
-
-        detail::appendSquareToString(move.from, san);
-
-        if constexpr (contains(SpecV, SanSpec::Capture))
-        {
-            const bool isCapture =
-                (move.type == MoveType::EnPassant)
-                ? true
-                : (pos.pieceAt(move.to) != Piece::none());
-
-            if (isCapture)
+            const CastlingRights type = moveToCastlingType(move);
+            switch (type)
             {
-                san += 'x';
+            case CastlingRights::WhiteKingSide:
+            case CastlingRights::BlackKingSide:
+                san = "O-O";
+                break;
+
+            case CastlingRights::WhiteQueenSide:
+            case CastlingRights::BlackQueenSide:
+                san = "O-O-O";
+                break;
+            }
+        }
+        else
+        {
+            const Piece piece = pos.pieceAt(move.from);
+
+            if (piece.type() != PieceType::Pawn)
+            {
+                san += detail::pieceTypeToChar(piece.type());
+            }
+
+            detail::appendSquareToString(move.from, san);
+
+            if constexpr (contains(SpecV, SanSpec::Capture))
+            {
+                const bool isCapture =
+                    (move.type == MoveType::EnPassant)
+                    ? true
+                    : (pos.pieceAt(move.to) != Piece::none());
+
+                if (isCapture)
+                {
+                    san += 'x';
+                }
+            }
+
+            detail::appendSquareToString(move.to, san);
+
+            if (move.promotedPiece != Piece::none())
+            {
+                san += '=';
+                san += detail::pieceTypeToChar(move.promotedPiece.type());
             }
         }
 
-        detail::appendSquareToString(move.to, san);
-
-        if (move.promotedPiece != Piece::none())
-        {
-            san += '=';
-            san += detail::pieceTypeToChar(move.promotedPiece.type());
-        }
-
-        if constexpr (contains(SpecV), SanSpec::Check)
+        if constexpr (contains(SpecV, SanSpec::Check))
         {
             if (pos.isCheck(move))
             {
