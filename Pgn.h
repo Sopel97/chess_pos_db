@@ -19,14 +19,6 @@ namespace pgn
 {
     using namespace std::literals;
 
-    enum struct GameResult : std::uint8_t
-    {
-        WhiteWin,
-        BlackWin,
-        Draw,
-        Unknown
-    };
-
     namespace detail
     {
         [[nodiscard]] std::uint16_t parseUInt16(std::string_view sv)
@@ -291,7 +283,7 @@ namespace pgn
 
         // `tag` is the string between quotation marks
         // It is assumed that the result value is correct
-        [[nodiscard]] inline GameResult parseGameResult(std::string_view tag)
+        [[nodiscard]] inline std::optional<GameResult> parseGameResult(std::string_view tag)
         {
             // tag is one of the following:
             // 1-0
@@ -301,7 +293,7 @@ namespace pgn
 
             if (tag.size() < 3)
             {
-                return GameResult::Unknown;
+                return {};
             }
 
             switch (tag[2])
@@ -313,7 +305,7 @@ namespace pgn
             case '2':
                 return GameResult::Draw;
             default:
-                return GameResult::Unknown;
+                return {};
             }
         }
     }
@@ -437,7 +429,7 @@ namespace pgn
             ASSERT(m_moveSection.front() == '1');
         }
 
-        [[nodiscard]] GameResult result() const
+        [[nodiscard]] std::optional<GameResult> result() const
         {
             const std::string_view tag = detail::findTagValue(m_tagSection, "Result"sv);
             return detail::parseGameResult(tag);

@@ -14,13 +14,6 @@ namespace persistence
 {
     struct HeaderEntry
     {
-        [[nodiscard]] static inline GameResult convertResult(pgn::GameResult res)
-        {
-            ASSERT(res != pgn::GameResult::Unknown);
-
-            return static_cast<GameResult>(static_cast<int>(res));
-        }
-
         static constexpr std::uint16_t unknownPlyCount = std::numeric_limits<std::uint16_t>::max();
 
         HeaderEntry() = default;
@@ -39,7 +32,7 @@ namespace persistence
         }
 
         HeaderEntry(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
-            m_result(convertResult(game.result())),
+            m_result(*game.result()),
             m_date(game.date()),
             m_eco(game.eco()),
             m_plyCount(plyCount)

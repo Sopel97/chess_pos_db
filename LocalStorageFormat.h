@@ -1079,14 +1079,12 @@ namespace persistence
 
                     for (auto& game : fr)
                     {
-                        const pgn::GameResult pgnResult = game.result();
-                        if (pgnResult == pgn::GameResult::Unknown)
+                        const std::optional<GameResult> result = game.result();
+                        if (!result.has_value())
                         {
                             stats.numSkippedGames += 1;
                             continue;
                         }
-
-                        const GameResult result = convertResult(pgnResult);
 
                         // NOTE: we cannot get plies after loading the positions
                         //       because this function may be called in parallel.
@@ -1097,13 +1095,13 @@ namespace persistence
                         for (auto& pos : game.positions())
                         {
                             Entry entry(pos, gameIdx);
-                            auto& bucket = buckets[result];
+                            auto& bucket = buckets[*result];
                             bucket.emplace_back(entry);
                             numPositionsInGame += 1;
 
                             if (bucket.size() == bucket.capacity())
                             {
-                                store(pipeline, bucket, level, result);
+                                store(pipeline, bucket, level, *result);
                             }
                         }
 
@@ -1248,14 +1246,12 @@ namespace persistence
 
                         for (auto& game : fr)
                         {
-                            const pgn::GameResult pgnResult = game.result();
-                            if (pgnResult == pgn::GameResult::Unknown)
+                            const std::optional<GameResult> result = game.result();
+                            if (!result.has_value())
                             {
                                 stats.numSkippedGames += 1;
                                 continue;
                             }
-
-                            const GameResult result = convertResult(pgnResult);
 
                             const std::uint32_t gameIdx = m_header.addGame(game);
 
@@ -1263,7 +1259,7 @@ namespace persistence
                             for (auto& pos : game.positions())
                             {
                                 Entry entry(pos, gameIdx);
-                                auto& bucket = entries[result];
+                                auto& bucket = entries[*result];
                                 bucket.emplace_back(entry);
                                 numPositionsInGame += 1;
 
@@ -1273,8 +1269,8 @@ namespace persistence
                                     // This doesn't have to be atomic since we're the only
                                     // ones using this blocks and there is enough space left for
                                     // all files before the next already present id.
-                                    auto& nextId = nextIds[result];
-                                    store(pipeline, bucket, level, result, nextId++);
+                                    auto& nextId = nextIds[*result];
+                                    store(pipeline, bucket, level, *result, nextId++);
                                 }
                             }
 
@@ -1430,13 +1426,6 @@ namespace persistence
                 {
                     f(data[result], result);
                 }
-            }
-
-            [[nodiscard]] static inline GameResult convertResult(pgn::GameResult res)
-            {
-                ASSERT(res != pgn::GameResult::Unknown);
-
-                return static_cast<GameResult>(static_cast<int>(res));
             }
         };
     }
