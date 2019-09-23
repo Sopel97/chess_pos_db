@@ -16,7 +16,14 @@ namespace persistence
     {
         static constexpr std::uint16_t unknownPlyCount = std::numeric_limits<std::uint16_t>::max();
 
-        HeaderEntry(ext::Vector<char>& headers, std::size_t offset)
+        HeaderEntry() = default;
+
+        HeaderEntry(ext::Vector<char>& headers, std::size_t offset) :
+            m_size{},
+            m_date{},
+            m_eco{},
+            m_plyCount{},
+            m_packedStrings{}
         {
             // there may be garbage at the end
             // we don't care because we have sizes serialized
@@ -159,14 +166,39 @@ namespace persistence
             return static_cast<std::uint32_t>(m_index.size());
         }
 
-        [[nodiscard]] std::vector<HeaderEntry> query(const std::vector<std::size_t>& indices)
+        [[nodiscard]] std::vector<HeaderEntry> query(const std::vector<std::uint32_t>& keys)
         {
-            std::vector<HeaderEntry> headers;
-            headers.reserve(indices.size());
+            const std::size_t numKeys = keys.size();
 
-            for (std::size_t idx : indices)
+            std::vector<std::uint32_t> orderedKeys;
+            std::vector<std::size_t> originalIds;
+            std::vector<std::pair<std::uint32_t, std::size_t>> compound;
+            orderedKeys.reserve(numKeys);
+            originalIds.reserve(numKeys);
+            compound.reserve(numKeys);
+            for (std::size_t i = 0; i < numKeys; ++i)
             {
-                headers.emplace_back(m_header, m_index[idx]);
+                compound.emplace_back(keys[i], i);
+            }
+            std::sort(compound.begin(), compound.end(), [](auto&& lhs, auto&& rhs) { return lhs.first < rhs.first; });
+            for (auto&& [key, id] : compound)
+            {
+                orderedKeys.emplace_back(key);
+                originalIds.emplace_back(id);
+            }
+
+            std::vector<std::size_t> offsets;
+            offsets.reserve(numKeys);
+            for (auto& key : orderedKeys)
+            {
+                offsets.emplace_back(m_index[key]);
+            }
+
+            std::vector<HeaderEntry> headers;
+            headers.resize(numKeys);
+            for (std::size_t i = 0; i < numKeys; ++i)
+            {
+                headers[originalIds[i]] = HeaderEntry(m_header, offsets[i]);
             }
 
             return headers;

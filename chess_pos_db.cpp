@@ -242,6 +242,196 @@ void buildsmall()
         }, 2u * 1024u * 1024u * 1024u);
 }
 
+struct AggregatedQueryResult
+{
+    EnumMap2<GameLevel, GameResult, std::size_t> counts;
+    EnumMap2<GameLevel, GameResult, std::optional<persistence::HeaderEntry>> games;
+};
+
+struct AggregatedQueryResults
+{
+    Position mainPosition;
+    AggregatedQueryResult main;
+    std::vector<std::pair<Move, AggregatedQueryResult>> continuations;
+};
+
+AggregatedQueryResults queryAggregate(persistence::local::Database& db, const Position& pos, bool queryContinuations, bool fetchFirstGame, bool fetchFirstGameForContinuations, bool removeEmptyContinuations)
+{
+    Position basePosition = pos;
+    std::vector<Position> positions;
+    std::vector<Move> moves;
+    if (queryContinuations)
+    {
+        movegen::forEachLegalMove(basePosition, [&](Move move) {
+            positions.emplace_back(basePosition.afterMove(move));
+            moves.emplace_back(move);
+            });
+    }
+    positions.emplace_back(basePosition);
+
+    AggregatedQueryResults aggResults;
+    aggResults.mainPosition = pos;
+    std::vector<std::uint32_t> gameQueries;
+    auto results = db.queryRanges(positions);
+    for (int i = 0; i < moves.size(); ++i)
+    {
+        AggregatedQueryResult aggResult;
+        std::size_t totalCount = 0;
+        for (GameLevel level : values<GameLevel>())
+        {
+            for (GameResult result : values<GameResult>())
+            {
+                const std::size_t count = results[level][result][i].count();
+                aggResult.counts[level][result] = count;
+                totalCount += count;
+
+                if (fetchFirstGameForContinuations && count > 0)
+                {
+                    gameQueries.emplace_back(results[level][result][i].firstGameIndex());
+                }
+            }
+        }
+
+        if (removeEmptyContinuations && totalCount == 0)
+        {
+            continue;
+        }
+
+        aggResults.continuations.emplace_back(moves[i], aggResult);
+    }
+
+    {
+        AggregatedQueryResult aggResult;
+        for (GameLevel level : values<GameLevel>())
+        {
+            for (GameResult result : values<GameResult>())
+            {
+                const std::size_t count = results[level][result].back().count();
+                aggResult.counts[level][result] = count;
+
+                if (fetchFirstGame && count > 0)
+                {
+                    gameQueries.emplace_back(results[level][result].back().firstGameIndex());
+                }
+            }
+        }
+        aggResults.main = aggResult;
+    }
+
+    {
+        std::vector<persistence::HeaderEntry> headers = db.queryHeaders(gameQueries);
+        auto it = headers.begin();
+        for (int i = 0; i < moves.size(); ++i)
+        {
+            AggregatedQueryResult& aggResult = aggResults.continuations[i].second;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    const std::size_t count = aggResult.counts[level][result];
+
+                    if (fetchFirstGameForContinuations && count > 0)
+                    {
+                        aggResult.games[level][result] = *it++;
+                    }
+                }
+            }
+        }
+
+        AggregatedQueryResult& aggResult = aggResults.main;
+        for (GameLevel level : values<GameLevel>())
+        {
+            for (GameResult result : values<GameResult>())
+            {
+                const std::size_t count = aggResult.counts[level][result];
+
+                if (fetchFirstGame && count > 0)
+                {
+                    aggResult.games[level][result] = *it++;
+                }
+            }
+        }
+    }
+
+    return aggResults;
+}
+
+std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
+{
+    auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin]);
+    str += std::string("=") + std::to_string(results[GameResult::Draw]);
+    str += std::string("-") + std::to_string(results[GameResult::BlackWin]);
+    return str;
+}
+
+void printAggregatedResult(const AggregatedQueryResult& res)
+{
+    std::size_t total = 0;
+    for (auto& cc : res.counts)
+    {
+        for (auto& c : cc)
+        {
+            total += c;
+        }
+    }
+    std::cout << std::setw(9) << total << ' ';
+
+    for (auto& cc : res.counts)
+    {
+        std::cout << std::setw(19) << resultsToString(cc) << ' ';
+    }
+
+    std::cout << '\n';
+
+    const persistence::HeaderEntry* firstGame = nullptr;
+    for (auto& gg : res.games)
+    {
+        for (auto& g : gg)
+        {
+            if (!g.has_value())
+            {
+                continue;
+            }
+
+            if (firstGame == nullptr || g->date() < firstGame->date())
+            {
+                firstGame = &*g;
+            }
+        }
+    }
+
+    if (firstGame)
+    {
+        std::cout 
+            << firstGame->date().toString() 
+            << ' ' << firstGame->eco().toString() 
+            << ' ' << firstGame->event() 
+            << ' ' << firstGame->plyCount() 
+            << ' ' << firstGame->white() 
+            << ' ' << firstGame->black()
+            << '\n';
+    }
+}
+
+void query2(const Position& pos)
+{
+    std::cout << "Loading db\n";
+    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
+    //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    std::cout << "Loaded db\n";
+
+    auto agg = queryAggregate(e, pos, true, true, true, false);
+    
+    printAggregatedResult(agg.main);
+    std::cout << "\n";
+    for (auto&& [move, res] : agg.continuations)
+    {
+        std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Capture>(pos, move) << " ";
+        printAggregatedResult(res);
+    }
+}
+
+
 void query(const Position& pos)
 {
     std::cout << "Loading db\n";
@@ -290,7 +480,7 @@ void query(const Position& pos)
                 if (thisCount != 0)
                 {
                     auto h = e.queryHeaders({ results[level][result].back().firstGameIndex() })[0];
-                    std::cout << ": " << h.date().toString() << ' ' << h.eco().toString() << ' ' << h.event() << ' ' << h.white() << ' ' << h.black();
+                    std::cout << ": " << h.date().toString() << ' ' << h.eco().toString() << ' ' << h.event() << ' ' << h.plyCount() << ' ' << h.white() << ' ' << h.black();
                 }
                 std::cout << '\n';
             }
@@ -302,13 +492,14 @@ void query(const Position& pos)
 int main()
 {
     {
-        //std::vector<char>(4'000'000'000ull);
+        std::vector<char>(2'000'000'000ull);
     }
     //testMoveGenerator();
     //return 0;
     //build();
     //buildsmall();
-    query(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
+    //query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
+    query2(Position::startPosition());
     return 0;
     /*
     persistence::Database e("w:/catobase/.tmp");

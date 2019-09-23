@@ -230,7 +230,7 @@ namespace persistence
             }
 
             // it must not be empty
-            [[nodiscard]] std::size_t firstGameIndex() const
+            [[nodiscard]] std::uint32_t firstGameIndex() const
             {
                 return m_file->at(m_begin).gameIdx();
             }
@@ -269,7 +269,7 @@ namespace persistence
             }
 
             // it must not be empty
-            [[nodiscard]] std::size_t firstGameIndex() const
+            [[nodiscard]] std::uint32_t firstGameIndex() const
             {
                 return m_ranges.front().firstGameIndex();
             }
@@ -583,7 +583,7 @@ namespace persistence
             {
                 ASSERT(!m_path.empty());
 
-                std::unique_lock<std::mutex>(m_mutex);
+                std::unique_lock<std::mutex> lock(m_mutex);
                 auto path = pathForId(id);
                 m_futureFiles.emplace(pipeline.scheduleUnordered(path, std::move(entries)), path);
             }
@@ -750,14 +750,11 @@ namespace persistence
         private:
             static inline const std::string m_name = "local";
 
-            // TODO: completely abolish that idea?
-            static constexpr std::uint32_t m_numPartitionsByHashModulo = 1;
+            template <typename T>
+            using PerPartition = EnumMap2<GameLevel, GameResult, T>;
 
             template <typename T>
-            using PerPartition = EnumMap2<GameLevel, GameResult, std::array<T, m_numPartitionsByHashModulo>>;
-
-            template <typename T>
-            using PerPartitionWithSpecificGameLevel = EnumMap<GameResult, std::array<T, m_numPartitionsByHashModulo>>;
+            using PerPartitionWithSpecificGameLevel = EnumMap<GameResult, T>;
 
             using PartitionStorageType = PerPartition<Partition>;
 
@@ -777,8 +774,7 @@ namespace persistence
 
             static constexpr std::size_t m_totalNumDirectories =
                 cardinality<GameLevel>()
-                * cardinality<GameResult>()
-                * m_numPartitionsByHashModulo;
+                * cardinality<GameResult>();
 
             // TODO: maybe make it configurable, though it doesn't need to be big.
             static constexpr std::size_t m_pgnParserMemory = 16ull * 1024ull * 1024ull;
@@ -816,35 +812,30 @@ namespace persistence
                 return m_name;
             }
 
-            [[nodiscard]] std::vector<HeaderEntry> queryHeaders(const std::vector<std::size_t>& indices)
+            [[nodiscard]] std::vector<HeaderEntry> queryHeaders(const std::vector<std::uint32_t>& indices)
             {
                 return m_header.query(indices);
             }
 
-            [[nodiscard]] std::vector<QueryResult> queryRanges(QueryTarget target, const std::vector<Position>& positions) const
-            {
-                std::vector<PositionSignature> keys;
-                keys.reserve(positions.size());
-                for (auto&& position : positions)
-                {
-                    keys.emplace_back(position);
-                }
-
-                std::vector<QueryResult> results;
-                for (auto&& partition : m_partitions[target.level][target.result])
-                {
-                    partition.queryRanges(results, keys);
-                }
-                return results;
-            }
-
             [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(const std::vector<QueryTarget>& targets, const std::vector<Position>& positions) const
             {
-                std::vector<PositionSignature> keys;
-                keys.reserve(positions.size());
-                for (auto&& position : positions)
+                const std::size_t numPositions = positions.size();
+
+                std::vector<PositionSignature> orderedKeys;
+                std::vector<std::size_t> originalIds;
+                std::vector<std::pair<PositionSignature, std::size_t>> compound;
+                orderedKeys.reserve(numPositions);
+                originalIds.reserve(numPositions);
+                compound.reserve(numPositions);
+                for (std::size_t i = 0; i < numPositions; ++i)
                 {
-                    keys.emplace_back(position);
+                    compound.emplace_back(PositionSignature(positions[i]), i);
+                }
+                std::sort(compound.begin(), compound.end(), [](auto&& lhs, auto&& rhs) { return lhs.first < rhs.first; });
+                for (auto&& [key, id] : compound)
+                {
+                    orderedKeys.emplace_back(key);
+                    originalIds.emplace_back(id);
                 }
 
                 EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> results;
@@ -852,13 +843,23 @@ namespace persistence
                 {
                     const GameLevel level = target.level;
                     const GameResult result = target.result;
-                    for (auto&& partition : m_partitions[level][result])
+
+                    std::vector<QueryResult> orderedResults;
+                    orderedResults.resize(numPositions);
+                    m_partitions[level][result].queryRanges(orderedResults, orderedKeys);
+
+                    results[level][result].resize(numPositions);
+                    for (std::size_t i = 0; i < numPositions; ++i)
                     {
-                        results[level][result].resize(positions.size());
-                        partition.queryRanges(results[level][result], keys);
+                        results[level][result][originalIds[i]] = orderedResults[i];
                     }
                 }
                 return results;
+            }
+
+            [[nodiscard]] std::vector<QueryResult> queryRanges(QueryTarget target, const std::vector<Position>& positions) const
+            {
+                return queryRanges(std::vector<QueryTarget>{ { target } }, positions)[target.level][target.result];
             }
 
             [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(const std::vector<Position>& positions) const
@@ -886,7 +887,7 @@ namespace persistence
                     [](auto& v) { return v.size() > 0; }
                 );
 
-                const std::size_t numBuffers = cardinality<GameResult>() * m_numPartitionsByHashModulo * numDifferentLevels;
+                const std::size_t numBuffers = cardinality<GameResult>() * numDifferentLevels;
                 const std::size_t numAdditionalBuffers = numBuffers;
 
                 const std::size_t bucketSize =
@@ -955,7 +956,7 @@ namespace persistence
 
                 auto pathsByLevel = partitionPathsByLevel(pgns);
 
-                const std::size_t numBuffers = cardinality<GameResult>() * m_numPartitionsByHashModulo * numWorkerThreads;
+                const std::size_t numBuffers = cardinality<GameResult>() * numWorkerThreads;
 
                 const std::size_t numAdditionalBuffers = numBuffers;
 
@@ -1004,7 +1005,7 @@ namespace persistence
 
                 auto pathsByLevel = partitionPathsByLevel(pgns);
 
-                const std::size_t numBuffers = cardinality<GameResult>() * m_numPartitionsByHashModulo;
+                const std::size_t numBuffers = cardinality<GameResult>();
 
                 const std::size_t numAdditionalBuffers = numBuffers;
 
@@ -1049,8 +1050,8 @@ namespace persistence
 
             void discoverFutureFiles()
             {
-                forEach(m_partitions, [this](auto& bucket, GameLevel level, GameResult result, std::uint32_t idx) {
-                    m_partitions[level][result][idx].collectFutureFiles();
+                forEach(m_partitions, [this](auto& bucket, GameLevel level, GameResult result) {
+                    m_partitions[level][result].collectFutureFiles();
                     });
             }
 
@@ -1062,7 +1063,7 @@ namespace persistence
             {
                 // create buffers
                 PerPartitionWithSpecificGameLevel<std::vector<Entry>> buckets;
-                forEach(buckets, [&](auto& bucket, GameResult result, std::uint32_t idx) {
+                forEach(buckets, [&](auto& bucket, GameResult result) {
                     bucket = pipeline.getEmptyBuffer();
                     });
 
@@ -1096,14 +1097,13 @@ namespace persistence
                         for (auto& pos : game.positions())
                         {
                             Entry entry(pos, gameIdx);
-                            const std::uint32_t partitionIdx = entry.hashMod(m_numPartitionsByHashModulo);
-                            auto& bucket = buckets[result][partitionIdx];
+                            auto& bucket = buckets[result];
                             bucket.emplace_back(entry);
                             numPositionsInGame += 1;
 
                             if (bucket.size() == bucket.capacity())
                             {
-                                store(pipeline, bucket, level, result, partitionIdx);
+                                store(pipeline, bucket, level, result);
                             }
                         }
 
@@ -1115,8 +1115,8 @@ namespace persistence
                 }
 
                 // flush buffers and return them to the pipeline for later use
-                forEach(buckets, [this, &pipeline, level](auto& bucket, GameResult result, std::uint32_t idx) {
-                    store(pipeline, std::move(bucket), level, result, idx);
+                forEach(buckets, [this, &pipeline, level](auto& bucket, GameResult result) {
+                    store(pipeline, std::move(bucket), level, result);
                     });
 
                 return stats;
@@ -1162,8 +1162,8 @@ namespace persistence
                     // into one partition
                     std::uint32_t idOffset = 0;
                     PerPartitionWithSpecificGameLevel<std::uint32_t> baseNextIds{};
-                    forEach(baseNextIds, [&](auto& nextId, GameResult result, std::uint32_t idx) {
-                        nextId = m_partitions[level][result][idx].nextId();
+                    forEach(baseNextIds, [&](auto& nextId, GameResult result) {
+                        nextId = m_partitions[level][result].nextId();
                         });
 
                     std::size_t blockSize = 0;
@@ -1176,8 +1176,8 @@ namespace persistence
                         {
                             // here we apply the offset
                             PerPartitionWithSpecificGameLevel<std::uint32_t> nextIds;
-                            forEach(nextIds, [&](auto& nextId, GameResult result, std::uint32_t idx) {
-                                nextId = baseNextIds[result][idx] + idOffset;
+                            forEach(nextIds, [&](auto& nextId, GameResult result) {
+                                nextId = baseNextIds[result] + idOffset;
                                 });
 
                             // store the block of desired size
@@ -1194,8 +1194,8 @@ namespace persistence
                     if (start != paths.end())
                     {
                         PerPartitionWithSpecificGameLevel<std::uint32_t> nextIds;
-                        forEach(nextIds, [&](auto& nextId, GameResult result, std::uint32_t idx) {
-                            nextId = baseNextIds[result][idx] + idOffset;
+                        forEach(nextIds, [&](auto& nextId, GameResult result) {
+                            nextId = baseNextIds[result] + idOffset;
                             });
                         blocks.emplace_back(Block{ start, paths.end(), nextIds });
                     }
@@ -1228,7 +1228,7 @@ namespace persistence
                 auto work = [&](const Block& block) {
 
                     PerPartitionWithSpecificGameLevel<std::vector<Entry>> entries;
-                    forEach(entries, [&](auto& bucket, GameResult result, std::uint32_t idx) {
+                    forEach(entries, [&](auto& bucket, GameResult result) {
                         bucket = pipeline.getEmptyBuffer();
                         });
 
@@ -1263,8 +1263,7 @@ namespace persistence
                             for (auto& pos : game.positions())
                             {
                                 Entry entry(pos, gameIdx);
-                                const std::uint32_t partitionIdx = entry.hashMod(m_numPartitionsByHashModulo);
-                                auto& bucket = entries[result][partitionIdx];
+                                auto& bucket = entries[result];
                                 bucket.emplace_back(entry);
                                 numPositionsInGame += 1;
 
@@ -1274,8 +1273,8 @@ namespace persistence
                                     // This doesn't have to be atomic since we're the only
                                     // ones using this blocks and there is enough space left for
                                     // all files before the next already present id.
-                                    auto& nextId = nextIds[result][partitionIdx];
-                                    store(pipeline, bucket, level, result, partitionIdx, nextId++);
+                                    auto& nextId = nextIds[result];
+                                    store(pipeline, bucket, level, result, nextId++);
                                 }
                             }
 
@@ -1287,9 +1286,9 @@ namespace persistence
                     }
 
                     // flush buffers and return them to the pipeline for later use
-                    forEach(entries, [this, &pipeline, &nextIds = nextIds, level](auto& bucket, GameResult result, std::uint32_t idx) {
-                        const std::uint32_t nextId = nextIds[result][idx];
-                        store(pipeline, std::move(bucket), level, result, idx, nextId);
+                    forEach(entries, [this, &pipeline, &nextIds = nextIds, level](auto& bucket, GameResult result) {
+                        const std::uint32_t nextId = nextIds[result];
+                        store(pipeline, std::move(bucket), level, result, nextId);
                         });
 
                     return stats;
@@ -1333,11 +1332,7 @@ namespace persistence
                     for (const auto& result : values<GameResult>())
                     {
                         const std::filesystem::path resultPath = levelPath / m_pathByGameResult[result];
-                        for (std::uint32_t partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
-                        {
-                            const std::filesystem::path partitionPath = resultPath / std::to_string(partitionIdx);
-                            m_partitions[level][result][partitionIdx].setPath(m_path / partitionPath);
-                        }
+                        m_partitions[level][result].setPath(m_path / resultPath);
                     }
                 }
             }
@@ -1346,8 +1341,7 @@ namespace persistence
                 AsyncStorePipeline& pipeline,
                 std::vector<Entry>& entries,
                 GameLevel level,
-                GameResult result,
-                std::uint32_t partitionIdx
+                GameResult result
             )
             {
                 if (entries.empty())
@@ -1357,15 +1351,14 @@ namespace persistence
 
                 auto newBuffer = pipeline.getEmptyBuffer();
                 entries.swap(newBuffer);
-                m_partitions[level][result][partitionIdx].storeUnordered(pipeline, std::move(newBuffer));
+                m_partitions[level][result].storeUnordered(pipeline, std::move(newBuffer));
             }
 
             void store(
                 AsyncStorePipeline& pipeline,
                 std::vector<Entry>&& entries,
                 GameLevel level,
-                GameResult result,
-                std::uint32_t partitionIdx
+                GameResult result
             )
             {
                 if (entries.empty())
@@ -1373,7 +1366,7 @@ namespace persistence
                     return;
                 }
 
-                m_partitions[level][result][partitionIdx].storeUnordered(pipeline, std::move(entries));
+                m_partitions[level][result].storeUnordered(pipeline, std::move(entries));
             }
 
             void store(
@@ -1381,7 +1374,6 @@ namespace persistence
                 std::vector<Entry>& entries,
                 GameLevel level,
                 GameResult result,
-                std::uint32_t partitionIdx,
                 std::uint32_t id
             )
             {
@@ -1396,7 +1388,7 @@ namespace persistence
 
                 auto newBuffer = pipeline.getEmptyBuffer();
                 entries.swap(newBuffer);
-                m_partitions[level][result][partitionIdx].storeUnordered(pipeline, std::move(newBuffer), id);
+                m_partitions[level][result].storeUnordered(pipeline, std::move(newBuffer), id);
             }
 
             void store(
@@ -1404,7 +1396,6 @@ namespace persistence
                 std::vector<Entry>&& entries,
                 GameLevel level,
                 GameResult result,
-                std::uint32_t partitionIdx,
                 std::uint32_t id
             )
             {
@@ -1417,7 +1408,7 @@ namespace persistence
                     return;
                 }
 
-                m_partitions[level][result][partitionIdx].storeUnordered(pipeline, std::move(entries), id);
+                m_partitions[level][result].storeUnordered(pipeline, std::move(entries), id);
             }
 
             template <typename T, typename FuncT>
@@ -1427,10 +1418,7 @@ namespace persistence
                 {
                     for (const auto& result : values<GameResult>())
                     {
-                        for (std::uint32_t partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
-                        {
-                            f(data[level][result][partitionIdx], level, result, partitionIdx);
-                        }
+                        f(data[level][result], level, result);
                     }
                 }
             }
@@ -1440,10 +1428,7 @@ namespace persistence
             {
                 for (const auto& result : values<GameResult>())
                 {
-                    for (std::uint32_t partitionIdx = 0; partitionIdx < m_numPartitionsByHashModulo; ++partitionIdx)
-                    {
-                        f(data[result][partitionIdx], result, partitionIdx);
-                    }
+                    f(data[result], result);
                 }
             }
 
