@@ -14,12 +14,20 @@ namespace persistence
 {
     struct HeaderEntry
     {
+        [[nodiscard]] static inline GameResult convertResult(pgn::GameResult res)
+        {
+            ASSERT(res != pgn::GameResult::Unknown);
+
+            return static_cast<GameResult>(static_cast<int>(res));
+        }
+
         static constexpr std::uint16_t unknownPlyCount = std::numeric_limits<std::uint16_t>::max();
 
         HeaderEntry() = default;
 
         HeaderEntry(ext::Vector<char>& headers, std::size_t offset) :
             m_size{},
+            m_result{},
             m_date{},
             m_eco{},
             m_plyCount{},
@@ -31,6 +39,7 @@ namespace persistence
         }
 
         HeaderEntry(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
+            m_result(convertResult(game.result())),
             m_date(game.date()),
             m_eco(game.eco()),
             m_plyCount(plyCount)
@@ -51,6 +60,11 @@ namespace persistence
         [[nodiscard]] std::size_t size() const
         {
             return m_size;
+        }
+
+        [[nodiscard]] GameResult result() const
+        {
+            return m_result;
         }
 
         [[nodiscard]] Date date() const
@@ -99,6 +113,7 @@ namespace persistence
         // in packed strings that would be considered 'garbage'
         std::uint16_t m_size;
 
+        GameResult m_result;
         Date m_date;
         Eco m_eco;
         std::uint16_t m_plyCount;
@@ -135,7 +150,7 @@ namespace persistence
             m_size = sizeof(HeaderEntry) - sizeof(m_packedStrings) + i;
         }
     };
-    static_assert(sizeof(HeaderEntry) == 2 + 4 + 2 + 2 + 768);
+    static_assert(sizeof(HeaderEntry) == 2 + 2 + 4 + 2 + 2 + 768);
 
     struct Header
     {

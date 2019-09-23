@@ -364,6 +364,19 @@ std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
     return str;
 }
 
+std::string toString(GameResult res)
+{
+    switch (res)
+    {
+    case GameResult::WhiteWin:
+        return "win";
+    case GameResult::BlackWin:
+        return "loss";
+    case GameResult::Draw:
+        return "draw";
+    }
+}
+
 void printAggregatedResult(const AggregatedQueryResult& res)
 {
     std::size_t total = 0;
@@ -404,6 +417,7 @@ void printAggregatedResult(const AggregatedQueryResult& res)
     {
         std::cout 
             << firstGame->date().toString() 
+            << ' ' << toString(firstGame->result())
             << ' ' << firstGame->eco().toString() 
             << ' ' << firstGame->event() 
             << ' ' << firstGame->plyCount() 
@@ -492,14 +506,14 @@ void query(const Position& pos)
 int main()
 {
     {
-        std::vector<char>(2'000'000'000ull);
+        //std::vector<char>(2'000'000'000ull);
     }
     //testMoveGenerator();
     //return 0;
-    //build();
+    build();
     //buildsmall();
     //query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
-    query2(Position::startPosition());
+    //query2(Position::startPosition());
     return 0;
     /*
     persistence::Database e("w:/catobase/.tmp");
