@@ -4,13 +4,19 @@
 
 #include "Assert.h"
 
+#include <iostream>
+
+#include <atomic>
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
+#include <future>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <numeric>
+#include <queue>
 #include <random>
 #include <string>
 #include <type_traits>
@@ -18,7 +24,8 @@
 
 namespace ext
 {
-    // TODO: concurrency support
+    // TODO: we need to use non-portable functions to allow >32bit file offsets
+    //       so consider moving to std::fstream
 
     struct Exception : public std::runtime_error
     {
@@ -26,6 +33,33 @@ namespace ext
 
         using BaseType::BaseType;
     };
+
+    namespace detail::except
+    {
+        [[noreturn]] void throwAppendException(const std::filesystem::path& path, std::size_t requested, std::size_t written)
+        {
+            throw Exception(
+                "Cannot append to file " + path.string()
+                + ". Written " + std::to_string(written) + " out of " + std::to_string(requested) + " elements."
+            );
+        }
+
+        [[noreturn]] void throwReadException(const std::filesystem::path& path, std::size_t offset, std::size_t requested, std::size_t read)
+        {
+            throw Exception(
+                "Cannot read from file " + path.string()
+                + ". Read " + std::to_string(read) + " out of " + std::to_string(requested) + " elements at offset " + std::to_string(offset) + "."
+            );
+        }
+
+        [[noreturn]] void throwOpenException(const std::filesystem::path& path, const std::string& openmode)
+        {
+            throw Exception(
+                "Cannot open file " + path.string()
+                + " with openmode + " + openmode
+            );
+        }
+    }
 
     [[nodiscard]] std::filesystem::path uniquePath()
     {
@@ -93,6 +127,7 @@ namespace ext
 
     namespace detail
     {
+        using NativeFileHandle = std::FILE*;
         using FileHandle = std::unique_ptr<std::FILE, FileDeleter>;
 
         [[nodiscard]] auto openFile(const std::filesystem::path& path, const std::string& openmode)
@@ -101,27 +136,67 @@ namespace ext
             auto h = FileHandle(std::fopen(pathStr.c_str(), openmode.c_str()));
             if (h == nullptr)
             {
-                throw Exception("Cannot open file.");
+                except::throwOpenException(path, openmode);
             }
             return h;
         }
+
+        [[nodiscard]] auto fileTell(NativeFileHandle fh)
+        {
+            return _ftelli64_nolock(fh);
+        }
+
+        auto fileSeek(NativeFileHandle fh, std::int64_t offset)
+        {
+            return _fseeki64_nolock(fh, offset, SEEK_SET);
+        }
+
+        auto fileSeek(NativeFileHandle fh, std::int64_t offset, int origin)
+        {
+            return _fseeki64_nolock(fh, offset, origin);
+        }
+
+        struct FileBase
+        {
+            virtual ~FileBase() = default;
+
+            virtual const std::filesystem::path& path() const = 0;
+
+            virtual const std::string& openmode() const = 0;
+
+            virtual bool isOpen() const = 0;
+
+            virtual std::size_t size() const = 0;
+
+            virtual std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const = 0;
+
+            virtual std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) = 0;
+
+            virtual void flush() = 0;
+
+            virtual bool isPooled() const = 0;
+        };
 
         // NOTE: Files are pooled - they are closed and reopened when needed -
         //       therefore it is possible that a file
         //       is deleted while it is seemingly held locked.
         //       If that happens the behaviour is undefined.
-        struct File
+        struct PooledFile : FileBase
         {
-            using NativeFileHandle = std::FILE*;
-
         private:
 
-            using FilePoolEntry = std::pair<FileHandle, File*>;
-            using FilePoolEntries = std::list<std::pair<FileHandle, File*>>;
+            using FilePoolEntry = std::pair<FileHandle, const PooledFile*>;
+            using FilePoolEntries = std::list<std::pair<FileHandle, const PooledFile*>>;
             using FilePoolEntryIter = typename FilePoolEntries::iterator;
 
             template <typename FuncT>
             decltype(auto) withHandle(FuncT&& func)
+            {
+                return pool().withHandle(*this, std::forward<FuncT>(func));
+            }
+
+            template <typename FuncT>
+            decltype(auto) withHandle(FuncT&& func) const
             {
                 return pool().withHandle(*this, std::forward<FuncT>(func));
             }
@@ -138,8 +213,10 @@ namespace ext
                 FilePool& operator=(FilePool&&) = delete;
 
                 template <typename FuncT>
-                decltype(auto) withHandle(File& file, FuncT&& func)
+                decltype(auto) withHandle(const PooledFile& file, FuncT&& func)
                 {
+                    std::unique_lock<std::mutex> lock(file.m_mutex);
+
                     return std::forward<FuncT>(func)(getHandle(file));
                 }
 
@@ -148,10 +225,12 @@ namespace ext
                     return m_files.end();
                 }
 
-                void close(File& file)
+                void close(PooledFile& file)
                 {
                     if (file.m_poolEntry != noneEntry())
                     {
+                        std::unique_lock<std::mutex> lock(file.m_mutex);
+
                         m_files.erase(file.m_poolEntry);
                         file.m_poolEntry = noneEntry();
                     }
@@ -159,8 +238,9 @@ namespace ext
 
             private:
                 FilePoolEntries m_files;
+                std::mutex m_mutex;
 
-                [[nodiscard]] FileHandle reopen(File& file)
+                [[nodiscard]] FileHandle reopen(const PooledFile& file)
                 {
                     ASSERT(file.m_timesOpened > 0u);
 
@@ -173,7 +253,7 @@ namespace ext
                     return openFile(file.m_path, openmode);
                 }
 
-                [[nodiscard]] FileHandle open(File& file)
+                [[nodiscard]] FileHandle open(const PooledFile& file)
                 {
                     ASSERT(file.m_timesOpened == 0u);
 
@@ -184,13 +264,18 @@ namespace ext
                 {
                     ASSERT(!m_files.empty());
 
-                    File& file = *(m_files.front().second);
+                    const PooledFile& file = *(m_files.front().second);
+
+                    std::unique_lock<std::mutex> lock(file.m_mutex);
+
                     file.m_poolEntry = noneEntry();
                     m_files.pop_front();
                 }
 
-                [[nodiscard]] NativeFileHandle getHandle(File& file)
+                [[nodiscard]] NativeFileHandle getHandle(const PooledFile& file)
                 {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+
                     if (file.m_poolEntry != noneEntry())
                     {
                         ASSERT(file.m_timesOpened > 0);
@@ -208,6 +293,7 @@ namespace ext
                         closeLastFile();
                     }
 
+                    // TODO: we may want to unlock the mutex for opening the files
                     // if we open for the first time we may want to truncate, we don't want that later
                     FileHandle handle{};
                     if (file.m_timesOpened > 0u)
@@ -227,6 +313,7 @@ namespace ext
 
                 void updateEntry(const FilePoolEntryIter& it)
                 {
+                    // Move the entry to the end (back)
                     m_files.splice(m_files.end(), m_files, it);
                 }
             };
@@ -239,7 +326,7 @@ namespace ext
 
         public:
 
-            File(std::filesystem::path path, std::string openmode) :
+            PooledFile(std::filesystem::path path, std::string openmode) :
                 m_path(std::move(path)),
                 m_openmode(std::move(openmode)),
                 m_poolEntry(pool().noneEntry()),
@@ -247,81 +334,73 @@ namespace ext
             {
             }
 
-            File(const File&) = delete;
-            File(File&&) = default;
-            File& operator=(const File&) = delete;
-            File& operator=(File&&) = default;
+            PooledFile(const PooledFile&) = delete;
+            PooledFile(PooledFile&&) = delete;
+            PooledFile& operator=(const PooledFile&) = delete;
+            PooledFile& operator=(PooledFile&&) = delete;
 
-            ~File()
+            ~PooledFile() override
             {
                 pool().close(*this);
             }
 
-            [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept
+            [[nodiscard]] friend bool operator==(const PooledFile& lhs, const PooledFile& rhs) noexcept
             {
                 return &lhs == &rhs;
             }
 
-            [[nodiscard]] const std::filesystem::path& path() const
+            [[nodiscard]] const std::filesystem::path& path() const override
             {
                 return m_path;
             }
 
-            [[nodiscard]] const std::string& openmode() const
+            [[nodiscard]] const std::string& openmode() const override
             {
                 return m_openmode;
             }
 
-            [[nodiscard]] bool isOpen()
+            [[nodiscard]] bool isOpen() const override
             {
                 return m_poolEntry != pool().noneEntry();
             }
 
-            [[nodiscard]] auto size()
+            [[nodiscard]] std::size_t size() const override
             {
                 return withHandle([&](NativeFileHandle handle) {
-                    const auto originalPos = std::ftell(handle);
-                    std::fseek(handle, 0, SEEK_END);
-                    const std::size_t s = std::ftell(handle);
-                    std::fseek(handle, originalPos, SEEK_SET);
+                    const auto originalPos = fileTell(handle);
+                    fileSeek(handle, 0, SEEK_END);
+                    const std::size_t s = fileTell(handle);
+                    fileSeek(handle, originalPos, SEEK_SET);
                     return s;
-                });
+                    });
             }
 
-            void seekset(std::size_t offset)
+            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override
             {
                 return withHandle([&](NativeFileHandle handle) {
-                    std::fseek(handle, static_cast<long>(offset), SEEK_SET);
-                });
-            }
-
-            void seekToEnd()
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    std::fseek(handle, 0, SEEK_END);
-                });
-            }
-
-            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count)
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    std::fseek(handle, static_cast<long>(offset), SEEK_SET);
+                    fileSeek(handle, offset, SEEK_SET);
                     return std::fread(static_cast<void*>(destination), elementSize, count, handle);
-                });
+                    });
             }
 
-            [[nodiscard]] std::size_t write(const std::byte* source, std::size_t elementSize, std::size_t count)
+            [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) override
             {
                 return withHandle([&](NativeFileHandle handle) {
+                    fileSeek(handle, 0, SEEK_END);
                     return std::fwrite(static_cast<const void*>(source), elementSize, count, handle);
-                });
+                    });
             }
 
-            void flush()
+            void flush() override
             {
                 withHandle([&](NativeFileHandle handle) {
                     std::fflush(handle);
-                });
+                    });
+            }
+
+            [[nodiscard]] bool isPooled() const override
+            {
+                return true;
             }
 
         private:
@@ -329,11 +408,349 @@ namespace ext
             std::string m_openmode;
 
             // used by the pool
-            FilePoolEntryIter m_poolEntry;
+            mutable FilePoolEntryIter m_poolEntry;
             // times opened is NOT concurrent opens but sequential opens
-            std::size_t m_timesOpened;
+            mutable std::size_t m_timesOpened;
+            mutable std::mutex m_mutex;
+        };
+
+
+        struct File : FileBase
+        {
+            using NativeFileHandle = std::FILE*;
+
+        public:
+            static constexpr std::size_t maxUnpooledOpenFiles = 128;
+
+            File(std::filesystem::path path, std::string openmode) :
+                m_path(std::move(path)),
+                m_openmode(std::move(openmode))
+            {
+                open();
+            }
+
+            File(const File&) = delete;
+            File(File&&) = delete;
+            File& operator=(const File&) = delete;
+            File& operator=(File&&) = delete;
+
+            ~File() override
+            {
+                close();
+            }
+
+            [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept
+            {
+                return &lhs == &rhs;
+            }
+
+            [[nodiscard]] const std::filesystem::path& path() const override
+            {
+                return m_path;
+            }
+
+            [[nodiscard]] const std::string& openmode() const override
+            {
+                return m_openmode;
+            }
+
+            void close()
+            {
+                m_handle.reset();
+                m_numOpenFiles -= 1;
+            }
+
+            void open()
+            {
+                // This is not designed to be a hard limits.
+                // It it prone to data races.
+                // We only want to reasonably restrict the number of
+                // unpooled files open at once so that
+                // we don't fail to open a PooledFile
+                if (m_numOpenFiles.load() >= maxUnpooledOpenFiles)
+                {
+                    except::throwOpenException(m_path, m_openmode);
+                }
+
+                m_handle = openFile(m_path, m_openmode);
+                m_numOpenFiles += 1;
+            }
+
+            [[nodiscard]] bool isOpen() const override
+            {
+                return m_handle != nullptr;
+            }
+
+            [[nodiscard]] std::size_t size() const override
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                ASSERT(m_handle.get() != nullptr);
+                const auto originalPos = fileTell(m_handle.get());
+                fileSeek(m_handle.get(), 0, SEEK_END);
+                const auto s = fileTell(m_handle.get());
+                fileSeek(m_handle.get(), originalPos, SEEK_SET);
+                return s;
+            }
+
+            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                ASSERT(m_handle.get() != nullptr);
+                fileSeek(m_handle.get(), offset, SEEK_SET);
+                return std::fread(static_cast<void*>(destination), elementSize, count, m_handle.get());
+            }
+
+            [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) override
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                ASSERT(m_handle.get() != nullptr);
+                fileSeek(m_handle.get(), 0, SEEK_END);
+                return std::fwrite(static_cast<const void*>(source), elementSize, count, m_handle.get());
+            }
+
+            void flush() override
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                ASSERT(m_handle.get() != nullptr);
+                std::fflush(m_handle.get());
+            }
+
+            [[nodiscard]] bool isPooled() const override
+            {
+                return false;
+            }
+
+        private:
+            std::filesystem::path m_path;
+            std::string m_openmode;
+            FileHandle m_handle;
+
+            mutable std::mutex m_mutex;
+
+            static inline std::atomic<std::size_t> m_numOpenFiles = 0;
+        };
+
+        struct ThreadPool
+        {
+            static constexpr std::size_t defaultNumThreads = 8;
+
+            enum struct JobType
+            {
+                Read,
+                Append
+            };
+
+            struct Job
+            {
+                JobType type;
+                std::shared_ptr<FileBase> file;
+                std::byte* buffer;
+                std::promise<std::size_t> promise;
+                std::size_t offset;
+                std::size_t elementSize;
+                std::size_t count;
+            };
+
+            static const std::vector<std::vector<std::filesystem::path>>& paths()
+            {
+                static const std::vector<std::vector<std::filesystem::path>> s_paths = []() {
+                    std::vector<std::vector<std::filesystem::path>> s_paths;
+
+                    s_paths.emplace_back().emplace_back(std::filesystem::canonical("C:"));
+                    s_paths.emplace_back().emplace_back(std::filesystem::canonical("W:"));
+
+                    return s_paths;
+                }();
+
+                return s_paths;
+            }
+
+            static ThreadPool& instance()
+            {
+                static ThreadPool s_instance{};
+                return s_instance;
+            }
+
+            static ThreadPool& instance(const std::filesystem::path& path)
+            {
+                static std::vector<std::unique_ptr<ThreadPool>> s_instances = []() {
+                    std::vector<std::unique_ptr<ThreadPool>> s_instances;
+
+                    const std::size_t size = paths().size();
+                    for (std::size_t i = 0; i < size; ++i)
+                    {
+                        s_instances.emplace_back(new ThreadPool{});
+                    }
+
+                    return s_instances;
+                }();
+
+                const std::size_t i = poolIndexForPath(path);
+                if (i == -1)
+                {
+                    return instance();
+                }
+
+                return *s_instances[i];
+            }
+
+            ThreadPool(const ThreadPool&) = delete;
+            ThreadPool(ThreadPool&&) = delete;
+            ThreadPool& operator=(const ThreadPool&) = delete;
+            ThreadPool& operator=(ThreadPool&&) = delete;
+
+            [[nodiscard]] std::future<std::size_t> scheduleRead(std::shared_ptr<FileBase> file, std::byte* buffer, std::size_t offset, std::size_t elementSize, std::size_t count)
+            {
+                Job job{
+                    JobType::Read,
+                    std::move(file),
+                    buffer,
+                    {},
+                    offset,
+                    elementSize,
+                    count
+                };
+                std::future<std::size_t> future = job.promise.get_future();
+
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                m_jobQueue.emplace(std::move(job));
+                if (m_jobQueue.size() == 1)
+                {
+                    lock.unlock();
+                    m_jobQueueNotEmpty.notify_one();
+                }
+
+                return future;
+            }
+
+            [[nodiscard]] std::future<std::size_t> scheduleAppend(std::shared_ptr<FileBase> file, const std::byte* buffer, std::size_t elementSize, std::size_t count)
+            {
+                Job job{
+                    JobType::Append,
+                    std::move(file),
+                    const_cast<std::byte*>(buffer),
+                    {},
+                    {},
+                    elementSize,
+                    count
+                };
+                std::future<std::size_t> future = job.promise.get_future();
+
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                m_jobQueue.emplace(std::move(job));
+                if (m_jobQueue.size() == 1)
+                {
+                    lock.unlock();
+                    m_jobQueueNotEmpty.notify_one();
+                }
+
+                return future;
+            }
+
+            ~ThreadPool()
+            {
+                m_done.store(true);
+                m_jobQueueNotEmpty.notify_one();
+
+                for (auto& thread : m_threads)
+                {
+                    if (thread.joinable())
+                    {
+                        thread.join();
+                    }
+                }
+            }
+
+        private:
+            std::vector<std::thread> m_threads;
+
+            std::queue<Job> m_jobQueue;
+
+            std::mutex m_mutex;
+            std::condition_variable m_jobQueueNotEmpty;
+
+            std::atomic<bool> m_done;
+
+            ThreadPool(std::size_t numThreads = defaultNumThreads) :
+                m_done(false)
+            {
+                m_threads.reserve(numThreads);
+                for (std::size_t i = 0; i < numThreads; ++i)
+                {
+                    m_threads.emplace_back([this]() { worker(); });
+                }
+            }
+
+            static std::size_t poolIndexForPath(const std::filesystem::path& path)
+            {
+                auto absolute = std::filesystem::canonical(path);
+                const auto& poolPaths = paths();
+                for (std::size_t i = 0; i < poolPaths.size(); ++i)
+                {
+                    auto& ps = poolPaths[i];
+                    for (const auto& path : ps)
+                    {
+                        auto originalPath = absolute;
+                        for (;;)
+                        {
+                            if (path == originalPath)
+                            {
+                                return i;
+                            }
+
+                            auto parent = originalPath.parent_path();
+                            if (parent == originalPath)
+                            {
+                                break;
+                            }
+                            originalPath = std::move(parent);
+                        }
+                    }
+                }
+
+                return -1;
+            }
+
+            void worker()
+            {
+                for (;;)
+                {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_jobQueueNotEmpty.wait(lock, [this]() { return !m_jobQueue.empty() || m_done.load(); });
+                    if (m_jobQueue.empty())
+                    {
+                        lock.unlock();
+                        m_jobQueueNotEmpty.notify_one();
+                        return;
+                    }
+
+                    Job job = std::move(m_jobQueue.front());
+                    m_jobQueue.pop();
+                    lock.unlock();
+
+                    if (job.type == JobType::Read)
+                    {
+                        const std::size_t r = job.file->read(job.buffer, job.offset, job.elementSize, job.count);
+                        job.promise.set_value(r);
+                    }
+                    else // job.type == JobType::Append
+                    {
+                        const std::size_t r = job.file->append(job.buffer, job.elementSize, job.count);
+                        job.promise.set_value(r);
+                    }
+                }
+            }
         };
     }
+
+    struct Pooled {};
+    struct Async {};
 
     // NOTE: It is assumed that one *physical* file is not accessed concurrently anywhere.
     // NOTE: It is also assumed that the file is not changed by any means while being open.
@@ -341,6 +758,14 @@ namespace ext
     {
         ImmutableBinaryFile(std::filesystem::path path) :
             m_file(std::make_shared<detail::File>(std::move(path), m_openmode)),
+            m_threadPool(&detail::ThreadPool::instance(m_file->path())),
+            m_size(m_file->size())
+        {
+        }
+
+        ImmutableBinaryFile(Pooled, std::filesystem::path path) :
+            m_file(std::make_shared<detail::PooledFile>(std::move(path), m_openmode)),
+            m_threadPool(&detail::ThreadPool::instance(m_file->path())),
             m_size(m_file->size())
         {
         }
@@ -375,6 +800,11 @@ namespace ext
             return m_file->read(destination, offset, elementSize, count);
         }
 
+        [[nodiscard]] std::future<std::size_t> read(Async, std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
+        {
+            return m_threadPool->scheduleRead(m_file, destination, offset, elementSize, count);
+        }
+
         [[nodiscard]] std::size_t size() const
         {
             return m_size;
@@ -383,16 +813,12 @@ namespace ext
     private:
         static inline const std::string m_openmode = "rb";
 
-        std::shared_ptr<detail::File> m_file;
+        std::shared_ptr<detail::FileBase> m_file;
+        detail::ThreadPool* m_threadPool;
         std::size_t m_size;
-
-        void seek(std::size_t offset) const
-        {
-            m_file->seekset(offset);
-        }
     };
 
-    enum struct OpenMode
+    enum struct OutputMode
     {
         Truncate,
         Append
@@ -400,8 +826,15 @@ namespace ext
 
     struct BinaryOutputFile
     {
-        BinaryOutputFile(std::filesystem::path path, OpenMode mode = OpenMode::Truncate) :
-            m_file(std::make_unique<detail::File>(std::move(path), mode == OpenMode::Append ? m_openmodeAppend : m_openmodeTruncate))
+        BinaryOutputFile(std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
+            m_file(std::make_shared<detail::File>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
+            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
+        {
+        }
+
+        BinaryOutputFile(Pooled, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
+            m_file(std::make_shared<detail::PooledFile>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
+            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
         {
         }
 
@@ -410,9 +843,9 @@ namespace ext
         BinaryOutputFile& operator=(const BinaryOutputFile&) = delete;
         BinaryOutputFile& operator=(BinaryOutputFile&&) = default;
 
-        [[nodiscard]] friend bool operator==(const BinaryOutputFile& lhs, const BinaryOutputFile& rhs) noexcept
+        virtual ~BinaryOutputFile()
         {
-            return &lhs == &rhs;
+
         }
 
         [[nodiscard]] decltype(auto) isOpen() const
@@ -430,22 +863,33 @@ namespace ext
             return m_file->openmode();
         }
 
-        void write(const std::byte* source, std::size_t elementSize, std::size_t count) const
+        [[nodiscard]] virtual std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const
         {
-            const std::size_t elementsWritten = m_file->write(source, elementSize, count);
-            if (elementsWritten != count)
-            {
-                throw Exception("Cannot write all bytes.");
-            }
+            return m_file->append(source, elementSize, count);
+        }
+
+        [[nodiscard]] virtual std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const
+        {
+            return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
         }
 
         // reopens the file in readonly mode
         [[nodiscard]] ImmutableBinaryFile seal()
         {
             flush();
-            ImmutableBinaryFile f(m_file->path());
-            m_file.reset();
-            return f;
+
+            if (m_file->isPooled())
+            {
+                ImmutableBinaryFile f(Pooled{}, m_file->path());
+                m_file.reset();
+                return f;
+            }
+            else
+            {
+                ImmutableBinaryFile f(m_file->path());
+                m_file.reset();
+                return f;
+            }
         }
 
         void flush()
@@ -457,13 +901,58 @@ namespace ext
         static inline const std::string m_openmodeTruncate = "wb";
         static inline const std::string m_openmodeAppend = "ab";
 
-        std::unique_ptr<detail::File> m_file;
+        std::shared_ptr<detail::FileBase> m_file;
+        detail::ThreadPool* m_threadPool;
+    };
+
+    struct ObservableBinaryOutputFile : BinaryOutputFile
+    {
+        using CallbackType = std::function<void(const std::byte*, std::size_t, std::size_t)>;
+
+        ObservableBinaryOutputFile(CallbackType callback, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
+            BinaryOutputFile(std::move(path), mode),
+            m_callback(std::move(callback))
+        {
+        }
+
+        ObservableBinaryOutputFile(Pooled, CallbackType callback, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
+            BinaryOutputFile(std::move(path), mode),
+            m_callback(std::move(callback))
+        {
+        }
+
+        ObservableBinaryOutputFile(const ObservableBinaryOutputFile&) = delete;
+        ObservableBinaryOutputFile(ObservableBinaryOutputFile&&) = default;
+        ObservableBinaryOutputFile& operator=(const ObservableBinaryOutputFile&) = delete;
+        ObservableBinaryOutputFile& operator=(ObservableBinaryOutputFile&&) = default;
+
+        [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const override
+        {
+            m_callback(source, elementSize, count);
+            return BinaryOutputFile::append(source, elementSize, count);
+        }
+
+        [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* source, std::size_t elementSize, std::size_t count) const override
+        {
+            m_callback(source, elementSize, count);
+            return BinaryOutputFile::append(Async{}, source, elementSize, count);
+        }
+
+    private:
+        CallbackType m_callback;
     };
 
     struct BinaryInputOutputFile
     {
-        BinaryInputOutputFile(std::filesystem::path path, OpenMode mode = OpenMode::Truncate) :
-            m_file(std::make_unique<detail::File>(std::move(path), mode == OpenMode::Append ? m_openmodeAppend : m_openmodeTruncate))
+        BinaryInputOutputFile(std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
+            m_file(std::make_shared<detail::File>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
+            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
+        {
+        }
+
+        BinaryInputOutputFile(Pooled, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
+            m_file(std::make_shared<detail::PooledFile>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
+            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
         {
         }
 
@@ -497,19 +986,24 @@ namespace ext
             return m_file->read(destination, offset, elementSize, count);
         }
 
+        [[nodiscard]] std::future<std::size_t> read(Async, std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
+        {
+            return m_threadPool->scheduleRead(m_file, destination, offset, elementSize, count);
+        }
+
         [[nodiscard]] std::size_t size() const
         {
             return m_file->size();
         }
 
-        void write(const std::byte* source, std::size_t elementSize, std::size_t count) const
+        [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const
         {
-            seekToEnd();
-            const std::size_t elementsWritten = m_file->write(source, elementSize, count);
-            if (elementsWritten != count)
-            {
-                throw Exception("Cannot write all bytes.");
-            }
+            return m_file->append(source, elementSize, count);
+        }
+
+        [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const
+        {
+            return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
         }
 
         // reopens the file in readonly mode
@@ -530,22 +1024,15 @@ namespace ext
         static inline const std::string m_openmodeTruncate = "wb+";
         static inline const std::string m_openmodeAppend = "ab+";
 
-        std::unique_ptr<detail::File> m_file;
-
-        void seek(std::size_t offset) const
-        {
-            m_file->seekset(offset);
-        }
-
-        void seekToEnd() const
-        {
-            m_file->seekToEnd();
-        }
+        std::shared_ptr<detail::FileBase> m_file;
+        detail::ThreadPool* m_threadPool;
     };
 
     template <typename T>
     struct Buffer
     {
+        static_assert(std::is_trivially_copyable_v<T>);
+
         Buffer(std::size_t size) :
             m_data(std::make_unique<T[]>(size)),
             m_size(size)
@@ -589,6 +1076,70 @@ namespace ext
     };
 
     template <typename T>
+    struct DoubleBuffer
+    {
+        static_assert(std::is_trivially_copyable_v<T>);
+
+        // NOTE: total buffer volume is 2*size
+        DoubleBuffer(std::size_t size) :
+            m_front(size),
+            m_back(size)
+        {
+            ASSERT(size > 0u);
+        }
+
+        [[nodiscard]] T* back_data()
+        {
+            return m_back.data();
+        }
+
+        [[nodiscard]] const T* back_data() const
+        {
+            return m_back.data();
+        }
+
+        [[nodiscard]] T* data()
+        {
+            return m_front.data();
+        }
+
+        [[nodiscard]] const T* data() const
+        {
+            return m_front.data();
+        }
+
+        [[nodiscard]] const T& operator[](std::size_t i) const
+        {
+            return m_front[i];
+        }
+
+        [[nodiscard]] T& operator[](std::size_t i)
+        {
+            return m_front[i];
+        }
+
+        void swap()
+        {
+            std::swap(m_front, m_back);
+        }
+
+        [[nodiscard]] std::size_t size() const
+        {
+            return m_front.size();
+        }
+
+        [[nodiscard]] std::size_t size_bytes() const
+        {
+            return m_front.size_bytes();
+        }
+
+    private:
+        // TODO: maybe do one joint allocation
+        Buffer<T> m_front;
+        Buffer<T> m_back;
+    };
+
+    template <typename T>
     struct ImmutableSpan
     {
         static_assert(std::is_trivially_copyable_v<T>);
@@ -603,7 +1154,7 @@ namespace ext
             using iterator_category = std::input_iterator_tag;
             using pointer = const T*;
 
-            SequentialIterator(const ImmutableBinaryFile& file, std::size_t begin, std::size_t end, Buffer<T>&& buffer) :
+            SequentialIterator(const ImmutableBinaryFile& file, std::size_t begin, std::size_t end, DoubleBuffer<T>&& buffer) :
                 m_file(file),
                 m_fileBegin(begin * sizeof(T)),
                 m_fileEnd(end * sizeof(T)),
@@ -615,6 +1166,7 @@ namespace ext
                 ASSERT(m_fileEnd <= m_file.size());
                 ASSERT(m_file.size() % sizeof(T) == 0);
 
+                refillBuffer();
                 refillBuffer();
             }
 
@@ -660,32 +1212,49 @@ namespace ext
             ImmutableBinaryFile m_file;
             std::size_t m_fileBegin;
             std::size_t m_fileEnd;
-            Buffer<T> m_buffer;
+            DoubleBuffer<T> m_buffer;
             T* m_bufBegin;
             T* m_bufEnd;
+            std::future<std::size_t> m_future;
 
             void refillBuffer()
             {
-                ASSERT(m_bufBegin == m_bufEnd);
+                waitForBuffer();
+
+                ASSERT(m_bufBegin == m_buffer.data() || m_bufBegin == nullptr);
+                ASSERT(!m_future.valid());
 
                 const std::size_t bytesLeft = m_fileEnd - m_fileBegin;
                 if (bytesLeft == 0)
                 {
-                    m_bufBegin = nullptr;
-                    m_bufEnd = nullptr;
+                    // simulate empty read so we don't request a read for 0 bytes
+                    std::promise<std::size_t> promise;
+                    m_future = promise.get_future();
+                    promise.set_value(0);
                     return;
                 }
 
                 const std::size_t numObjectsToRead = std::min(bytesLeft / sizeof(T), m_buffer.size());
 
-                const std::size_t numObjectsRead = m_file.read(
-                    reinterpret_cast<std::byte*>(m_buffer.data()),
+                m_future = m_file.read(
+                    Async{},
+                    reinterpret_cast<std::byte*>(m_buffer.back_data()),
                     m_fileBegin,
                     sizeof(T),
                     numObjectsToRead
                 );
+            }
 
-                m_fileBegin += numObjectsToRead * sizeof(T);
+            void waitForBuffer()
+            {
+                if (!m_future.valid()) return;
+
+                ASSERT(m_bufBegin == m_bufEnd);
+
+                const std::size_t numObjectsRead = m_future.get();
+                m_buffer.swap();
+
+                m_fileBegin += numObjectsRead * sizeof(T);
                 if (numObjectsRead)
                 {
                     m_bufBegin = m_buffer.data();
@@ -839,7 +1408,7 @@ namespace ext
 
                     if (elementsRead != 1)
                     {
-                        throw Exception("Cannot read file.");
+                        detail::except::throwReadException(m_file.path(), idx, 1, elementsRead);
                     }
                     m_lastReadIdx = idx;
                 }
@@ -876,6 +1445,7 @@ namespace ext
             m_begin(0u),
             m_end(m_file.size() / sizeof(T))
         {
+            ASSERT(m_file.size() % sizeof(T) == 0);
         }
 
         ImmutableSpan(const ImmutableBinaryFile& file, std::size_t begin, std::size_t size) :
@@ -883,8 +1453,9 @@ namespace ext
             m_begin(begin),
             m_end(begin + size)
         {
-            ASSERT(begin <= end);
-            ASSERT(end * sizeof(T) <= m_file.size());
+            ASSERT(m_begin <= m_end);
+            ASSERT(m_end * sizeof(T) <= m_file.size());
+            ASSERT(m_file.size() % sizeof(T) == 0);
         }
 
         ImmutableSpan(const RandomAccessIterator& begin, const RandomAccessIterator& end) :
@@ -922,25 +1493,37 @@ namespace ext
             return m_begin == m_end;
         }
 
-        void read(T* destination, std::size_t offset, std::size_t count) const
+        [[nodiscard]] std::size_t read(T* destination, std::size_t offset, std::size_t count) const
         {
             const std::size_t elementsRead = m_file.read(
                 reinterpret_cast<std::byte*>(destination),
-                offset * sizeof(T),
+                (m_begin + offset) * sizeof(T),
                 sizeof(T),
                 count
             );
 
-            if (elementsRead != count)
-            {
-                throw Exception("Cannot read file.");
-            }
+            return elementsRead;
+        }
+
+        std::future<std::size_t> read(Async, T* destination, std::size_t offset, std::size_t count) const
+        {
+            return m_file.read(
+                Async{},
+                reinterpret_cast<std::byte*>(destination),
+                (m_begin + offset) * sizeof(T),
+                sizeof(T),
+                count
+            );
         }
 
         [[nodiscard]] std::size_t read(T* destination) const
         {
-            read(destination, 0, size());
-            return size();
+            return read(destination, 0, size());
+        }
+
+        [[nodiscard]] std::future<std::size_t> read(Async, T* destination) const
+        {
+            return read(Async{}, destination, 0, size());
         }
 
         [[nodiscard]] T operator[](std::size_t i) const
@@ -948,7 +1531,11 @@ namespace ext
             ASSERT(i < size());
 
             T value;
-            read(&value, i, 1u);
+            const std::size_t elementsRead = read(&value, i, 1u);
+            if (elementsRead != 1)
+            {
+                detail::except::throwReadException(path(), m_begin + i, 1, elementsRead);
+            }
 
             return value;
         }
@@ -967,7 +1554,7 @@ namespace ext
             return operator[](m_end - 1u);
         }
 
-        [[nodiscard]] auto begin_seq(Buffer<T>&& buffer = Buffer<T>(1024)) const
+        [[nodiscard]] auto begin_seq(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
         {
             return SequentialIterator(m_file, m_begin, m_end, std::move(buffer));
         }
@@ -977,7 +1564,7 @@ namespace ext
             return typename SequentialIterator::Sentinel{};
         }
 
-        [[nodiscard]] auto cbegin_seq(Buffer<T>&& buffer = Buffer<T>(1024)) const
+        [[nodiscard]] auto cbegin_seq(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
         {
             return begin_seq(std::move(buffer));
         }
@@ -1007,7 +1594,7 @@ namespace ext
             return end_rand();
         }
 
-        [[nodiscard]] auto begin(Buffer<T>&& buffer = Buffer<T>(1024)) const
+        [[nodiscard]] auto begin(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
         {
             return begin_seq(std::move(buffer));
         }
@@ -1017,7 +1604,7 @@ namespace ext
             return end_seq();
         }
 
-        [[nodiscard]] auto cbegin(Buffer<T>&& buffer = Buffer<T>(1024)) const
+        [[nodiscard]] auto cbegin(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
         {
             return begin(std::move(buffer));
         }
@@ -1060,12 +1647,22 @@ namespace ext
 
         using value_type = T;
 
-        // it "borrows" the file, allows its later retrieval
-        BackInserter(BinaryOutputFile&& file, Buffer<T>&& buffer = Buffer<T>(1024)) :
-            m_file(std::move(file)),
+        // Default buffer size makes it work like it is unbuffered
+        BackInserter(BinaryOutputFile& file) :
+            m_file(&file),
+            m_buffer(1),
+            m_nextEmpty(m_buffer.data()),
+            m_live(true),
+            m_numObjectsToWrite(0)
+        {
+        }
+
+        BackInserter(BinaryOutputFile& file, DoubleBuffer<T>&& buffer) :
+            m_file(&file),
             m_buffer(std::move(buffer)),
             m_nextEmpty(m_buffer.data()),
-            m_live(true)
+            m_live(true),
+            m_numObjectsToWrite(0)
         {
         }
 
@@ -1076,39 +1673,56 @@ namespace ext
 
         ~BackInserter()
         {
-            flushBuffer();
+            // Don't throw from a destructor
+            try
+            {
+                flush();
+                m_live = false;
+            }
+            catch (...)
+            {
+            }
         }
 
         [[nodiscard]] decltype(auto) path() const
         {
-            return m_file.path();
+            ASSERT(m_live);
+
+            return m_file->path();
         }
 
         template <typename... Ts>
         void emplace(Ts&& ... args)
         {
+            ASSERT(m_live);
+
             *(m_nextEmpty++) = T{ std::forward<Ts>(args)... };
 
             if (m_nextEmpty == m_buffer.data() + m_buffer.size())
             {
-                flushBuffer();
+                writeBuffer();
             }
         }
 
         // pods don't benefit from move semantics
         void push(const T& value)
         {
+            ASSERT(m_live);
+
             *(m_nextEmpty++) = value;
 
             if (m_nextEmpty == m_buffer.data() + m_buffer.size())
             {
-                flushBuffer();
+                writeBuffer();
             }
         }
 
         void append(const T* data, std::size_t count)
         {
+            ASSERT(m_live);
+
             const std::size_t bufferSizeLeft = m_buffer.size() - (m_nextEmpty - m_buffer.data());
+            // TODO: should be <=? Or has to be < because we have to leave space for emplace/push?
             if (count < bufferSizeLeft)
             {
                 // if we can fit it in the buffer with some space left then do it
@@ -1117,67 +1731,90 @@ namespace ext
             }
             else
             {
+                // TODO: try to write to a buffer after swapping
+
                 // if we would fill the buffer completely or it doesn't fit then flush what we have
                 // and write straight from the passed data
-                flushBuffer();
-                m_file.write(reinterpret_cast<const std::byte*>(data), sizeof(T), count);
-                m_file.flush();
+                writeBuffer();
+
+                // since this write omits the buffer we have to make
+                // sure it's sequenced after the previous one completes
+                waitForBufferWritten();
+
+                const std::size_t numWritten = m_file->append(reinterpret_cast<const std::byte*>(data), sizeof(T), count);
+                m_file->flush();
+
+                if (numWritten != count)
+                {
+                    detail::except::throwAppendException(path(), count, numWritten);
+                }
             }
         }
 
         void flush()
         {
-            flushBuffer();
-        }
-
-        [[nodiscard]] BinaryOutputFile release() &&
-        {
             if (m_live)
             {
-                flushBuffer();
-                m_live = false;
+                writeBuffer();
+                waitForBufferWritten();
+                m_file->flush();
             }
-            return std::move(m_file);
         }
 
-        [[nodiscard]] Buffer<T> buffer() &&
+        [[nodiscard]] DoubleBuffer<T> buffer() &&
         {
-            if (m_live)
-            {
-                flushBuffer();
-                m_live = false;
-            }
+            flush();
+            m_live = false;
             return std::move(m_buffer);
         }
 
     private:
-        BinaryOutputFile m_file;
-        Buffer<T> m_buffer;
+        BinaryOutputFile* m_file;
+        DoubleBuffer<T> m_buffer;
         T* m_nextEmpty;
         bool m_live;
+        std::future<std::size_t> m_future;
+        std::size_t m_numObjectsToWrite;
 
-        void flushBuffer()
+        void writeBuffer()
         {
             if (m_buffer.data() == nullptr)
             {
                 return;
             }
 
-            const std::size_t numObjectsToWrite = m_nextEmpty - m_buffer.data();
-            if (numObjectsToWrite == 0u)
+            waitForBufferWritten();
+
+            m_buffer.swap();
+            const std::size_t numObjectsToWrite = m_nextEmpty - m_buffer.back_data();
+
+            m_numObjectsToWrite = numObjectsToWrite;
+
+            if (numObjectsToWrite)
             {
-                return;
+                m_future = m_file->append(
+                    Async{},
+                    reinterpret_cast<const std::byte*>(m_buffer.back_data()),
+                    sizeof(T),
+                    m_numObjectsToWrite
+                );
             }
 
-            m_file.write(
-                reinterpret_cast<const std::byte*>(m_buffer.data()),
-                sizeof(T),
-                numObjectsToWrite
-            );
-
-            m_file.flush();
-
             m_nextEmpty = m_buffer.data();
+        }
+
+        void waitForBufferWritten()
+        {
+            if (m_future.valid())
+            {
+                ASSERT(m_buffer.data() != nullptr);
+
+                const std::size_t numWrittenObjects = m_future.get();
+                if (numWrittenObjects != m_numObjectsToWrite)
+                {
+                    detail::except::throwAppendException(path(), m_numObjectsToWrite, numWrittenObjects);
+                }
+            }
         }
     };
 
@@ -1189,11 +1826,12 @@ namespace ext
         using value_type = T;
 
         // it "borrows" the file, allows its later retrieval
-        Vector(BinaryInputOutputFile&& file, Buffer<T>&& buffer = Buffer<T>(1024)) :
+        Vector(BinaryInputOutputFile&& file, DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) :
             m_file(std::move(file)),
             m_buffer(std::move(buffer)),
             m_nextEmpty(m_buffer.data()),
-            m_size(m_file.size())
+            m_size(m_file.size()),
+            m_numObjectsToWrite(0)
         {
         }
 
@@ -1204,7 +1842,15 @@ namespace ext
 
         ~Vector()
         {
-            flushBuffer();
+            // Don't throw from a destructor
+            try
+            {
+                flush();
+            }
+            catch (std::runtime_error&)
+            {
+
+            }
         }
 
         [[nodiscard]] decltype(auto) path() const
@@ -1227,10 +1873,8 @@ namespace ext
             return m_size == 0;
         }
 
-        [[nodiscard]] std::size_t readSome(T* destination, std::size_t offset, std::size_t count)
+        [[nodiscard]] std::size_t readNoFlush(T* destination, std::size_t offset, std::size_t count) const
         {
-            flushBuffer();
-
             const std::size_t elementsRead = m_file.read(
                 reinterpret_cast<std::byte*>(destination),
                 offset * sizeof(T),
@@ -1241,22 +1885,49 @@ namespace ext
             return elementsRead;
         }
 
-        void read(T* destination, std::size_t offset, std::size_t count)
+        [[nodiscard]] std::future<std::size_t> readNoFlush(Async, T* destination, std::size_t offset, std::size_t count) const
         {
-            flushBuffer();
+            return m_file.read(
+                Async{},
+                reinterpret_cast<std::byte*>(destination),
+                offset * sizeof(T),
+                sizeof(T),
+                count
+            );
+        }
 
-            const std::size_t elementsRead = readSome(destination, offset, count);
+        [[nodiscard]] std::size_t readNoFlush(T* destination) const
+        {
+            return readNoFlush(destination, 0, size());
+        }
 
-            if (elementsRead != count)
-            {
-                throw Exception("Cannot read file.");
-            }
+        [[nodiscard]] std::size_t readNoFlush(Async, T* destination) const
+        {
+            return readNoFlush(Async{}, destination, 0, size());
+        }
+
+        [[nodiscard]] std::size_t read(T* destination, std::size_t offset, std::size_t count)
+        {
+            flush();
+
+            return readNoFlush(destination, offset, count);
+        }
+
+        [[nodiscard]] std::future<std::size_t> read(Async, T* destination, std::size_t offset, std::size_t count)
+        {
+            flush();
+
+            return readNoFlush(Async{}, destination, offset, count);
         }
 
         [[nodiscard]] std::size_t read(T* destination)
         {
-            read(destination, 0, size());
-            return size();
+            return read(destination, 0, size());
+        }
+
+        [[nodiscard]] std::size_t read(Async, T* destination)
+        {
+            return read(Async{}, destination, 0, size());
         }
 
         [[nodiscard]] T operator[](std::size_t i)
@@ -1264,7 +1935,11 @@ namespace ext
             ASSERT(i < size());
 
             T value;
-            read(&value, i, 1u);
+            const std::size_t readElements = read(&value, i, 1u);
+            if (readElements != 1u)
+            {
+                detail::except::throwReadException(path(), i, 1, readElements);
+            }
 
             return value;
         }
@@ -1290,10 +1965,8 @@ namespace ext
 
             if (m_nextEmpty == m_buffer.data() + m_buffer.size())
             {
-                flushBuffer();
+                writeBuffer();
             }
-
-            m_size += 1;
         }
 
         // pods don't benefit from move semantics
@@ -1303,10 +1976,8 @@ namespace ext
 
             if (m_nextEmpty == m_buffer.data() + m_buffer.size())
             {
-                flushBuffer();
+                writeBuffer();
             }
-
-            m_size += 1;
         }
 
         void append(const T* data, std::size_t count)
@@ -1322,26 +1993,38 @@ namespace ext
             {
                 // if we would fill the buffer completely or it doesn't fit then flush what we have
                 // and write straight from the passed data
-                flushBuffer();
-                m_file.write(reinterpret_cast<const std::byte*>(data), sizeof(T), count);
-                m_file.flush();
-            }
+                writeBuffer();
 
-            m_size += count;
+                // since this write omits the buffer we have to make
+                // sure it's sequenced after the previous one completes
+                waitForBufferWritten();
+
+                const std::size_t numWritten = m_file.append(reinterpret_cast<const std::byte*>(data), sizeof(T), count);
+                m_file.flush();
+
+                if (numWritten != count)
+                {
+                    detail::except::throwAppendException(path(), count, numWritten);
+                }
+            }
         }
 
         void flush()
         {
-            flushBuffer();
+            writeBuffer();
+            waitForBufferWritten();
+            m_file.flush();
         }
 
     private:
         BinaryInputOutputFile m_file;
-        Buffer<T> m_buffer;
+        DoubleBuffer<T> m_buffer;
         T* m_nextEmpty;
         std::size_t m_size;
+        std::future<std::size_t> m_future;
+        std::size_t m_numObjectsToWrite;
 
-        void flushBuffer()
+        void writeBuffer()
         {
             if (m_buffer.data() == nullptr)
             {
@@ -1354,15 +2037,30 @@ namespace ext
                 return;
             }
 
-            m_file.write(
-                reinterpret_cast<const std::byte*>(m_buffer.data()),
+            waitForBufferWritten();
+
+            m_buffer.swap();
+            m_numObjectsToWrite = numObjectsToWrite;
+            m_future = m_file.append(
+                Async{},
+                reinterpret_cast<const std::byte*>(m_buffer.back_data()),
                 sizeof(T),
-                numObjectsToWrite
+                m_numObjectsToWrite
             );
 
-            m_file.flush();
-
             m_nextEmpty = m_buffer.data();
+        }
+
+        void waitForBufferWritten()
+        {
+            if (m_future.valid())
+            {
+                const std::size_t numWrittenObjects = m_future.get();
+                if (numWrittenObjects != m_numObjectsToWrite)
+                {
+                    detail::except::throwAppendException(path(), m_numObjectsToWrite, numWrittenObjects);
+                }
+            }
         }
     };
 
@@ -1435,17 +2133,12 @@ namespace ext
         TemporaryPaths(std::filesystem::path dir = "") :
             m_dir(std::move(dir))
         {
-            std::filesystem::create_directories(dir);
+            std::filesystem::create_directories(m_dir);
         }
 
         [[nodiscard]] std::filesystem::path& next()
         {
             return m_paths.emplace_back(uniquePath(m_dir));
-        }
-
-        [[nodiscard]] const std::filesystem::path& last()
-        {
-            return m_paths.back();
         }
 
         ~TemporaryPaths()
@@ -1460,32 +2153,6 @@ namespace ext
         std::filesystem::path m_dir;
         std::vector<std::filesystem::path> m_paths;
     };
-
-    // these "borrow" the file for the function call
-    template <typename T, typename FuncT>
-    void withBackInserter(BinaryOutputFile& file, FuncT&& func)
-    {
-        auto backInserter = BackInserter<T>(std::move(file));
-        std::forward<FuncT>(func)(backInserter);
-        file = std::move(backInserter).release();
-    }
-    template <typename T, typename FuncT>
-    void withBackInserterUnbuffered(BinaryOutputFile& file, FuncT&& func)
-    {
-        static Buffer<T> buffer(1);
-        auto backInserter = BackInserter<T>(std::move(file), std::move(buffer));
-        std::forward<FuncT>(func)(backInserter);
-        buffer = std::move(backInserter).buffer();
-        file = std::move(backInserter).release();
-    }
-
-    template <typename T, typename FuncT>
-    void withBackInserter(BinaryOutputFile& file, Buffer<T>&& buffer, FuncT&& func)
-    {
-        auto backInserter = BackInserter<T>(std::move(file), std::move(buffer));
-        std::forward<FuncT>(func)(backInserter);
-        file = std::move(backInserter).release();
-    }
 
     struct ProgressReport
     {
@@ -1568,74 +2235,52 @@ namespace ext
     }
 
     template <typename T>
-    void writeFile(const std::filesystem::path& path, const T* data, const std::size_t count)
+    [[nodiscard]] std::size_t writeFile(const std::filesystem::path& path, const T* data, const std::size_t count)
     {
-        const std::string pathString = path.string();
-        auto file = std::fopen(pathString.c_str(), "wb");
-        if (file == nullptr)
-        {
-            throw Exception("Cannot open file.");
-        }
-        const std::size_t objectsWritten = std::fwrite(data, sizeof(T), count, file);
-        if (objectsWritten != count)
-        {
-            throw Exception("Cannot write all elements.");
-        }
+        static_assert(std::is_trivially_copyable_v<T>);
 
-        std::fclose(file);
+        BinaryOutputFile file(path, OutputMode::Truncate);
+        return file.append(reinterpret_cast<const std::byte*>(data), sizeof(T), count);
     }
 
     template <typename T>
-    std::vector<T> readFile(const std::filesystem::path& path)
+    [[nodiscard]] std::future<std::size_t> writeFile(Async, const std::filesystem::path& path, const T* data, const std::size_t count)
     {
-        const std::string pathString = path.string();
-        auto file = std::fopen(pathString.c_str(), "rb");
-        if (file == nullptr)
-        {
-            throw Exception("Cannot open file.");
-        }
+        static_assert(std::is_trivially_copyable_v<T>);
 
-        std::fseek(file, 0, SEEK_END);
-        const std::size_t count = std::ftell(file) / sizeof(T);
-        std::fseek(file, 0, SEEK_SET);
-
-        std::vector<T> entries(count);
-
-        std::fread(entries.data(), sizeof(T), count, file);
-        std::fclose(file);
-
-        return entries;
+        BinaryOutputFile file(Pooled{}, path, OutputMode::Truncate);
+        // This is fine, the async pipeline uses shared_ptr so the file will be kept alive.
+        return file.append(Async{}, reinterpret_cast<const std::byte*>(data), sizeof(T), count);
     }
 
     template <typename T>
-    void copy(const ImmutableSpan<T>& in, BinaryOutputFile& outFile)
+    [[nodiscard]] std::vector<T> readFile(const std::filesystem::path& path)
     {
-        withBackInserter<T>(outFile, [&](BackInserter<T>& out) {
-            for (auto& v : in)
-            {
-                out.push(v);
-            }
-            });
+        static_assert(std::is_trivially_copyable_v<T>);
+
+        ImmutableBinaryFile file(path);
+        std::vector<T> data(file.size() / sizeof(T));
+        (void)file.read(reinterpret_cast<std::byte*>(data.data()), 0, sizeof(T), file.size() / sizeof(T));
+        return data;
     }
 
     template <typename T>
-    void concat(const std::vector<ImmutableSpan<T>>& in, BinaryOutputFile& outFile)
+    [[nodiscard]] std::future<std::size_t> readFile(Async, const std::filesystem::path& path, std::vector<T>& data)
     {
-        withBackInserter<T>(outFile, [&](BackInserter<T>& out) {
-            for (auto& i : in)
-            {
-                for (auto& v : i)
-                {
-                    out.push(v);
-                }
-            }
-            });
+        static_assert(std::is_trivially_copyable_v<T>);
+
+        ImmutableBinaryFile file(path);
+        data.clear();
+        data.resize(file.size() / sizeof(T));
+        // This is fine, the async pipeline uses shared_ptr so the file will be kept alive.
+        return file.read(Async{}, reinterpret_cast<std::byte*>(data.data()), 0, sizeof(T), file.size() / sizeof(T));
     }
 
     namespace detail::merge
     {
-        static constexpr std::size_t outputBufferSizeMultiplier = 2;
-        static constexpr std::size_t maxNumMergedInputs = 16;
+        static constexpr std::size_t maxOutputBufferSizeMultiplier = 8;
+        static constexpr std::size_t maxNumMergedInputs = 192;
+        static constexpr std::size_t priorityQueueMergeThreshold = 32;
 
         [[nodiscard]] std::size_t merge_assess_work(
             std::vector<std::size_t>::const_iterator inSizesBegin,
@@ -1650,18 +2295,23 @@ namespace ext
             }
 
             // prepare at most maxNumMergedInputs parts
-            const std::size_t numInputsPerPart = ceilDiv(numInputs, maxNumMergedInputs);
+            const std::size_t numInputsPerPart = maxNumMergedInputs;
             std::size_t writes = 0;
             std::size_t offset = 0;
+            std::size_t parts = 0;
             for (; offset + numInputsPerPart < numInputs; offset += numInputsPerPart)
             {
                 writes += merge_assess_work(std::next(inSizesBegin, offset), std::next(inSizesBegin, offset + numInputsPerPart));
+                parts += 1;
             }
 
             // we may have some inputs left if numInputs % numInputsPerPart != 0
-            if (offset + 1u < numInputs)
+            if (offset < numInputs)
             {
-                writes += merge_assess_work(std::next(inSizesBegin, offset), inSizesEnd);
+                if (parts + (numInputs - offset) > maxNumMergedInputs)
+                {
+                    writes += merge_assess_work(std::next(inSizesBegin, offset), inSizesEnd);
+                }
             }
 
             return writes + std::accumulate(inSizesBegin, inSizesEnd, static_cast<std::size_t>(0));
@@ -1700,6 +2350,8 @@ namespace ext
 
             ASSERT(numInputs <= maxNumMergedInputs);
 
+            const std::size_t outputBufferSizeMultiplier = std::min(numInputs, maxOutputBufferSizeMultiplier);
+
             const std::size_t bufferUnitSize = numObjectsPerBufferUnit<T>(
                 maxMemoryBytes, numInputs + outputBufferSizeMultiplier
                 );
@@ -1721,68 +2373,130 @@ namespace ext
                 maxInputBufferSize = std::max(maxInputBufferSize, bufferSize);
                 numTotal += size;
 
-                iters.emplace_back(i.begin(Buffer<T>(bufferSize)), i.end());
+                iters.emplace_back(i.begin(DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
             }
 
             ASSERT(iters.size() > 1);
 
-            // this will hold the current values for each iterator
-            std::vector<T> nextValues(iters.size());
-
-            // we ensure that removal leaves the elements in the same order
-            auto removeIter = [&iters, &nextValues](std::size_t i) {
-                iters.erase(std::begin(iters) + i);
-                nextValues.erase(std::begin(nextValues) + i);
-            };
-
-            // assign current values
-            for (std::size_t i = 0; i < iters.size(); ++i)
-            {
-                nextValues[i] = *(iters[i].begin());
-            }
-
             std::size_t numProcessed = 0;
             const std::size_t outputBufferSize = maxInputBufferSize * outputBufferSizeMultiplier;
-            withBackInserter<T>(outFile, Buffer<T>(outputBufferSize), [&](BackInserter<T>& out) {
-                while (!iters.empty())
+
+            {
+                BackInserter<T> out(outFile, DoubleBuffer<T>((outputBufferSize + 1) / 2));
                 {
-                    std::size_t minIdx = 0;
-
-                    // do a search for minimum on contiguous memory
-                    const std::size_t numIters = iters.size();
-                    for (std::size_t i = 1; i < numIters; ++i)
+                    // Priority queue requires a comparator with a reversed comparison.
+                    // Also we ensure that the merge is stable by forcing order of iter indices.
+                    struct Comp : CompT
                     {
-                        if (cmp(nextValues[i], nextValues[minIdx]))
+                        Comp(CompT t) : CompT(t) {}
+
+                        bool operator()(const std::pair<T, std::size_t>& lhs, const std::pair<T, std::size_t>& rhs) const noexcept
                         {
-                            minIdx = i;
+                            if (CompT::operator()(rhs.first, lhs.first)) return true;
+                            else if (CompT::operator()(lhs.first, rhs.first)) return false;
+                            return lhs.second > rhs.second;
                         }
-                    }
+                    };
 
-                    // write the minimum value
-                    out.push(nextValues[minIdx]);
-
-                    // update iterator
-                    auto& it = ++iters[minIdx].begin();
-
-                    // if it's at the end remove it
-                    if (it == iters[minIdx].end())
+                    // We use a priority queue unless the number of files is small
+                    if (iters.size() > priorityQueueMergeThreshold)
                     {
-                        removeIter(minIdx);
-                    }
-                    else
-                    {
-                        // else we update the next value for this iterator
-                        nextValues[minIdx] = *it;
-                    }
+                        std::priority_queue<std::pair<T, std::size_t>, std::vector<std::pair<T, std::size_t>>, Comp> queue{ Comp(cmp) };
+                        for (std::size_t i = 0; i < iters.size(); ++i)
+                        {
+                            ASSERT(iters[i].begin() != iters[i].end());
+                            queue.emplace(*(iters[i].begin()), i);
+                        }
 
-                    ++numProcessed;
-                    if (numProcessed >= outputBufferSize)
-                    {
-                        progress.reportWork(numProcessed);
-                        numProcessed = 0;
+                        while (queue.size() > priorityQueueMergeThreshold)
+                        {
+                            auto [value, minIdx] = queue.top();
+                            queue.pop();
+
+                            // write the minimum value
+                            out.push(value);
+
+                            // update iterator
+                            auto& it = ++iters[minIdx].begin();
+
+                            // if it's at the end remove it
+                            if (it != iters[minIdx].end())
+                            {
+                                queue.emplace(*it, minIdx);
+                            }
+
+                            ++numProcessed;
+                            if (numProcessed >= outputBufferSize)
+                            {
+                                progress.reportWork(numProcessed);
+                                numProcessed = 0;
+                            }
+                        }
+
+                        // When merging with a priority_queue we don't erase immediately.
+                        iters.erase(std::remove_if(iters.begin(), iters.end(), [](const auto& iter) { return iter.begin() == iter.end(); }), iters.end());
                     }
                 }
-                });
+
+                ASSERT(iters.size() <= priorityQueueMergeThreshold);
+                // Finish with the linear scan procedure for low number of files.
+                {
+                    // this will hold the current values for each iterator
+                    std::vector<T> nextValues(iters.size());
+
+                    // we ensure that removal leaves the elements in the same order
+                    auto removeIter = [&iters, &nextValues](std::size_t i) {
+                        iters.erase(std::begin(iters) + i);
+                        nextValues.erase(std::begin(nextValues) + i);
+                    };
+
+                    // assign current values
+                    for (std::size_t i = 0; i < iters.size(); ++i)
+                    {
+                        ASSERT(iters[i].begin() != iters[i].end());
+                        nextValues[i] = *(iters[i].begin());
+                    }
+
+                    while (!iters.empty())
+                    {
+                        std::size_t minIdx = 0;
+
+                        // do a search for minimum on contiguous memory
+                        const std::size_t numIters = iters.size();
+                        for (std::size_t i = 1; i < numIters; ++i)
+                        {
+                            if (cmp(nextValues[i], nextValues[minIdx]))
+                            {
+                                minIdx = i;
+                            }
+                        }
+
+                        // write the minimum value
+                        out.push(nextValues[minIdx]);
+
+                        // update iterator
+                        auto& it = ++iters[minIdx].begin();
+
+                        // if it's at the end remove it
+                        if (it == iters[minIdx].end())
+                        {
+                            removeIter(minIdx);
+                        }
+                        else
+                        {
+                            // else we update the next value for this iterator
+                            nextValues[minIdx] = *it;
+                        }
+
+                        ++numProcessed;
+                        if (numProcessed >= outputBufferSize)
+                        {
+                            progress.reportWork(numProcessed);
+                            numProcessed = 0;
+                        }
+                    }
+                }
+            }
 
             progress.reportWork(numProcessed);
         }
@@ -1815,7 +2529,8 @@ namespace ext
             parts.reserve(maxNumMergedInputs);
 
             // prepare at most maxNumMergedInputs parts
-            const std::size_t numInputsPerPart = ceilDiv(numInputs, maxNumMergedInputs);
+            // each part is made from 128 files at most
+            const std::size_t numInputsPerPart = maxNumMergedInputs;
             std::size_t offset = 0;
             for (; offset + numInputsPerPart < numInputs; offset += numInputsPerPart)
             {
@@ -1831,17 +2546,20 @@ namespace ext
                     cmp,
                     progress
                     );
-
                 parts.emplace_back(partOut.seal());
             }
 
-            // we may have some inputs left if numInputs % numInputsPerPart != 0
-            if (offset != numInputs)
+            // we may have some inputs left
+            if (offset < numInputs)
             {
-                if (offset + 1u == numInputs)
+                if (parts.size() + (numInputs - offset) <= maxNumMergedInputs)
                 {
-                    // the last input is singular, don't copy
-                    parts.emplace_back(*std::next(std::begin(in), offset));
+                    // use the rest of the files as is if in total it would fit for one batch
+                    while (offset != numInputs)
+                    {
+                        parts.emplace_back(*std::next(std::begin(in), offset));
+                        ++offset;
+                    }
                 }
                 else
                 {
@@ -1889,7 +2607,7 @@ namespace ext
     )
     {
         auto progress = detail::Progress(callback);
-        progress.setTotalWork(detail::merge::merge_assess_work(in));
+        progress.setTotalWork(detail::merge::merge_assess_work<T, std::vector<ImmutableSpan<T>>>(in));
         return detail::merge::merge_impl<T, const std::vector<ImmutableSpan<T>>>(
             aux.memory, aux.tempdir, in, outFile, cmp, progress
             );
@@ -1944,6 +2662,11 @@ namespace ext
             detail::Progress<ProgressCallbackT>& progress
         )
         {
+            // TODO: Sort asyncronously along with reading/writing.
+            //       Requires 3 buffers with proper synchronization
+            //       and swapping of the buffers.
+            //       Should be doable without additional threads.
+
             const std::size_t inputSize = in.size();
 
             const std::size_t bufferSize = numObjectsPerBufferUnit<T>(maxMemoryBytes, 1);
@@ -1952,12 +2675,13 @@ namespace ext
             if (numParts == 1)
             {
                 Buffer<T> buffer(inputSize);
-                in.read(buffer.data(), 0, inputSize);
+                (void)in.read(buffer.data(), 0, inputSize);
                 sort(buffer.data(), buffer.data() + inputSize, cmp);
 
-                withBackInserterUnbuffered<T>(outFile, [&](BackInserter<T>& out) {
+                {
+                    BackInserter<T> out(outFile);
                     out.append(buffer.data(), inputSize);
-                    });
+                }
 
                 progress.reportWork(inputSize);
                 return;
@@ -1976,9 +2700,12 @@ namespace ext
                 sort(buffer.data(), buffer.data() + bufferSize, cmp);
 
                 BinaryOutputFile partOut(temporaryFiles.next());
-                withBackInserterUnbuffered<T>(partOut, [&](BackInserter<T>& out) {
+
+                {
+                    BackInserter<T> out(partOut);
                     out.append(buffer.data(), bufferSize);
-                    });
+                }
+
                 parts.emplace_back(partOut.seal());
 
                 progress.reportWork(bufferSize);
@@ -1991,9 +2718,12 @@ namespace ext
                 sort(buffer.data(), buffer.data() + left, cmp);
 
                 BinaryOutputFile partOut(temporaryFiles.next());
-                withBackInserterUnbuffered<T>(partOut, [&](BackInserter<T>& out) {
+
+                {
+                    BackInserter<T> out(partOut);
                     out.append(buffer.data(), left);
-                    });
+                }
+
                 parts.emplace_back(partOut.seal());
 
                 progress.reportWork(left);
@@ -2199,9 +2929,9 @@ namespace ext
     namespace detail::equal_range
     {
         [[nodiscard]] std::pair<std::size_t, std::size_t> neighbourhood(
-            std::size_t begin, 
-            std::size_t end, 
-            std::size_t mid, 
+            std::size_t begin,
+            std::size_t end,
+            std::size_t mid,
             std::size_t size
         )
         {
@@ -2260,10 +2990,10 @@ namespace ext
 
             template <typename T>
             [[nodiscard]] auto operator()(
-                std::size_t low, 
+                std::size_t low,
                 std::size_t high,
-                const T& lowValue, 
-                const T& highValue, 
+                const T& lowValue,
+                const T& highValue,
                 const T& key
                 ) const
             {
@@ -2285,7 +3015,7 @@ namespace ext
         auto makeInterpolator(ToArithmeticT&& a, ToSizeT&& b)
         {
             return detail::equal_range::Interpolate(
-                std::forward<ToArithmeticT>(a), 
+                std::forward<ToArithmeticT>(a),
                 std::forward<ToSizeT>(b)
             );
         }
@@ -2294,10 +3024,10 @@ namespace ext
         {
             template <typename T>
             [[nodiscard]] auto operator()(
-                std::size_t low, 
+                std::size_t low,
                 std::size_t high,
-                const T& lowValue, 
-                const T& highValue, 
+                const T& lowValue,
+                const T& highValue,
                 const T& key
                 ) const
             {
@@ -2324,24 +3054,24 @@ namespace ext
 
         // EntryType must be convertible to KeyType - values of type KeyType are stored for further reference
         template <
-            typename CrossT, 
-            typename EntryType, 
-            typename KeyType, 
+            typename CrossT,
+            typename EntryType,
+            typename KeyType,
             typename CompareT = std::less<>,
             typename KeyExtractorT = Identity,
             typename MiddleT = Interpolate<>
         >
-        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
-            CrossT,
-            const ImmutableSpan<EntryType>& data,
-            Range<KeyType>&& iters,
-            const std::vector<KeyType>& keys,
-            CompareT cmp = CompareT{},
-            KeyExtractorT extractKey = KeyExtractorT{},
-            MiddleT middle = MiddleT{}
-        )
+            [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
+                CrossT,
+                const ImmutableSpan<EntryType>& data,
+                Range<KeyType>&& iters,
+                const std::vector<KeyType>& keys,
+                CompareT cmp = CompareT{},
+                KeyExtractorT extractKey = KeyExtractorT{},
+                MiddleT middle = MiddleT{}
+            )
         {
-            // 32KiB should be abount how much we can read using 'constant' time.
+            // 32KiB should be about how much we can read using 'constant' time.
             constexpr std::size_t maxSeqReadSize = 32 * 1024;
             constexpr std::size_t maxNumSeqReadElements = std::max(static_cast<std::size_t>(3), maxSeqReadSize / sizeof(EntryType));
             static_assert(maxNumSeqReadElements >= 3, "We need at least 3 values at once to properly narrow the search");
@@ -2354,7 +3084,7 @@ namespace ext
                 ASSERT(begin != end);
                 ASSERT(end - begin <= maxNumSeqReadElements);
 
-                data.read(buffer.data(), begin, end - begin);
+                (void)data.read(buffer.data(), begin, end - begin);
 
                 return end - begin;
             };
@@ -2696,22 +3426,22 @@ namespace ext
         }
 
         template <
-            typename CrossT, 
-            typename EntryType, 
-            typename KeyType, 
+            typename CrossT,
+            typename EntryType,
+            typename KeyType,
             typename CompareT = std::less<>,
             typename KeyExtractorT = Identity,
             typename MiddleT = Interpolate<>
         >
-        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_impl(
-            CrossT,
-            const ImmutableSpan<EntryType>& data,
-            const RangeIndex<KeyType, CompareT>& index,
-            const std::vector<KeyType>& keys,
-            CompareT cmp = CompareT{},
-            KeyExtractorT extractKey = KeyExtractorT{},
-            MiddleT middle = MiddleT{}
-        )
+            [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_indexed_impl(
+                CrossT,
+                const ImmutableSpan<EntryType>& data,
+                const RangeIndex<KeyType, CompareT>& index,
+                const std::vector<KeyType>& keys,
+                CompareT cmp = CompareT{},
+                KeyExtractorT extractKey = KeyExtractorT{},
+                MiddleT middle = MiddleT{}
+            )
         {
             std::size_t begin = 0;
             std::size_t end = data.size();
@@ -2722,6 +3452,7 @@ namespace ext
             ranges.reserve(keys.size());
             for (int i = 0; i < keys.size(); ++i)
             {
+                // TODO: extract as a function of index
                 // Find a range entry that contains keys[i] or, if there is none, get
                 // the next range.
                 // NOTE: we don't use cmp here because we're comparing index entries,
@@ -2766,10 +3497,10 @@ namespace ext
             }
 
             return equal_range_multiple_impl(
-                CrossT{}, 
-                data, 
-                std::move(ranges), 
-                keys, 
+                CrossT{},
+                data,
+                std::move(ranges),
+                keys,
                 std::move(cmp),
                 std::move(extractKey),
                 std::move(middle)
@@ -2777,20 +3508,21 @@ namespace ext
         }
 
         template <
-            typename CrossT, 
-            typename EntryType, 
-            typename KeyType, 
+            typename CrossT,
+            typename EntryType,
+            typename KeyType,
             typename CompareT = std::less<>,
             typename KeyExtractorT = Identity,
             typename MiddleT = Interpolate<>
         >
-        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
-            CrossT,
-            const ImmutableSpan<EntryType>& data,
-            const std::vector<KeyType>& keys,
-            CompareT cmp = CompareT{},
-            KeyExtractorT extractKey = KeyExtractorT{},
-            MiddleT middle = MiddleT{})
+            [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_impl(
+                CrossT,
+                const ImmutableSpan<EntryType>& data,
+                const std::vector<KeyType>& keys,
+                CompareT cmp = CompareT{},
+                KeyExtractorT extractKey = KeyExtractorT{},
+                MiddleT middle = MiddleT{}
+            )
         {
             std::size_t begin = 0;
             std::size_t end = data.size();
@@ -2810,44 +3542,14 @@ namespace ext
 
             return equal_range_multiple_impl(
                 CrossT{},
-                data, 
-                std::move(ranges), 
-                keys, 
+                data,
+                std::move(ranges),
+                keys,
                 std::move(cmp),
                 std::move(extractKey),
                 std::move(middle)
             );
         }
-    }
-
-    template <
-        typename EntryType, 
-        typename KeyType, 
-        typename CompareT = std::less<>,
-        typename KeyExtractorT = detail::equal_range::Identity,
-        typename ToArithmeticT = detail::equal_range::Identity,
-        typename ToSizeTT = detail::equal_range::Identity
-    >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{},
-        ToArithmeticT toArithmetic = ToArithmeticT{},
-        ToSizeTT toSizeT = ToSizeTT{}
-    )
-    {
-        return detail::equal_range::equal_range_multiple_impl(
-            detail::equal_range::NoCrossUpdates{}, 
-            data, 
-            keys, 
-            std::move(cmp),
-            std::move(extractKey),
-            detail::equal_range::makeInterpolator(
-                std::move(toArithmetic), 
-                std::move(toSizeT)
-            )
-        );
     }
 
     template <
@@ -2858,18 +3560,18 @@ namespace ext
         typename ToArithmeticT = detail::equal_range::Identity,
         typename ToSizeTT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_cross(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{},
-        ToArithmeticT toArithmetic = ToArithmeticT{},
-        ToSizeTT toSizeT = ToSizeTT{}
-    )
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp(
+            const ImmutableSpan<EntryType>& data,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{},
+            ToArithmeticT toArithmetic = ToArithmeticT{},
+            ToSizeTT toSizeT = ToSizeTT{}
+        )
     {
         return detail::equal_range::equal_range_multiple_impl(
-            detail::equal_range::DoCrossUpdates{},
-            data, 
+            detail::equal_range::NoCrossUpdates{},
+            data,
             keys,
             std::move(cmp),
             std::move(extractKey),
@@ -2888,25 +3590,23 @@ namespace ext
         typename ToArithmeticT = detail::equal_range::Identity,
         typename ToSizeTT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_indexed(
-        const ImmutableSpan<EntryType>& data,
-        const RangeIndex<KeyType, CompareT>& index,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{},
-        ToArithmeticT toArithmetic = ToArithmeticT{},
-        ToSizeTT toSizeT = ToSizeTT{}
-    )
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_cross(
+            const ImmutableSpan<EntryType>& data,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{},
+            ToArithmeticT toArithmetic = ToArithmeticT{},
+            ToSizeTT toSizeT = ToSizeTT{}
+        )
     {
-        return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::NoCrossUpdates{}, 
+        return detail::equal_range::equal_range_multiple_impl(
+            detail::equal_range::DoCrossUpdates{},
             data,
-            index,
             keys,
             std::move(cmp),
             std::move(extractKey),
             detail::equal_range::makeInterpolator(
-                std::move(toArithmetic), 
+                std::move(toArithmetic),
                 std::move(toSizeT)
             )
         );
@@ -2920,15 +3620,47 @@ namespace ext
         typename ToArithmeticT = detail::equal_range::Identity,
         typename ToSizeTT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_indexed_cross(
-        const ImmutableSpan<EntryType>& data,
-        const RangeIndex<KeyType, CompareT>& index,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{},
-        ToArithmeticT toArithmetic = ToArithmeticT{},
-        ToSizeTT toSizeT = ToSizeTT{}
-    )
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_indexed(
+            const ImmutableSpan<EntryType>& data,
+            const RangeIndex<KeyType, CompareT>& index,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{},
+            ToArithmeticT toArithmetic = ToArithmeticT{},
+            ToSizeTT toSizeT = ToSizeTT{}
+        )
+    {
+        return detail::equal_range::equal_range_multiple_indexed_impl(
+            detail::equal_range::NoCrossUpdates{},
+            data,
+            index,
+            keys,
+            std::move(cmp),
+            std::move(extractKey),
+            detail::equal_range::makeInterpolator(
+                std::move(toArithmetic),
+                std::move(toSizeT)
+            )
+        );
+    }
+
+    template <
+        typename EntryType,
+        typename KeyType,
+        typename CompareT = std::less<>,
+        typename KeyExtractorT = detail::equal_range::Identity,
+        typename ToArithmeticT = detail::equal_range::Identity,
+        typename ToSizeTT = detail::equal_range::Identity
+    >
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_interp_indexed_cross(
+            const ImmutableSpan<EntryType>& data,
+            const RangeIndex<KeyType, CompareT>& index,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{},
+            ToArithmeticT toArithmetic = ToArithmeticT{},
+            ToSizeTT toSizeT = ToSizeTT{}
+        )
     {
         return detail::equal_range::equal_range_multiple_indexed_impl(
             detail::equal_range::DoCrossUpdates{},
@@ -2938,7 +3670,7 @@ namespace ext
             std::move(cmp),
             std::move(extractKey),
             detail::equal_range::makeInterpolator(
-                std::move(toArithmetic), 
+                std::move(toArithmetic),
                 std::move(toSizeT)
             )
         );
@@ -2950,15 +3682,15 @@ namespace ext
         typename CompareT = std::less<>,
         typename KeyExtractorT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{}
-    )
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin(
+            const ImmutableSpan<EntryType>& data,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{}
+        )
     {
         return detail::equal_range::equal_range_multiple_impl(
-            detail::equal_range::NoCrossUpdates{}, 
+            detail::equal_range::NoCrossUpdates{},
             data,
             keys,
             std::move(cmp),
@@ -2973,12 +3705,12 @@ namespace ext
         typename CompareT = std::less<>,
         typename KeyExtractorT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_cross(
-        const ImmutableSpan<EntryType>& data,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{}
-    )
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_cross(
+            const ImmutableSpan<EntryType>& data,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{}
+        )
     {
         return detail::equal_range::equal_range_multiple_impl(
             detail::equal_range::DoCrossUpdates{},
@@ -2996,16 +3728,16 @@ namespace ext
         typename CompareT = std::less<>,
         typename KeyExtractorT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_indexed(
-        const ImmutableSpan<EntryType>& data,
-        const RangeIndex<KeyType, CompareT>& index,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{}
-    )
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_indexed(
+            const ImmutableSpan<EntryType>& data,
+            const RangeIndex<KeyType, CompareT>& index,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{}
+        )
     {
         return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::NoCrossUpdates{}, 
+            detail::equal_range::NoCrossUpdates{},
             data,
             index,
             keys,
@@ -3021,91 +3753,361 @@ namespace ext
         typename CompareT = std::less<>,
         typename KeyExtractorT = detail::equal_range::Identity
     >
-    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_indexed_cross(
-        const ImmutableSpan<EntryType>& data,
-        const RangeIndex<KeyType, CompareT>& index,
-        const std::vector<KeyType>& keys,
-        CompareT cmp = CompareT{},
-        KeyExtractorT extractKey = KeyExtractorT{}
-    )
+        [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> equal_range_multiple_bin_indexed_cross(
+            const ImmutableSpan<EntryType>& data,
+            const RangeIndex<KeyType, CompareT>& index,
+            const std::vector<KeyType>& keys,
+            CompareT cmp = CompareT{},
+            KeyExtractorT extractKey = KeyExtractorT{}
+        )
     {
         return detail::equal_range::equal_range_multiple_indexed_impl(
-            detail::equal_range::DoCrossUpdates{}, 
+            detail::equal_range::DoCrossUpdates{},
             data,
             index,
-            keys, 
+            keys,
             std::move(cmp),
             std::move(extractKey),
             detail::equal_range::Binary{}
         );
     }
 
+    namespace detail
+    {
+        template <
+            typename BeginT,
+            typename EndT,
+            typename CompareT = std::less<>,
+            typename KeyExtractT = detail::equal_range::Identity
+        >
+            auto makeIndexImpl(
+                BeginT iter,
+                EndT end,
+                std::size_t maxNumEntriesInRange,
+                CompareT cmp = CompareT{},
+                KeyExtractT key = KeyExtractT{}
+            )
+        {
+            using EntryType = typename BeginT::value_type;
+            using KeyType = decltype(key(std::declval<EntryType>()));
+
+            ASSERT(iter != end);
+
+            std::vector<RangeIndexEntry<KeyType, CompareT>> iters;
+
+            EntryType startValue = *iter;
+            EntryType endValue = startValue;
+            EntryType firstOfNextRange = startValue;
+            EntryType prevValue = startValue;
+            std::size_t startIdx = 0;
+            std::size_t firstOfNextRangeIdx = 0;
+            std::size_t offset = 0;
+            while (iter != end)
+            {
+                prevValue = *iter;
+                ++iter;
+                ++offset;
+
+                // Go through the largest span of equal values
+                while (iter != end)
+                {
+                    if (cmp(prevValue, *iter))
+                    {
+                        break;
+                    }
+
+                    prevValue = *iter;
+                    ++offset;
+                    ++iter;
+                }
+
+                // We either reached an end in which case we create
+                // the last range spanning up to the end.
+                // Or we hit the first value different than the startValue
+
+                while (iter != end)
+                {
+                    // If the value changes then update the
+                    // range divisor position and respective values.
+                    // We do it even when the already selected span is longer
+                    // than maxNumEntriesInRange.
+                    if (cmp(prevValue, *iter))
+                    {
+                        firstOfNextRange = *iter;
+                        firstOfNextRangeIdx = startIdx + offset;
+                        endValue = prevValue;
+                    }
+
+                    // Either maxNumEntriesInRange long or as long as
+                    // the equal value span from the first while loop.
+                    if (offset >= maxNumEntriesInRange)
+                    {
+                        break;
+                    }
+
+                    prevValue = *iter;
+                    ++offset;
+                    ++iter;
+                }
+
+                RangeIndexEntry<KeyType, CompareT> e;
+                if (iter == end)
+                {
+                    // startValue is the lowValue of the range
+                    // prevValue is the highValue of the range
+                    // startIdx is low
+                    // startIdx + offset - 1 is high
+
+                    e.low = startIdx;
+                    e.lowValue = key(startValue);
+                    e.high = startIdx + offset - 1u;
+                    e.highValue = key(prevValue);
+                }
+                else
+                {
+                    // startValue is the lowValue of the range
+                    // endValue is the highValue of the range
+                    // startIdx is low
+                    // firstOfNextRangeIdx - 1 is high
+                    // firstOfNextRange is the lowValue of the next range
+                    // firstOfNextRangeIdx is the startIdx of the next range
+
+                    e.low = startIdx;
+                    e.lowValue = key(startValue);
+                    e.high = firstOfNextRangeIdx - 1u;
+                    e.highValue = key(endValue);
+
+                    // "How many already read values go to the next range"
+                    offset -= firstOfNextRangeIdx - startIdx;
+
+                    startIdx = firstOfNextRangeIdx;
+                    startValue = firstOfNextRange;
+                }
+                iters.emplace_back(e);
+            }
+
+            return RangeIndex<KeyType, CompareT>(std::move(iters));
+        }
+    }
+
+    // TODO: sequential make index (from a file)
+    // TODO: sequential incremental index maker
+    // Each index entry range starts with the first unique value.
+    // Ie. at most only one range contains any given value.
     template <
-        typename EntryType, 
+        typename EntryType,
         typename CompareT = std::less<>,
         typename KeyExtractT = detail::equal_range::Identity
     >
         auto makeIndex(
             const std::vector<EntryType> & values,
-            std::size_t size,
+            std::size_t maxNumEntriesInRange,
             CompareT cmp = CompareT{},
             KeyExtractT key = KeyExtractT{}
         )
     {
-        using KeyType = decltype(key(std::declval<EntryType>()));
-
         ASSERT(values.size() > 0);
 
-        if (size == 0)
-        {
-            RangeIndexEntry<KeyType, CompareT> e{
-                0, values.size() - 1u,
-                key(values.front()), key(values.back())
-            };
-            return RangeIndex<KeyType, CompareT>({ e });
-        }
-
-        std::vector<RangeIndexEntry<KeyType, CompareT>> iters;
-        iters.reserve(size);
-
-        const std::size_t minRangeSize = values.size() / size;
-
-        std::size_t idx = 0;
-        while (idx < values.size())
-        {
-            // we try to take as many equal values as possible
-            // or at least minRangeSize values
-            const auto [begin, end] = std::equal_range(values.begin(), values.end(), values[idx], cmp);
-            const std::size_t rangeSize = std::max(static_cast<std::size_t>(std::distance(begin, end)), minRangeSize);
-
-            // This can produce an anomaly where idxx is higher than previous idxy
-            // this is taken care of later
-            std::size_t idxx = static_cast<std::size_t>(std::distance(values.begin(), begin));
-            std::size_t idxy = idxx + rangeSize - 1u;
-
-            if (idxx < idx)
-            {
-                auto& prev = iters.back();
-                prev.high = idxx - 1u;
-                prev.highValue = key(values[prev.high]);
-            }
-
-            if (idxy >= values.size())
-            {
-                idxy = values.size() - 1u;
-            }
-            RangeIndexEntry<KeyType, CompareT> e{ idxx, idxy, key(values[idxx]), key(values[idxy]) };
-            iters.emplace_back(e);
-
-            idx = idxy + 1u;
-        }
-
-        ASSERT(!iters.empty());
-        ASSERT(iters.front().low == 0);
-        ASSERT(iters.back().high == values.size() - 1u);
-        ASSERT(iters.front().lowValue == key(values.front()));
-        ASSERT(iters.back().highValue == key(values.back()));
-
-        return RangeIndex<KeyType, CompareT>(std::move(iters));
+        return detail::makeIndexImpl(values.begin(), values.end(), maxNumEntriesInRange, cmp, key);
     }
+
+    template <
+        typename EntryType,
+        typename CompareT = std::less<>,
+        typename KeyExtractT = detail::equal_range::Identity
+    >
+        auto makeIndex(
+            const ImmutableSpan<EntryType> & values,
+            std::size_t maxNumEntriesInRange, // the actual number of entries covered by a range can be bigger
+                                              // but only when lowValue == highValue
+            CompareT cmp = CompareT{},
+            KeyExtractT key = KeyExtractT{},
+            DoubleBuffer<EntryType> buffer = DoubleBuffer<EntryType>(1024 * 1024 * 8 / sizeof(EntryType))
+        )
+    {
+        ASSERT(values.size() > 0);
+
+        return detail::makeIndexImpl(values.begin(std::move(buffer)), values.end(), maxNumEntriesInRange, cmp, key);
+    }
+
+    template <
+        typename EntryType,
+        typename CompareT = std::less<>,
+        typename KeyExtractT = detail::equal_range::Identity
+    >
+        struct IndexBuilder : KeyExtractT
+    {
+        static_assert(std::is_empty_v<CompareT>);
+
+        using KeyType = decltype(std::declval<KeyExtractT>()(std::declval<EntryType>()));
+        using IndexType = RangeIndex<KeyType, CompareT>;
+
+        IndexBuilder(std::size_t maxNumEntriesInRange, CompareT cmp = CompareT{}, KeyExtractT key = KeyExtractT{}) :
+            KeyExtractT(key),
+            m_ranges{},
+            m_startValue{},
+            m_endValue{},
+            m_firstOfNextRange{},
+            m_prevValue{},
+            m_maxNumEntriesInRange(maxNumEntriesInRange),
+            m_startIdx{},
+            m_firstOfNextRangeIdx{},
+            m_offset{ 0 },
+            m_state(0)
+        {
+        }
+
+        void append(const EntryType* begin, std::size_t count)
+        {
+            if (count == 0)
+            {
+                return;
+            }
+
+            appendImpl(begin, count);
+        }
+
+        void append(const EntryType value)
+        {
+            appendImpl(&value, 1);
+        }
+
+        IndexType end()
+        {
+            if (m_offset != 0)
+            {
+                RangeIndexEntry<KeyType, CompareT> e;
+
+                e.low = m_startIdx;
+                e.lowValue = m_startValue;
+                e.high = m_startIdx + m_offset - 1u;
+                e.highValue = m_prevValue;
+
+                m_ranges.emplace_back(e);
+            }
+
+            return IndexType(std::move(m_ranges));
+        }
+
+    private:
+        std::vector<RangeIndexEntry<KeyType, CompareT>> m_ranges;
+        EntryType m_startValue;
+        EntryType m_endValue;
+        EntryType m_firstOfNextRange;
+        EntryType m_prevValue;
+        std::size_t m_maxNumEntriesInRange;
+        std::size_t m_startIdx;
+        std::size_t m_firstOfNextRangeIdx;
+        std::size_t m_offset;
+        std::size_t m_state;
+
+        void appendImpl(const EntryType* begin, std::size_t count)
+        {
+            const EntryType* end = begin + count;
+
+            while (begin != end)
+            {
+                switch (m_state)
+                {
+                case 0:
+                    m_startValue = *begin;
+                    m_endValue = KeyExtractT::operator()(m_startValue);
+                    m_firstOfNextRange = m_startValue;
+                    m_prevValue = KeyExtractT::operator()(m_startValue);
+                    m_startIdx = 0;
+                    m_firstOfNextRangeIdx = 0;
+                    m_state = 1;
+                    m_offset = 0;
+
+                case 1:
+                    m_prevValue = *begin;
+                    ++begin;
+                    ++m_offset;
+                    m_state = 2;
+
+                case 2:
+                    // Go through the largest span of equal values
+                    while (begin != end)
+                    {
+                        if (CompareT{}(m_prevValue, *begin))
+                        {
+                            break;
+                        }
+
+                        m_prevValue = *begin;
+                        ++m_offset;
+                        ++begin;
+                    }
+                    if (begin == end)
+                    {
+                        return;
+                    }
+
+                    m_state = 3;
+
+                case 3:
+
+                    // We either reached an end in which case we create
+                    // the last range spanning up to the end.
+                    // Or we hit the first value different than the startValue
+
+                    while (begin != end)
+                    {
+                        // If the value changes then update the
+                        // range divisor position and respective values.
+                        // We do it even when the already selected span is longer
+                        // than maxNumEntriesInRange.
+                        if (CompareT{}(m_prevValue, *begin))
+                        {
+                            m_firstOfNextRange = *begin;
+                            m_firstOfNextRangeIdx = m_startIdx + m_offset;
+                            m_endValue = m_prevValue;
+                        }
+
+                        // Either maxNumEntriesInRange long or as long as
+                        // the equal value span from the first while loop.
+                        if (m_offset >= m_maxNumEntriesInRange)
+                        {
+                            break;
+                        }
+
+                        m_prevValue = *begin;
+                        ++m_offset;
+                        ++begin;
+                    }
+                    if (begin == end)
+                    {
+                        return;
+                    }
+
+                    m_state = 4;
+
+                case 4:
+                    RangeIndexEntry<KeyType, CompareT> e;
+
+                    // startValue is the lowValue of the range
+                    // endValue is the highValue of the range
+                    // startIdx is low
+                    // firstOfNextRangeIdx - 1 is high
+                    // firstOfNextRange is the lowValue of the next range
+                    // firstOfNextRangeIdx is the startIdx of the next range
+
+                    e.low = m_startIdx;
+                    e.lowValue = KeyExtractT::operator()(m_startValue);
+                    e.high = m_firstOfNextRangeIdx - 1u;
+                    e.highValue = KeyExtractT::operator()(m_endValue);
+
+                    // "How many already read values go to the next range"
+                    m_offset -= m_firstOfNextRangeIdx - m_startIdx;
+
+                    m_startIdx = m_firstOfNextRangeIdx;
+                    m_startValue = m_firstOfNextRange;
+
+                    m_ranges.emplace_back(e);
+
+                    m_state = 1;
+                }
+            }
+        }
+    };
 }

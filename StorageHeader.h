@@ -28,7 +28,8 @@ namespace persistence
         {
             // there may be garbage at the end
             // we don't care because we have sizes serialized
-            (void)headers.readSome(reinterpret_cast<char*>(this), offset, sizeof(HeaderEntry));
+            const std::size_t read = headers.read(reinterpret_cast<char*>(this), offset, sizeof(HeaderEntry));
+            ASSERT(m_size <= read);
         }
 
         HeaderEntry(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
@@ -154,8 +155,8 @@ namespace persistence
             // here we use operator, to create directories before we try to
             // create files there
             m_path((std::filesystem::create_directories(path), std::move(path))),
-            m_header({ m_path / headerPath, ext::OpenMode::Append }, ext::Buffer<char>(ext::numObjectsPerBufferUnit<char>(memory, 2))),
-            m_index({ m_path / indexPath, ext::OpenMode::Append }, ext::Buffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(memory, 2)))
+            m_header({ m_path / headerPath, ext::OutputMode::Append }, ext::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(memory, 4))),
+            m_index({ m_path / indexPath, ext::OutputMode::Append }, ext::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(memory, 4)))
         {
         }
 

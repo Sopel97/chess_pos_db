@@ -104,7 +104,7 @@ namespace persistence
             if constexpr (useIndex)
             {
                 path += "_index";
-                ext::writeFile<typename Index::EntryType>(path, index.data(), index.size());
+                (void)ext::writeFile<typename Index::EntryType>(path, index.data(), index.size());
             }
         }
 
@@ -134,7 +134,7 @@ namespace persistence
         struct File
         {
             File(std::filesystem::path path) :
-                m_entries(std::move(path)),
+                m_entries({ ext::Pooled{}, std::move(path) }),
                 m_index(readIndexFor(m_entries.path())),
                 m_id(std::stoi(m_entries.path().filename().string()))
             {
@@ -148,7 +148,7 @@ namespace persistence
             }
 
             File(std::filesystem::path path, Index&& index) :
-                m_entries(std::move(path)),
+                m_entries({ ext::Pooled{}, std::move(path) }),
                 m_index(std::move(index)),
                 m_id(std::stoi(m_entries.path().filename().string()))
             {
@@ -517,7 +517,7 @@ namespace persistence
 
                     const std::size_t indexSize = std::max(std::size_t{ 1 }, job.buffer.size() / 1024u);
                     Index index = ext::makeIndex(job.buffer, indexSize, std::less<>{}, extractEntryKey);
-                    ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
+                    (void)ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
                     writeIndexFor(job.path, index);
 
                     job.buffer.clear();
@@ -567,7 +567,7 @@ namespace persistence
                 ASSERT(!m_path.empty());
 
                 auto path = nextPath();
-                ext::writeFile(path, data, count);
+                (void)ext::writeFile(path, data, count);
                 m_files.emplace_back(path);
             }
 
