@@ -486,7 +486,13 @@ namespace persistence
 
                     lock.unlock();
 
-                    std::stable_sort(job.buffer.begin(), job.buffer.end());
+                    // NOTE: we don't need stable_sort here as game indices are
+                    //       already ordered within one buffer.
+                    std::sort(job.buffer.begin(), job.buffer.end(), [](auto&& lhs, auto&& rhs) {
+                        if (lhs < rhs) return true;
+                        else if (rhs < lhs) return false;
+                        return lhs.gameIdx() < rhs.gameIdx();
+                    });
 
                     lock.lock();
                     m_writeQueue.emplace(std::move(job));
