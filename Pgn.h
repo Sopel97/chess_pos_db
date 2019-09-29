@@ -19,6 +19,12 @@ namespace pgn
 {
     using namespace std::literals;
 
+    struct TagView
+    {
+        std::string_view key;
+        std::string_view value;
+    };
+
     namespace detail
     {
         [[nodiscard]] std::uint16_t parseUInt16(std::string_view sv)
@@ -210,6 +216,53 @@ namespace pgn
             }
         }
 
+        inline void seekNextTag(std::string_view& s)
+        {
+            const std::size_t idx = s.find('[');
+            if (idx == std::string::npos)
+            {
+                s.remove_prefix(s.size());
+            }
+            else
+            {
+                s.remove_prefix(idx);
+            }
+        }
+
+        inline TagView extractTagAdvance(std::string_view& s)
+        {
+            ASSERT(s.size() > 0);
+            ASSERT(s[0] == '[');
+
+            // Shortest valid tag is [A ""] which has length of 6
+            // It is assumed that there is no space after [,
+            // there is only one space between key and value, 
+            // and that there is no space after ",
+            // and that it ends with a ].
+            if (s.size() < 6)
+            {
+                return{};
+            }
+
+            const std::size_t space = s.find(' ', 1);
+            if (space == std::string::npos)
+            {
+                return {};
+            }
+            std::string_view key = s.substr(1, space - 1);
+
+            const std::size_t end = s.find('\"', space + 2);
+            if (end == std::string::npos)
+            {
+                return {};
+            }
+            std::string_view value = s.substr(space + 2, end - (space + 2));
+
+            s.remove_prefix(end + 2);
+
+            return { key, value };
+        }
+
         namespace lookup::extractMove
         {
             constexpr std::array<bool, 256> skip = []() {
@@ -344,7 +397,6 @@ namespace pgn
                 detail::seekNextMove(m_moveSection);
                 if (m_moveSection.empty())
                 {
-                    m_moveSection.remove_prefix(m_moveSection.size());
                     return *this;
                 }
 
@@ -413,6 +465,89 @@ namespace pgn
         std::string_view m_moveSection;
     };
 
+    struct UnparsedGameTags
+    {
+    private:
+
+        struct UnparsedTagsIterator
+        {
+            struct Sentinel {};
+
+            using value_type = TagView;
+            using difference_type = std::ptrdiff_t;
+            using reference = const TagView &;
+            using iterator_category = std::input_iterator_tag;
+            using pointer = const TagView*;
+
+            UnparsedTagsIterator(std::string_view tagSection) noexcept :
+                m_tagSection(tagSection)
+            {
+                ASSERT(m_tagSection.front() == '[');
+            }
+
+            const UnparsedTagsIterator& operator++()
+            {
+                detail::seekNextTag(m_tagSection);
+                if (m_tagSection.empty())
+                {
+                    return *this;
+                }
+
+                m_tag = detail::extractTagAdvance(m_tagSection);
+
+                return *this;
+            }
+
+            [[nodiscard]] bool friend operator==(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept
+            {
+                return lhs.m_tagSection.empty();
+            }
+
+            [[nodiscard]] bool friend operator!=(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept
+            {
+                return !(lhs == rhs);
+            }
+
+            [[nodiscard]] const TagView& operator*() const
+            {
+                return m_tag;
+            }
+
+            [[nodiscard]] const TagView* operator->() const
+            {
+                return &m_tag;
+            }
+
+        private:
+            std::string_view m_tagSection;
+            TagView m_tag;
+        };
+
+    public:
+
+        using iterator = UnparsedTagsIterator;
+        using const_iterator = UnparsedTagsIterator;
+
+        UnparsedGameTags(std::string_view tagSection) noexcept :
+            m_tagSection(tagSection)
+        {
+            ASSERT(!m_tagSection.empty());
+        }
+
+        [[nodiscard]] UnparsedTagsIterator begin()
+        {
+            return { m_tagSection };
+        }
+
+        [[nodiscard]] UnparsedTagsIterator::Sentinel end() const
+        {
+            return {};
+        }
+
+    private:
+        std::string_view m_tagSection;
+    };
+
     struct UnparsedGame
     {
         explicit UnparsedGame() :
@@ -427,6 +562,87 @@ namespace pgn
         {
             ASSERT(m_tagSection.front() == '[');
             ASSERT(m_moveSection.front() == '1');
+        }
+
+        [[nodiscard]] void getResultDateEcoEventWhiteBlack(
+            std::optional<GameResult>& result,
+            Date& date,
+            Eco& eco,
+            std::string_view& event,
+            std::string_view& white,
+            std::string_view& black
+        ) const
+        {
+            for (auto&& tag : tags())
+            {
+                if (tag.key == "Event"sv)
+                {
+                    event = tag.value;
+                }
+                else if (tag.key == "White"sv)
+                {
+                    white = tag.value;
+                }
+                else if (tag.key == "Black"sv)
+                {
+                    black = tag.value;
+                }
+                else if (tag.key == "Date"sv || tag.key == "UTCDate"sv)
+                {
+                    date = detail::parseDate(tag.value);
+                }
+                else if (tag.key == "ECO"sv)
+                {
+                    eco = Eco(tag.value);
+                }
+                else if (tag.key == "Result"sv)
+                {
+                    result = detail::parseGameResult(tag.value);
+                }
+            }
+        }
+
+        [[nodiscard]] void getResultDateEcoEventWhiteBlackPlyCount(
+            std::optional<GameResult>& result,
+            Date& date,
+            Eco& eco,
+            std::string_view& event,
+            std::string_view& white,
+            std::string_view& black,
+            std::uint16_t& plyCount
+        ) const
+        {
+            for (auto&& tag : tags())
+            {
+                if (tag.key == "Event"sv)
+                {
+                    event = tag.value;
+                }
+                else if (tag.key == "White"sv)
+                {
+                    white = tag.value;
+                }
+                else if (tag.key == "Black"sv)
+                {
+                    black = tag.value;
+                }
+                else if (tag.key == "Date"sv || tag.key == "UTCDate"sv)
+                {
+                    date = detail::parseDate(tag.value);
+                }
+                else if (tag.key == "ECO"sv)
+                {
+                    eco = Eco(tag.value);
+                }
+                else if (tag.key == "Result"sv)
+                {
+                    result = detail::parseGameResult(tag.value);
+                }
+                else if (tag.key == "PlyCount"sv)
+                {
+                    plyCount = detail::parseUInt16(tag.value);
+                }
+            }
         }
 
         [[nodiscard]] std::optional<GameResult> result() const
@@ -492,6 +708,11 @@ namespace pgn
             return UnparsedGamePositions(m_moveSection);
         }
 
+        [[nodiscard]] UnparsedGameTags tags() const
+        {
+            return UnparsedGameTags(m_tagSection);
+        }
+
     private:
         std::string_view m_tagSection;
         std::string_view m_moveSection;
@@ -504,7 +725,7 @@ namespace pgn
     private:
         // currently bufferSize must be bigger than the maximum number of bytes taken by a single game
         // TODO: resize buffer when didn't process anything
-        static constexpr std::size_t m_minBufferSize = 32ull * 1024ull;
+        static constexpr std::size_t m_minBufferSize = 128ull * 1024ull;
 
         struct LazyPgnFileReaderIterator
         {
@@ -520,6 +741,8 @@ namespace pgn
                 m_file(nullptr, &std::fclose),
                 m_bufferSize(bufferSize),
                 m_buffer(bufferSize + 1), // one spot for '\0',
+                m_auxBuffer(bufferSize),
+                m_auxBufferLeft(0),
                 m_bufferView(m_buffer.data(), bufferSize),
                 m_game{}
             {
@@ -568,6 +791,9 @@ namespace pgn
             std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
             std::size_t m_bufferSize;
             std::vector<char> m_buffer;
+            std::vector<char> m_auxBuffer;
+            std::future<std::size_t> m_future;
+            std::size_t m_auxBufferLeft;
             std::string_view m_bufferView; // what is currently being processed
             UnparsedGame m_game;
 
@@ -628,7 +854,7 @@ namespace pgn
                     // We only extract one game at the time.
 
                     m_game = UnparsedGame(
-                        m_bufferView.substr(tagStart, tagEnd - tagStart),
+                        m_bufferView.substr(tagStart, tagEnd - tagStart + 1), // because tag end sequence contains ]
                         m_bufferView.substr(moveStart, moveEnd - moveStart)
                     );
 
@@ -657,7 +883,27 @@ namespace pgn
 
                 // fill the buffer and put '\0' at the end
                 const std::size_t numBytesLeft = m_bufferSize - numBytesProcessed;
-                const std::size_t numBytesRead = std::fread(m_buffer.data() + numBytesLeft, 1, numBytesProcessed, m_file.get());
+                std::size_t numBytesRead;
+                if (m_future.valid())
+                {
+                    std::size_t actualRead = m_future.get();
+                    numBytesRead = std::min(numBytesProcessed, actualRead + m_auxBufferLeft);
+                    std::memcpy(m_buffer.data() + numBytesLeft, m_auxBuffer.data(), numBytesRead);
+                    std::memmove(m_auxBuffer.data(), m_auxBuffer.data() + numBytesRead, m_auxBuffer.size() - numBytesRead);
+                    m_auxBufferLeft = (m_auxBuffer.size() - numBytesRead);
+                    if (numBytesRead == numBytesProcessed)
+                    {
+                        m_future = std::async(std::launch::async, [this]() {return std::fread(m_auxBuffer.data() + m_auxBufferLeft, 1, m_auxBuffer.size() - m_auxBufferLeft, m_file.get()); });
+                    }
+                }
+                else
+                {
+                    numBytesRead = std::fread(m_buffer.data() + numBytesLeft, 1, numBytesProcessed, m_file.get());
+                    if (numBytesRead == numBytesProcessed)
+                    {
+                        m_future = std::async(std::launch::async, [this]() {return std::fread(m_auxBuffer.data(), 1, m_auxBuffer.size(), m_file.get()); });
+                    }
+                }
 
                 // If we hit the end of file we make sure that it ends with at least two new lines.
                 // One is there by the PGN standard, the second one may not.

@@ -705,26 +705,40 @@ struct Position : public Board
         m_epSquare = Square::none();
         const PieceType movedPiece = pieceAt(move.from).type();
         const CastlingRights oldCastlingRights = m_castlingRights;
-        if (movedPiece == PieceType::Pawn)
+        switch (movedPiece)
+        {
+        case PieceType::Pawn:
         {
             const int d = move.to.rank() - move.from.rank();
             if (d == -2 || d == 2)
             {
                 m_epSquare = Square(move.from.file(), move.from.rank() + d / 2);
             }
+            break;
         }
-        else if (move.type == MoveType::Castle)
+        case PieceType::King:
         {
-            m_castlingRights = CastlingRights::None;
+            if (move.type == MoveType::Castle)
+            {
+                m_castlingRights = CastlingRights::None;
+            }
+            else
+            {
+                if (move.from == E1) m_castlingRights &= ~CastlingRights::White;
+                else if (move.from == E8) m_castlingRights &= ~CastlingRights::Black;
+            }
+            break;
         }
-        else
+        case PieceType::Rook:
         {
-            if (move.from == E1) m_castlingRights &= ~CastlingRights::White;
-            else if (move.from == E8) m_castlingRights &= ~CastlingRights::Black;
-            else if (move.from == H1) m_castlingRights &= ~CastlingRights::WhiteKingSide;
+            if (move.from == H1) m_castlingRights &= ~CastlingRights::WhiteKingSide;
             else if (move.from == A1) m_castlingRights &= ~CastlingRights::WhiteQueenSide;
             else if (move.from == H8) m_castlingRights &= ~CastlingRights::BlackKingSide;
             else if (move.from == A8) m_castlingRights &= ~CastlingRights::BlackQueenSide;
+            break;
+        }
+        default:
+            break;
         }
 
         const Piece captured = BaseType::doMove(move);

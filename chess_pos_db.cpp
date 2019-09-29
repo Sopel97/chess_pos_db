@@ -200,8 +200,8 @@ std::size_t dumpPositions(const std::filesystem::path& from, const std::filesyst
 
 void build()
 {
-    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
-    //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    //persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     /*
     e.importPgns(std::execution::par_unseq, {
         {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
@@ -218,7 +218,8 @@ void build()
         {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Human}
         }, 2u * 1024u * 1024u * 1024u);
         */
-    e.importPgns(std::execution::par_unseq, {
+    //e.importPgns(std::execution::par_unseq, {
+    e.importPgns(std::execution::seq, {
         {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Server},
         {"w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Human},
@@ -503,16 +504,90 @@ void query(const Position& pos)
     }
 }
 
+void benchPgnParse()
+{
+    std::vector<persistence::local::PgnFile> files{
+        {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
+        { "w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Server },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-04.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-05.pgn", GameLevel::Engine },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-06.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-07.pgn", GameLevel::Engine },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-08.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-09.pgn", GameLevel::Server },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Engine },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine }
+    };
+
+    std::size_t ct = 0;
+    for (auto&& file : files)
+    {
+        pgn::LazyPgnFileReader reader(file.path(), 1024*1024);
+        std::size_t c = 0;
+        for (auto&& game : reader)
+        {
+            for (auto&& position : game.positions())
+            {
+                ++c;
+            }
+        }
+        std::cout << c << '\n';
+        ct += c;
+    }
+    std::cout << ct << '\n';
+}
+
+void benchPgnParsePar()
+{
+    std::vector<persistence::local::PgnFile> files{
+        {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
+        { "w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Server },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-04.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-05.pgn", GameLevel::Engine },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-06.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-07.pgn", GameLevel::Engine },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-08.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-09.pgn", GameLevel::Server },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Engine },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human },
+        { "w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine }
+    };
+
+    std::atomic<std::size_t> ct = 0;
+    std::for_each(std::execution::par, files.begin(), files.end(), [&ct](auto&& file) {
+        pgn::LazyPgnFileReader reader(file.path(), 1024 * 1024);
+        std::size_t c = 0;
+        for (auto&& game : reader)
+        {
+            for (auto&& position : game.positions())
+            {
+                ++c;
+            }
+        }
+        std::cout << c << '\n';
+        ct += c;
+        });
+    std::cout << ct << '\n';
+}
+
+
 int main()
 {
     {
-        //std::vector<char>(2'000'000'000ull);
+        //std::vector<char>(4'000'000'000ull);
     }
+
+    //benchPgnParse();
+    //benchPgnParsePar();
+
     //testMoveGenerator();
     //return 0;
-    //build();
+    build();
     //buildsmall();
-    query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
+    //query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
     //query2(Position::startPosition());
     return 0;
     /*

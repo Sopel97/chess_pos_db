@@ -33,17 +33,26 @@ namespace persistence
         }
 
         HeaderEntry(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
-            m_result(*game.result()),
-            m_date(game.date()),
-            m_eco(game.eco()),
             m_plyCount(plyCount)
         {
-            fillPackedStrings(game);
+            std::string_view event;
+            std::string_view white;
+            std::string_view black;
+            std::optional<GameResult> result;
+            game.getResultDateEcoEventWhiteBlack(result, m_date, m_eco, event, white, black);
+            m_result = *result;
+            fillPackedStrings(event, white, black);
         }
 
-        HeaderEntry(const pgn::UnparsedGame& game) :
-            HeaderEntry(game, game.plyCount(unknownPlyCount))
+        HeaderEntry(const pgn::UnparsedGame& game)
         {
+            std::string_view event;
+            std::string_view white;
+            std::string_view black;
+            std::optional<GameResult> result;
+            game.getResultDateEcoEventWhiteBlackPlyCount(result, m_date, m_eco, event, white, black, m_plyCount);
+            m_result = *result;
+            fillPackedStrings(event, white, black);
         }
 
         [[nodiscard]] const char* data() const
@@ -116,13 +125,9 @@ namespace persistence
         // strings are preceeded with length
         std::uint8_t m_packedStrings[(maxStringLength + 1) * numPackedStrings];
 
-        void fillPackedStrings(const pgn::UnparsedGame& game)
+        void fillPackedStrings(std::string_view event, std::string_view white, std::string_view black)
         {
             using namespace std::literals;
-
-            const std::string_view event = game.tag("Event"sv);
-            const std::string_view white = game.tag("White"sv);
-            const std::string_view black = game.tag("Black"sv);
 
             const std::uint8_t eventSize = static_cast<std::uint8_t>(std::min(event.size(), maxStringLength));
             const std::uint8_t whiteSize = static_cast<std::uint8_t>(std::min(white.size(), maxStringLength));
@@ -165,9 +170,19 @@ namespace persistence
             return addHeader(HeaderEntry(game));
         }
 
+        [[nodiscard]] std::uint32_t addGameNoLock(const pgn::UnparsedGame& game)
+        {
+            return addHeaderNoLock(HeaderEntry(game));
+        }
+
         [[nodiscard]] std::uint32_t addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
             return addHeader(HeaderEntry(game, plyCount));
+        }
+
+        [[nodiscard]] std::uint32_t addGameNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+        {
+            return addHeaderNoLock(HeaderEntry(game, plyCount));
         }
 
         [[nodiscard]] std::uint32_t nextGameId() const
@@ -226,6 +241,16 @@ namespace persistence
             const std::size_t headerSizeBytes = m_header.size();
 
             std::unique_lock<std::mutex> lock(m_mutex);
+            m_header.append(entry.data(), entry.size());
+            m_index.emplace_back(headerSizeBytes);
+            return static_cast<std::uint32_t>(m_index.size() - 1u);
+        }
+
+        // returns the index of the header (not the address)
+        [[nodiscard]] std::uint32_t addHeaderNoLock(const HeaderEntry& entry)
+        {
+            const std::size_t headerSizeBytes = m_header.size();
+
             m_header.append(entry.data(), entry.size());
             m_index.emplace_back(headerSizeBytes);
             return static_cast<std::uint32_t>(m_index.size() - 1u);

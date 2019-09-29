@@ -515,8 +515,8 @@ namespace persistence
 
                     lock.unlock();
 
-                    const std::size_t indexSize = std::max(std::size_t{ 1 }, job.buffer.size() / 1024u);
-                    Index index = ext::makeIndex(job.buffer, indexSize, std::less<>{}, extractEntryKey);
+                    constexpr std::size_t indexRangeSize = 1024;
+                    Index index = ext::makeIndex(job.buffer, indexRangeSize, std::less<>{}, extractEntryKey);
                     (void)ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
                     writeIndexFor(job.path, index);
 
@@ -777,7 +777,7 @@ namespace persistence
                 * cardinality<GameResult>();
 
             // TODO: maybe make it configurable, though it doesn't need to be big.
-            static constexpr std::size_t m_pgnParserMemory = 16ull * 1024ull * 1024ull;
+            static constexpr std::size_t m_pgnParserMemory = 4ull * 1024ull * 1024ull;
 
         public:
 
@@ -946,19 +946,19 @@ namespace persistence
                     return {};
                 }
 
-                if (numThreads <= 2)
+                if (numThreads <= 4)
                 {
                     return importPgns(std::execution::seq, pgns, memory);
                 }
 
-                const std::size_t numSortingThreads = numThreads / 2;
-                const std::size_t numWorkerThreads = numThreads - numSortingThreads;
+                const std::size_t numWorkerThreads = numThreads / 4;
+                const std::size_t numSortingThreads = numThreads - numWorkerThreads;
 
                 auto pathsByLevel = partitionPathsByLevel(pgns);
 
                 const std::size_t numBuffers = cardinality<GameResult>() * numWorkerThreads;
 
-                const std::size_t numAdditionalBuffers = numBuffers;
+                const std::size_t numAdditionalBuffers = numBuffers * 2;
 
                 const std::size_t bucketSize =
                     ext::numObjectsPerBufferUnit<Entry>(
@@ -996,7 +996,7 @@ namespace persistence
                 std::size_t memory
             )
             {
-                constexpr std::size_t numSortingThreads = 1;
+                const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u) - 1u;
 
                 if (pgns.empty())
                 {
@@ -1007,7 +1007,7 @@ namespace persistence
 
                 const std::size_t numBuffers = cardinality<GameResult>();
 
-                const std::size_t numAdditionalBuffers = numBuffers;
+                const std::size_t numAdditionalBuffers = numBuffers * 2;
 
                 const std::size_t bucketSize =
                     ext::numObjectsPerBufferUnit<Entry>(
@@ -1028,7 +1028,7 @@ namespace persistence
                         continue;
                     }
 
-                    statsTotal += importPgnsImpl(pipeline, pathsByLevel[level], level);
+                    statsTotal += importPgnsImpl(std::execution::seq, pipeline, pathsByLevel[level], level);
                 }
 
                 pipeline.waitForCompletion();
@@ -1106,6 +1106,70 @@ namespace persistence
                         }
 
                         ASSERT(numPositionsInGame > 0);
+
+                        stats.numGames += 1;
+                        stats.numPositions += numPositionsInGame;
+                    }
+                }
+
+                // flush buffers and return them to the pipeline for later use
+                forEach(buckets, [this, &pipeline, level](auto& bucket, GameResult result) {
+                    store(pipeline, std::move(bucket), level, result);
+                    });
+
+                return stats;
+            }
+
+            ImportStats importPgnsImpl(
+                std::execution::sequenced_policy,
+                AsyncStorePipeline& pipeline,
+                const PgnFilePaths& paths,
+                GameLevel level
+            )
+            {
+                // create buffers
+                PerPartitionWithSpecificGameLevel<std::vector<Entry>> buckets;
+                forEach(buckets, [&](auto& bucket, GameResult result) {
+                    bucket = pipeline.getEmptyBuffer();
+                    });
+
+                ImportStats stats{};
+                for (auto& path : paths)
+                {
+                    pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
+                    if (!fr.isOpen())
+                    {
+                        std::cerr << "Failed to open file " << path << '\n';
+                        break;
+                    }
+
+                    for (auto& game : fr)
+                    {
+                        const std::optional<GameResult> result = game.result();
+                        if (!result.has_value())
+                        {
+                            stats.numSkippedGames += 1;
+                            continue;
+                        }
+
+                        const std::uint32_t gameIdx = m_header.nextGameId();
+
+                        std::size_t numPositionsInGame = 0;
+                        for (auto& pos : game.positions())
+                        {
+                            auto& bucket = buckets[*result];
+                            bucket.emplace_back(pos, gameIdx);
+                            numPositionsInGame += 1;
+
+                            if (bucket.size() == bucket.capacity())
+                            {
+                                store(pipeline, bucket, level, *result);
+                            }
+                        }
+
+                        ASSERT(numPositionsInGame > 0);
+
+                        m_header.addGameNoLock(game, numPositionsInGame - 1);
 
                         stats.numGames += 1;
                         stats.numPositions += numPositionsInGame;
@@ -1258,9 +1322,8 @@ namespace persistence
                             std::size_t numPositionsInGame = 0;
                             for (auto& pos : game.positions())
                             {
-                                Entry entry(pos, gameIdx);
                                 auto& bucket = entries[*result];
-                                bucket.emplace_back(entry);
+                                bucket.emplace_back(pos, gameIdx);
                                 numPositionsInGame += 1;
 
                                 if (bucket.size() == bufferSize)
