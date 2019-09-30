@@ -412,7 +412,7 @@ namespace ext
                 return true;
             }
 
-            [[nodiscard]] void truncate() override
+            void truncate() override
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
@@ -553,7 +553,7 @@ namespace ext
                 return false;
             }
 
-            [[nodiscard]] void truncate() override
+            void truncate() override
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
@@ -1045,7 +1045,7 @@ namespace ext
             return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
         }
 
-        [[nodiscard]] void truncate()
+        void truncate()
         {
             m_file->truncate();
         }

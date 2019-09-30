@@ -30,6 +30,7 @@ namespace persistence
             // we don't care because we have sizes serialized
             const std::size_t read = headers.read(reinterpret_cast<char*>(this), offset, sizeof(PackedGameHeader));
             ASSERT(m_size <= read);
+            (void)read;
         }
 
         PackedGameHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
@@ -157,13 +158,14 @@ namespace persistence
         static inline const std::filesystem::path indexPath = "index";
 
         static constexpr std::size_t defaultMemory = 4 * 1024 * 1024;
+        static constexpr std::size_t minMemory = 1024;
 
         Header(std::filesystem::path path, std::size_t memory = defaultMemory) :
             // here we use operator, to create directories before we try to
             // create files there
             m_path((std::filesystem::create_directories(path), std::move(path))),
-            m_header({ m_path / headerPath, ext::OutputMode::Append }, ext::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(memory, 4))),
-            m_index({ m_path / indexPath, ext::OutputMode::Append }, ext::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(memory, 4)))
+            m_header({ m_path / headerPath, ext::OutputMode::Append }, ext::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(std::max(memory, minMemory), 4))),
+            m_index({ m_path / indexPath, ext::OutputMode::Append }, ext::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(std::max(memory, minMemory), 4)))
         {
         }
 
@@ -265,7 +267,7 @@ namespace persistence
         [[nodiscard]] std::uint32_t addHeader(const PackedGameHeader& entry)
         {
             std::unique_lock<std::mutex> lock(m_mutex);
-            addHeaderNoLock(entry);
+            return addHeaderNoLock(entry);
         }
     };
 }

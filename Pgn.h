@@ -305,7 +305,7 @@ namespace pgn
 
             ASSERT(tagName.size() + 2u <= maxTagNameLength);
 
-            char tagMatch[256];
+            char tagMatch[maxTagNameLength];
             tagMatch[0] = '[';
             tagName.copy(tagMatch + 1u, tagName.size());
             tagMatch[tagName.size() + 1u] = ' ';
@@ -564,7 +564,7 @@ namespace pgn
             ASSERT(m_moveSection.front() == '1');
         }
 
-        [[nodiscard]] void getResultDateEcoEventWhiteBlack(
+        void getResultDateEcoEventWhiteBlack(
             std::optional<GameResult>& result,
             Date& date,
             Eco& eco,
@@ -602,7 +602,7 @@ namespace pgn
             }
         }
 
-        [[nodiscard]] void getResultDateEcoEventWhiteBlackPlyCount(
+        void getResultDateEcoEventWhiteBlackPlyCount(
             std::optional<GameResult>& result,
             Date& date,
             Eco& eco,

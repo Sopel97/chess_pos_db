@@ -830,7 +830,8 @@ struct Position : public Board
         Position cpy(*this);
         auto pc = cpy.doMove(move);
 
-        //ASSERT(cpy.beforeMove(move, pc) == *this);
+        (void)pc;
+        //ASSERT(cpy.beforeMove(move, pc) == *this); // this assert would result in infinite recursion
 
         return cpy;
     }

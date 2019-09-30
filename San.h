@@ -520,6 +520,10 @@ namespace san
             case CastlingRights::BlackQueenSide:
                 san = "O-O-O";
                 break;
+
+            default:
+                // clang gives warnings because CastlingRights has redundant values
+                ASSERT(false);
             }
         }
         else
