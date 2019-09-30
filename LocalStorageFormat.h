@@ -677,7 +677,7 @@ namespace persistence
                     }
                     m_files.clear();
 
-                    ext::merge(progressCallback, { 256 * 1024 * 1024 }, files, outFile, std::less<>{});
+                    ext::merge(progressCallback, { 1024 * 1024 * 1024 }, files, outFile, std::less<>{});
 
                     while (!files.empty())
                     {
@@ -699,6 +699,53 @@ namespace persistence
                 writeIndexFor(newFilePath, index);
 
                 m_files.emplace_back(newFilePath, std::move(index));
+            }
+
+            [[nodiscard]] bool empty() const
+            {
+                return m_files.empty() && m_futureFiles.empty();
+            }
+
+            // outPath is a path of the partition to output to
+            void copyMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback)
+            {
+                if (m_files.empty())
+                {
+                    return;
+                }
+
+                ASSERT(outPath != path());
+
+                if (m_files.size() == 1)
+                {
+                    auto path = m_files.front().path();
+                    auto outFilePath = outPath / path.filename();
+                    std::filesystem::copy_file(path, outFilePath, std::filesystem::copy_options::overwrite_existing);
+                    return;
+                }
+
+                const auto outFilePath = outPath / "0";
+                const std::uint32_t id = 0;
+
+                ext::IndexBuilder<Entry, std::less<>, decltype(extractEntryKey)> ib(1024, {}, extractEntryKey);
+                {
+                    auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
+                        ib.append(reinterpret_cast<const Entry*>(data), count);
+                    };
+
+                    ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
+                    std::vector<ext::ImmutableSpan<Entry>> files;
+                    files.reserve(m_files.size());
+                    for (auto&& file : m_files)
+                    {
+                        files.emplace_back(file.entries());
+                    }
+
+                    ext::merge(progressCallback, { 1024 * 1024 * 1024 }, files, outFile, std::less<>{});
+                }
+
+                Index index = ib.end();
+                writeIndexFor(outFilePath, index);
             }
 
         private:
@@ -955,6 +1002,31 @@ namespace persistence
                     };
 
                     partition.mergeAll(progressReport);
+                    });
+                std::cerr << timestamp() << ": Finalizing...\n";
+                std::cerr << timestamp() << ": Completed.\n";
+            }
+
+            void copyMergeAll(const std::filesystem::path& path)
+            {
+                // create directories
+                Database db(path, 1);
+
+                m_header.copyTo(path);
+
+                const std::size_t numPartitions = 9;
+                std::size_t i = 0;
+                std::cerr << timestamp() << ": Merging files...\n";
+                forEach(m_partitions, [numPartitions, &i, &db](auto&& partition, GameLevel level, GameResult result) {
+
+                    ++i;
+                    std::cerr << timestamp() << ": Merging files in partition " << i << '/' << numPartitions << " : " << partition.path() << ".\n";
+
+                    auto progressReport = [numPartitions, &i](const ext::ProgressReport& report) {
+                        std::cerr << timestamp() << ":     " << static_cast<int>(report.ratio() * 100) << "%.\n";
+                    };
+
+                    partition.copyMergeAll(db.m_partitions[level][result].path(), progressReport);
                     });
                 std::cerr << timestamp() << ": Finalizing...\n";
                 std::cerr << timestamp() << ": Completed.\n";

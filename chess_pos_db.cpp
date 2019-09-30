@@ -592,6 +592,48 @@ void mergeAll()
     e.mergeAll();
 }
 
+void buildbig()
+{
+    persistence::local::Database e("w:/catobase/.tmp_big", 4ull * 1024ull * 1024ull);
+
+    e.importPgns(std::execution::seq, {
+        {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-04.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-05.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-06.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-07.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-08.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-09.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-01.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-02.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-03.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-04.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-05.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-06.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-07.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-08.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-09.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-10.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-11.pgn", GameLevel::Server},
+        {"w:/catobase/data/lichess_db_standard_rated_2014-12.pgn", GameLevel::Server}
+        }, 2u * 1024u * 1024u * 1024u);
+
+    //e.mergeAll();
+}
+
+void copyMergeAll()
+{
+    std::cout << "Loading db\n";
+    persistence::local::Database e("w:/catobase/.tmp_big", 4ull * 1024ull * 1024ull);
+    std::cout << "Loaded db\n";
+
+    e.copyMergeAll("c:/dev/chess_pos_db/.tmp");
+}
 
 int main()
 {
@@ -604,12 +646,16 @@ int main()
 
     //testMoveGenerator();
     //return 0;
-    build();
+    //build();
     //buildccrl();
     //buildsmall();
-    mergeAll();
+    //mergeAll();
     //query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
     //query2(Position::startPosition());
+
+    //buildbig();
+    copyMergeAll();
+
     return 0;
     /*
     persistence::Database e("w:/catobase/.tmp");

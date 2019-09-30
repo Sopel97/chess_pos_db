@@ -190,6 +190,12 @@ namespace persistence
             return static_cast<std::uint32_t>(m_index.size());
         }
 
+        void copyTo(const std::filesystem::path& path) const
+        {
+            std::filesystem::copy_file(m_path / headerPath, path / headerPath, std::filesystem::copy_options::overwrite_existing);
+            std::filesystem::copy_file(m_path / indexPath, path / indexPath, std::filesystem::copy_options::overwrite_existing);
+        }
+
         [[nodiscard]] std::vector<HeaderEntry> query(const std::vector<std::uint32_t>& keys)
         {
             const std::size_t numKeys = keys.size();
