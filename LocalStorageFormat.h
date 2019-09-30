@@ -29,6 +29,12 @@ namespace persistence
 {
     namespace local
     {
+        decltype(auto) timestamp()
+        {
+            auto time_now = std::time(nullptr);
+            return std::put_time(std::localtime(&time_now), "%Y-%m-%d %OH:%OM:%OS");
+        }
+
         static constexpr bool useIndex = true;
 
         struct Entry
@@ -938,20 +944,20 @@ namespace persistence
             {
                 const std::size_t numPartitions = 9;
                 std::size_t i = 0;
-                std::cerr << "Merging files...\n";
+                std::cerr << timestamp() << ": Merging files...\n";
                 forEach(m_partitions, [numPartitions, &i](auto&& partition, GameLevel level, GameResult result) {
 
                     ++i;
-                    std::cerr << "Merging files in partition " << i << '/' << numPartitions << " : " << partition.path() << ".\n";
+                    std::cerr << timestamp() << ": Merging files in partition " << i << '/' << numPartitions << " : " << partition.path() << ".\n";
 
                     auto progressReport = [numPartitions, &i](const ext::ProgressReport& report) {
-                        std::cerr << "    " << static_cast<int>(report.ratio() * 100) << "%.\n";
+                        std::cerr << timestamp() << ":     " << static_cast<int>(report.ratio() * 100) << "%.\n";
                     };
 
                     partition.mergeAll(progressReport);
                     });
-                std::cerr << "Finalizing...\n";
-                std::cerr << "Completed.\n";
+                std::cerr << timestamp() << ": Finalizing...\n";
+                std::cerr << timestamp() << ": Completed.\n";
             }
 
             ImportStats importPgns(
@@ -1115,7 +1121,7 @@ namespace persistence
                 );
 
                 ImportStats statsTotal{};
-                std::cerr << "Importing pgns...\n";
+                std::cerr << timestamp() << ": Importing pgns...\n";
                 for (auto level : values<GameLevel>())
                 {
                     if (pathsByLevel[level].empty())
@@ -1125,15 +1131,17 @@ namespace persistence
 
                     statsTotal += importPgnsImpl(std::execution::seq, pipeline, pathsByLevel[level], level, [&totalSize, &totalSizeProcessed](auto&& pgn) {
                         totalSizeProcessed += std::filesystem::file_size(pgn);
-                        std::cerr << "    " << static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0) << "% - completed " << pgn << ".\n";
+                        std::cerr << timestamp() << ":     " << static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0) << "% - completed " << pgn << ".\n";
                         });
                 }
-                std::cerr << "Finalizing...\n";
+                std::cerr << timestamp() << ": Finalizing...\n";
 
                 pipeline.waitForCompletion();
                 discoverFutureFiles();
 
-                std::cerr << "Completed.\n";
+                std::cerr << timestamp() << ": Completed.\n";
+
+                std::cerr << timestamp() << ": Imported " << statsTotal.numGames << " games with " << statsTotal.numPositions << " positions. Skipped " << statsTotal.numSkippedGames << " games.\n";
 
                 return statsTotal;
             }
