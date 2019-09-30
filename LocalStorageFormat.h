@@ -84,13 +84,20 @@ namespace persistence
         static_assert(sizeof(Entry) == 20);
 
         using Index = ext::RangeIndex<PositionSignature, std::less<>>;
+
+        [[nodiscard]] std::filesystem::path pathForIndex(const std::filesystem::path& path)
+        {
+            auto cpy = path;
+            cpy += "_index";
+            return cpy;
+        }
         
-        [[nodiscard]] Index readIndexFor(std::filesystem::path path)
+        [[nodiscard]] Index readIndexFor(const std::filesystem::path& path)
         {
             if constexpr (useIndex)
             {
-                path += "_index";
-                Index idx(ext::readFile<typename Index::EntryType>(path));
+                auto indexPath = pathForIndex(path);
+                Index idx(ext::readFile<typename Index::EntryType>(indexPath));
                 return idx;
             }
             else
@@ -99,12 +106,12 @@ namespace persistence
             }
         }
 
-        void writeIndexFor(std::filesystem::path path, const Index& index)
+        void writeIndexFor(const std::filesystem::path& path, const Index& index)
         {
             if constexpr (useIndex)
             {
-                path += "_index";
-                (void)ext::writeFile<typename Index::EntryType>(path, index.data(), index.size());
+                auto indexPath = pathForIndex(path);
+                (void)ext::writeFile<typename Index::EntryType>(indexPath, index.data(), index.size());
             }
         }
 
@@ -179,6 +186,11 @@ namespace persistence
             [[nodiscard]] Entry at(std::size_t idx) const
             {
                 return m_entries[idx];
+            }
+
+            [[nodiscard]] const ext::ImmutableSpan<Entry>& entries() const
+            {
+                return m_entries;
             }
 
             void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const;
@@ -634,6 +646,55 @@ namespace persistence
                 return m_path;
             }
 
+            void mergeAll()
+            {
+                if (m_files.size() < 2)
+                {
+                    return;
+                }
+
+                const auto outFilePath = m_path / "merge_tmp";
+                const std::uint32_t id = m_files.front().id();
+
+                ext::IndexBuilder<Entry, std::less<>, decltype(extractEntryKey)> ib(1024, {}, extractEntryKey);
+                {
+                    auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
+                        ib.append(reinterpret_cast<const Entry*>(data), count);
+                    };
+
+                    ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
+                    std::vector<ext::ImmutableSpan<Entry>> files;
+                    files.reserve(m_files.size());
+                    for (auto&& file : m_files)
+                    {
+                        files.emplace_back(file.entries());
+                    }
+                    m_files.clear();
+
+                    ext::merge({ 256 * 1024 * 1024 }, files, outFile);
+
+                    while (!files.empty())
+                    {
+                        auto path = files.back().path();
+                        files.pop_back();
+
+                        auto indexPath = pathForIndex(path);
+
+                        std::filesystem::remove(path);
+                        std::filesystem::remove(indexPath);
+                    }
+                }
+
+                auto newFilePath = outFilePath;
+                newFilePath.replace_filename(std::to_string(id));
+                std::filesystem::rename(outFilePath, newFilePath);
+
+                Index index = ib.end();
+                writeIndexFor(newFilePath, index);
+
+                m_files.emplace_back(newFilePath, std::move(index));
+            }
+
         private:
             std::filesystem::path m_path;
             std::vector<File> m_files;
@@ -871,6 +932,13 @@ namespace persistence
             [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(const std::vector<Position>& positions) const
             {
                 return queryRanges(allQueryTargets(), positions);
+            }
+
+            void mergeAll()
+            {
+                forEach(m_partitions, [](auto&& partition, GameLevel level, GameResult result) {
+                    partition.mergeAll();
+                    });
             }
 
             ImportStats importPgns(

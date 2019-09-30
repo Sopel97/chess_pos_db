@@ -3979,9 +3979,9 @@ namespace ext
                 RangeIndexEntry<KeyType, CompareT> e;
 
                 e.low = m_startIdx;
-                e.lowValue = m_startValue;
+                e.lowValue = KeyExtractT::operator()(m_startValue);
                 e.high = m_startIdx + m_offset - 1u;
-                e.highValue = m_prevValue;
+                e.highValue = KeyExtractT::operator()(m_prevValue);
 
                 m_ranges.emplace_back(e);
             }
@@ -4011,9 +4011,9 @@ namespace ext
                 {
                 case 0:
                     m_startValue = *begin;
-                    m_endValue = KeyExtractT::operator()(m_startValue);
+                    m_endValue = m_startValue;
                     m_firstOfNextRange = m_startValue;
-                    m_prevValue = KeyExtractT::operator()(m_startValue);
+                    m_prevValue = m_startValue;
                     m_startIdx = 0;
                     m_firstOfNextRangeIdx = 0;
                     m_state = 1;

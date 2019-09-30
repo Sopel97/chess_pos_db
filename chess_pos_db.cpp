@@ -235,10 +235,19 @@ void build()
         }, 2u * 1024u * 1024u * 1024u);
 }
 
+void buildccrl()
+{
+    persistence::local::Database e("c:/dev/chess_pos_db/.tmpccrl", 4ull * 1024ull * 1024ull);
+    e.importPgns(std::execution::seq, {
+        {"w:/catobase/data/CCRL-4040.[1086555].pgn", GameLevel::Human}
+        }, 2u * 1024u * 1024u * 1024u);
+}
+
 void buildsmall()
 {
-    persistence::local::Database e("w:/catobase/.tmp2_indexed", 4ull * 1024ull * 1024ull);
-    e.importPgns(std::execution::par_unseq, {
+    //persistence::local::Database e("w:/catobase/.tmp2_indexed", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    e.importPgns(std::execution::seq, {
         {"w:/catobase/data/Server Games LiChess 2019-1.pgn", GameLevel::Human}
         }, 2u * 1024u * 1024u * 1024u);
 }
@@ -431,7 +440,7 @@ void printAggregatedResult(const AggregatedQueryResult& res)
 void query2(const Position& pos)
 {
     std::cout << "Loading db\n";
-    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
     //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     std::cout << "Loaded db\n";
 
@@ -573,6 +582,16 @@ void benchPgnParsePar()
     std::cout << ct << '\n';
 }
 
+void mergeAll()
+{
+    std::cout << "Loading db\n";
+    //persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    std::cout << "Loaded db\n";
+
+    e.mergeAll();
+}
+
 
 int main()
 {
@@ -585,9 +604,11 @@ int main()
 
     //testMoveGenerator();
     //return 0;
-    build();
+    //build();
+    //buildccrl();
     //buildsmall();
-    //query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
+    //mergeAll();
+    query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
     //query2(Position::startPosition());
     return 0;
     /*
