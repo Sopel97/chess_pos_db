@@ -1961,6 +1961,7 @@ namespace ext
         template <typename... Ts>
         void emplace_back(Ts&& ... args)
         {
+            ++m_size;
             *(m_nextEmpty++) = T{ std::forward<Ts>(args)... };
 
             if (m_nextEmpty == m_buffer.data() + m_buffer.size())
@@ -1972,6 +1973,7 @@ namespace ext
         // pods don't benefit from move semantics
         void push_back(const T& value)
         {
+            ++m_size;
             *(m_nextEmpty++) = value;
 
             if (m_nextEmpty == m_buffer.data() + m_buffer.size())
@@ -1982,6 +1984,7 @@ namespace ext
 
         void append(const T* data, std::size_t count)
         {
+            m_size += count;
             const std::size_t bufferSizeLeft = m_buffer.size() - (m_nextEmpty - m_buffer.data());
             if (count < bufferSizeLeft)
             {
