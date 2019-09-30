@@ -646,7 +646,7 @@ namespace persistence
                 return m_path;
             }
 
-            void mergeAll()
+            void mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback)
             {
                 if (m_files.size() < 2)
                 {
@@ -671,7 +671,7 @@ namespace persistence
                     }
                     m_files.clear();
 
-                    ext::merge({ 256 * 1024 * 1024 }, files, outFile);
+                    ext::merge(progressCallback, { 256 * 1024 * 1024 }, files, outFile, std::less<>{});
 
                     while (!files.empty())
                     {
@@ -936,9 +936,22 @@ namespace persistence
 
             void mergeAll()
             {
-                forEach(m_partitions, [](auto&& partition, GameLevel level, GameResult result) {
-                    partition.mergeAll();
+                const std::size_t numPartitions = 9;
+                std::size_t i = 0;
+                std::cerr << "Merging files...\n";
+                forEach(m_partitions, [numPartitions, &i](auto&& partition, GameLevel level, GameResult result) {
+
+                    ++i;
+                    std::cerr << "Merging files in partition " << i << '/' << numPartitions << " : " << partition.path() << ".\n";
+
+                    auto progressReport = [numPartitions, &i](const ext::ProgressReport& report) {
+                        std::cerr << "    " << static_cast<int>(report.ratio() * 100) << "%.\n";
+                    };
+
+                    partition.mergeAll(progressReport);
                     });
+                std::cerr << "Finalizing...\n";
+                std::cerr << "Completed.\n";
             }
 
             ImportStats importPgns(
@@ -1077,6 +1090,13 @@ namespace persistence
                     return {};
                 }
 
+                std::size_t totalSize = 0;
+                std::size_t totalSizeProcessed = 0;
+                for (auto&& pgn : pgns)
+                {
+                    totalSize += std::filesystem::file_size(pgn.path());
+                }
+
                 auto pathsByLevel = partitionPathsByLevel(pgns);
 
                 const std::size_t numBuffers = cardinality<GameResult>();
@@ -1095,6 +1115,7 @@ namespace persistence
                 );
 
                 ImportStats statsTotal{};
+                std::cerr << "Importing pgns...\n";
                 for (auto level : values<GameLevel>())
                 {
                     if (pathsByLevel[level].empty())
@@ -1102,11 +1123,17 @@ namespace persistence
                         continue;
                     }
 
-                    statsTotal += importPgnsImpl(std::execution::seq, pipeline, pathsByLevel[level], level);
+                    statsTotal += importPgnsImpl(std::execution::seq, pipeline, pathsByLevel[level], level, [&totalSize, &totalSizeProcessed](auto&& pgn) {
+                        totalSizeProcessed += std::filesystem::file_size(pgn);
+                        std::cerr << "    " << static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0) << "% - completed " << pgn << ".\n";
+                        });
                 }
+                std::cerr << "Finalizing...\n";
 
                 pipeline.waitForCompletion();
                 discoverFutureFiles();
+
+                std::cerr << "Completed.\n";
 
                 return statsTotal;
             }
@@ -1193,12 +1220,13 @@ namespace persistence
 
                 return stats;
             }
-
+            
             ImportStats importPgnsImpl(
                 std::execution::sequenced_policy,
                 AsyncStorePipeline& pipeline,
                 const PgnFilePaths& paths,
-                GameLevel level
+                GameLevel level,
+                std::function<void(const std::filesystem::path& file)> completionCallback
             )
             {
                 // create buffers
@@ -1214,6 +1242,7 @@ namespace persistence
                     if (!fr.isOpen())
                     {
                         std::cerr << "Failed to open file " << path << '\n';
+                        completionCallback(path);
                         break;
                     }
 
@@ -1248,6 +1277,8 @@ namespace persistence
                         stats.numGames += 1;
                         stats.numPositions += numPositionsInGame;
                     }
+
+                    completionCallback(path);
                 }
 
                 // flush buffers and return them to the pipeline for later use

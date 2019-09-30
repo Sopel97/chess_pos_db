@@ -2599,7 +2599,8 @@ namespace ext
     }
 
     template <typename T, typename ProgressCallbackT, typename CompT = std::less<>>
-    void merge(ProgressCallbackT && callback,
+    void merge(
+        ProgressCallbackT && callback,
         const AuxilaryStorage & aux,
         const std::vector<ImmutableSpan<T>> & in,
         BinaryOutputFile & outFile,

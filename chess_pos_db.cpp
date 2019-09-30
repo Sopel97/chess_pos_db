@@ -604,11 +604,11 @@ int main()
 
     //testMoveGenerator();
     //return 0;
-    //build();
+    build();
     //buildccrl();
     //buildsmall();
-    //mergeAll();
-    query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
+    mergeAll();
+    //query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
     //query2(Position::startPosition());
     return 0;
     /*
