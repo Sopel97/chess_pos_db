@@ -12,13 +12,13 @@
 
 namespace persistence
 {
-    struct HeaderEntry
+    struct PackedGameHeader
     {
         static constexpr std::uint16_t unknownPlyCount = std::numeric_limits<std::uint16_t>::max();
 
-        HeaderEntry() = default;
+        PackedGameHeader() = default;
 
-        HeaderEntry(ext::Vector<char>& headers, std::size_t offset) :
+        PackedGameHeader(ext::Vector<char>& headers, std::size_t offset) :
             m_size{},
             m_result{},
             m_date{},
@@ -28,11 +28,11 @@ namespace persistence
         {
             // there may be garbage at the end
             // we don't care because we have sizes serialized
-            const std::size_t read = headers.read(reinterpret_cast<char*>(this), offset, sizeof(HeaderEntry));
+            const std::size_t read = headers.read(reinterpret_cast<char*>(this), offset, sizeof(PackedGameHeader));
             ASSERT(m_size <= read);
         }
 
-        HeaderEntry(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
+        PackedGameHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
             m_plyCount(plyCount)
         {
             std::string_view event;
@@ -44,7 +44,7 @@ namespace persistence
             fillPackedStrings(event, white, black);
         }
 
-        HeaderEntry(const pgn::UnparsedGame& game)
+        PackedGameHeader(const pgn::UnparsedGame& game)
         {
             std::string_view event;
             std::string_view white;
@@ -112,7 +112,7 @@ namespace persistence
 
         static_assert(maxStringLength < 256); // it's nice to require only one byte for length
 
-        // We just read sizeof(HeaderEntry), we don't touch anything
+        // We just read sizeof(PackedGameHeader), we don't touch anything
         // in packed strings that would be considered 'garbage'
         std::uint16_t m_size;
 
@@ -146,17 +146,19 @@ namespace persistence
             black.copy(reinterpret_cast<char*>(&m_packedStrings[i]), blackSize);
             i += blackSize;
 
-            m_size = sizeof(HeaderEntry) - sizeof(m_packedStrings) + i;
+            m_size = sizeof(PackedGameHeader) - sizeof(m_packedStrings) + i;
         }
     };
-    static_assert(sizeof(HeaderEntry) == 2 + 2 + 4 + 2 + 2 + 768);
+    static_assert(sizeof(PackedGameHeader) == 2 + 2 + 4 + 2 + 2 + 768);
 
     struct Header
     {
         static inline const std::filesystem::path headerPath = "header";
         static inline const std::filesystem::path indexPath = "index";
 
-        Header(std::filesystem::path path, std::size_t memory) :
+        static constexpr std::size_t defaultMemory = 4 * 1024 * 1024;
+
+        Header(std::filesystem::path path, std::size_t memory = defaultMemory) :
             // here we use operator, to create directories before we try to
             // create files there
             m_path((std::filesystem::create_directories(path), std::move(path))),
@@ -167,22 +169,22 @@ namespace persistence
 
         [[nodiscard]] std::uint32_t addGame(const pgn::UnparsedGame& game)
         {
-            return addHeader(HeaderEntry(game));
+            return addHeader(PackedGameHeader(game));
         }
 
         [[nodiscard]] std::uint32_t addGameNoLock(const pgn::UnparsedGame& game)
         {
-            return addHeaderNoLock(HeaderEntry(game));
+            return addHeaderNoLock(PackedGameHeader(game));
         }
 
         [[nodiscard]] std::uint32_t addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
-            return addHeader(HeaderEntry(game, plyCount));
+            return addHeader(PackedGameHeader(game, plyCount));
         }
 
         [[nodiscard]] std::uint32_t addGameNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
-            return addHeaderNoLock(HeaderEntry(game, plyCount));
+            return addHeaderNoLock(PackedGameHeader(game, plyCount));
         }
 
         [[nodiscard]] std::uint32_t nextGameId() const
@@ -190,14 +192,23 @@ namespace persistence
             return static_cast<std::uint32_t>(m_index.size());
         }
 
-        void copyTo(const std::filesystem::path& path) const
+        void clear()
+        {
+            m_header.clear();
+            m_index.clear();
+        }
+
+        void replicateTo(const std::filesystem::path& path) const
         {
             std::filesystem::copy_file(m_path / headerPath, path / headerPath, std::filesystem::copy_options::overwrite_existing);
             std::filesystem::copy_file(m_path / indexPath, path / indexPath, std::filesystem::copy_options::overwrite_existing);
         }
 
-        [[nodiscard]] std::vector<HeaderEntry> query(const std::vector<std::uint32_t>& keys)
+        [[nodiscard]] std::vector<PackedGameHeader> query(const std::vector<std::uint32_t>& keys)
         {
+            // TODO: think about a good abstraction for iterating in a sorted order
+            //       with ability to retrieve original indices
+
             const std::size_t numKeys = keys.size();
 
             std::vector<std::uint32_t> orderedKeys;
@@ -224,11 +235,11 @@ namespace persistence
                 offsets.emplace_back(m_index[key]);
             }
 
-            std::vector<HeaderEntry> headers;
+            std::vector<PackedGameHeader> headers;
             headers.resize(numKeys);
             for (std::size_t i = 0; i < numKeys; ++i)
             {
-                headers[originalIds[i]] = HeaderEntry(m_header, offsets[i]);
+                headers[originalIds[i]] = PackedGameHeader(m_header, offsets[i]);
             }
 
             return headers;
@@ -242,24 +253,19 @@ namespace persistence
         std::mutex m_mutex;
 
         // returns the index of the header (not the address)
-        [[nodiscard]] std::uint32_t addHeader(const HeaderEntry& entry)
+        [[nodiscard]] std::uint32_t addHeaderNoLock(const PackedGameHeader& entry)
         {
             const std::size_t headerSizeBytes = m_header.size();
-
-            std::unique_lock<std::mutex> lock(m_mutex);
             m_header.append(entry.data(), entry.size());
             m_index.emplace_back(headerSizeBytes);
             return static_cast<std::uint32_t>(m_index.size() - 1u);
         }
 
         // returns the index of the header (not the address)
-        [[nodiscard]] std::uint32_t addHeaderNoLock(const HeaderEntry& entry)
+        [[nodiscard]] std::uint32_t addHeader(const PackedGameHeader& entry)
         {
-            const std::size_t headerSizeBytes = m_header.size();
-
-            m_header.append(entry.data(), entry.size());
-            m_index.emplace_back(headerSizeBytes);
-            return static_cast<std::uint32_t>(m_index.size() - 1u);
+            std::unique_lock<std::mutex> lock(m_mutex);
+            addHeaderNoLock(entry);
         }
     };
 }

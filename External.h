@@ -175,6 +175,8 @@ namespace ext
             virtual void flush() = 0;
 
             virtual bool isPooled() const = 0;
+
+            virtual void truncate() = 0;
         };
 
         // NOTE: Files are pooled - they are closed and reopened when needed -
@@ -227,6 +229,17 @@ namespace ext
 
                 void close(PooledFile& file)
                 {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+
+                    closeNoLock(file);
+                }
+
+            private:
+                FilePoolEntries m_files;
+                std::mutex m_mutex;
+
+                void closeNoLock(PooledFile& file)
+                {
                     if (file.m_poolEntry != noneEntry())
                     {
                         std::unique_lock<std::mutex> lock(file.m_mutex);
@@ -235,10 +248,6 @@ namespace ext
                         file.m_poolEntry = noneEntry();
                     }
                 }
-
-            private:
-                FilePoolEntries m_files;
-                std::mutex m_mutex;
 
                 [[nodiscard]] FileHandle reopen(const PooledFile& file)
                 {
@@ -403,6 +412,26 @@ namespace ext
                 return true;
             }
 
+            [[nodiscard]] void truncate() override
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                // We have to close the file but we cannot use pool's method
+                // because it would try to lock the file again.
+                // This is pretty much the only way we can ensure atomicity here.
+                if (m_poolEntry != pool().noneEntry())
+                {
+                    std::fclose(m_poolEntry->first.get());
+                    std::filesystem::resize_file(m_path, 0);
+                    // We don't care about openmode here because we truncate anyway
+                    m_poolEntry->first = detail::openFile(m_path, m_openmode);
+                }
+                else
+                {
+                    std::filesystem::resize_file(m_path, 0);
+                }
+            }
+
         private:
             std::filesystem::path m_path;
             std::string m_openmode;
@@ -522,6 +551,16 @@ namespace ext
             [[nodiscard]] bool isPooled() const override
             {
                 return false;
+            }
+
+            [[nodiscard]] void truncate() override
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                ASSERT(m_handle.get() != nullptr);
+                close();
+                std::filesystem::resize_file(m_path, 0);
+                open();
             }
 
         private:
@@ -1004,6 +1043,11 @@ namespace ext
         [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const
         {
             return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
+        }
+
+        [[nodiscard]] void truncate()
+        {
+            m_file->truncate();
         }
 
         // reopens the file in readonly mode
@@ -1871,6 +1915,13 @@ namespace ext
         [[nodiscard]] bool empty() const
         {
             return m_size == 0;
+        }
+
+        void clear()
+        {
+            flush();
+            m_file.truncate();
+            m_size = 0;
         }
 
         [[nodiscard]] std::size_t readNoFlush(T* destination, std::size_t offset, std::size_t count) const

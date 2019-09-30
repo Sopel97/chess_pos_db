@@ -255,7 +255,7 @@ void buildsmall()
 struct AggregatedQueryResult
 {
     EnumMap2<GameLevel, GameResult, std::size_t> counts;
-    EnumMap2<GameLevel, GameResult, std::optional<persistence::HeaderEntry>> games;
+    EnumMap2<GameLevel, GameResult, std::optional<persistence::PackedGameHeader>> games;
 };
 
 struct AggregatedQueryResults
@@ -329,7 +329,7 @@ AggregatedQueryResults queryAggregate(persistence::local::Database& db, const Po
     }
 
     {
-        std::vector<persistence::HeaderEntry> headers = db.queryHeaders(gameQueries);
+        std::vector<persistence::PackedGameHeader> headers = db.queryHeaders(gameQueries);
         auto it = headers.begin();
         for (int i = 0; i < moves.size(); ++i)
         {
@@ -406,7 +406,7 @@ void printAggregatedResult(const AggregatedQueryResult& res)
 
     std::cout << '\n';
 
-    const persistence::HeaderEntry* firstGame = nullptr;
+    const persistence::PackedGameHeader* firstGame = nullptr;
     for (auto& gg : res.games)
     {
         for (auto& g : gg)
@@ -626,13 +626,13 @@ void buildbig()
     //e.mergeAll();
 }
 
-void copyMergeAll()
+void replicateMergeAll()
 {
     std::cout << "Loading db\n";
     persistence::local::Database e("w:/catobase/.tmp_big", 4ull * 1024ull * 1024ull);
     std::cout << "Loaded db\n";
 
-    e.copyMergeAll("c:/dev/chess_pos_db/.tmp");
+    e.replicateMergeAll("c:/dev/chess_pos_db/.tmp");
 }
 
 int main()
@@ -654,7 +654,7 @@ int main()
     //query2(Position::startPosition());
 
     //buildbig();
-    copyMergeAll();
+    replicateMergeAll();
 
     return 0;
     /*

@@ -652,6 +652,25 @@ namespace persistence
                 return m_path;
             }
 
+            void clear()
+            {
+                collectFutureFiles();
+
+                while (!m_files.empty())
+                {
+                    auto path = m_files.back().path();
+                    m_files.pop_back();
+
+                    auto indexPath = pathForIndex(path);
+
+                    std::filesystem::remove(path);
+                    if (useIndex)
+                    {
+                        std::filesystem::remove(indexPath);
+                    }
+                }
+            }
+
             void mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback)
             {
                 if (m_files.size() < 2)
@@ -675,20 +694,10 @@ namespace persistence
                     {
                         files.emplace_back(file.entries());
                     }
-                    m_files.clear();
 
                     ext::merge(progressCallback, { 1024 * 1024 * 1024 }, files, outFile, std::less<>{});
 
-                    while (!files.empty())
-                    {
-                        auto path = files.back().path();
-                        files.pop_back();
-
-                        auto indexPath = pathForIndex(path);
-
-                        std::filesystem::remove(path);
-                        std::filesystem::remove(indexPath);
-                    }
+                    clear();
                 }
 
                 auto newFilePath = outFilePath;
@@ -707,7 +716,7 @@ namespace persistence
             }
 
             // outPath is a path of the partition to output to
-            void copyMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback)
+            void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback)
             {
                 if (m_files.empty())
                 {
@@ -920,6 +929,13 @@ namespace persistence
                 return s_allQueryTargets;
             }
 
+            Database(std::filesystem::path path) :
+                m_path(path),
+                m_header(path)
+            {
+                initializePartitions();
+            }
+
             Database(std::filesystem::path path, std::size_t headerBufferMemory) :
                 m_path(path),
                 m_header(path, headerBufferMemory)
@@ -932,7 +948,15 @@ namespace persistence
                 return m_name;
             }
 
-            [[nodiscard]] std::vector<HeaderEntry> queryHeaders(const std::vector<std::uint32_t>& indices)
+            void clear()
+            {
+                m_header.clear();
+                forEach(m_partitions, [](auto&& partition, GameLevel level, GameResult result) {
+                    partition.clear();
+                    });
+            }
+
+            [[nodiscard]] std::vector<PackedGameHeader> queryHeaders(const std::vector<std::uint32_t>& indices)
             {
                 return m_header.query(indices);
             }
@@ -1007,17 +1031,26 @@ namespace persistence
                 std::cerr << timestamp() << ": Completed.\n";
             }
 
-            void copyMergeAll(const std::filesystem::path& path)
+            void replicateMergeAll(const std::filesystem::path& path)
             {
-                // create directories
-                Database db(path, 1);
+                PerPartition<std::filesystem::path> partitionPaths;
+                {
+                    // just a dummy db to initialize the partitions
+                    // and clear the existing content
+                    Database db(path, 1);
+                    db.clear();
 
-                m_header.copyTo(path);
+                    forEach(db.m_partitions, [&partitionPaths](auto&& partition, GameLevel level, GameResult result) {
+                        partitionPaths[level][result] = partition.path();
+                        });
+                }
+
+                m_header.replicateTo(path);
 
                 const std::size_t numPartitions = 9;
                 std::size_t i = 0;
                 std::cerr << timestamp() << ": Merging files...\n";
-                forEach(m_partitions, [numPartitions, &i, &db](auto&& partition, GameLevel level, GameResult result) {
+                forEach(m_partitions, [numPartitions, &i, &partitionPaths](auto&& partition, GameLevel level, GameResult result) {
 
                     ++i;
                     std::cerr << timestamp() << ": Merging files in partition " << i << '/' << numPartitions << " : " << partition.path() << ".\n";
@@ -1026,7 +1059,7 @@ namespace persistence
                         std::cerr << timestamp() << ":     " << static_cast<int>(report.ratio() * 100) << "%.\n";
                     };
 
-                    partition.copyMergeAll(db.m_partitions[level][result].path(), progressReport);
+                    partition.replicateMergeAll(partitionPaths[level][result], progressReport);
                     });
                 std::cerr << timestamp() << ": Finalizing...\n";
                 std::cerr << timestamp() << ": Completed.\n";
