@@ -661,6 +661,7 @@ int main()
     std::cout << static_cast<std::size_t>(cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>()) << '\n';
     std::cout << persistence::local::detail::indexGranularity << '\n';
 
+    ext::detail::ThreadPool::instance("");
 
     //buildbig();
     //replicateMergeAll();

@@ -30,6 +30,23 @@ namespace ext
     // TODO: we need to use non-portable functions to allow >32bit file offsets
     //       so consider moving to std::fstream
 
+    namespace detail
+    {
+        decltype(auto) timestamp()
+        {
+            auto time_now = std::time(nullptr);
+            return std::put_time(std::localtime(&time_now), "%Y-%m-%d %OH:%OM:%OS");
+        }
+
+        template <typename... ArgsTs>
+        void log(ArgsTs&& ... args)
+        {
+            std::cerr << timestamp();
+            (std::cerr << ... << args);
+            std::cerr << '\n';
+        }
+    }
+
     struct Exception : public std::runtime_error
     {
         using BaseType = std::runtime_error;
@@ -597,23 +614,36 @@ namespace ext
                 std::size_t count;
             };
 
-            static const std::vector<std::vector<std::filesystem::path>>& paths()
+            struct ThreadPoolSpec
             {
-                static const std::vector<std::vector<std::filesystem::path>> s_paths = []() {
-                    std::vector<std::vector<std::filesystem::path>> s_paths;
+                std::size_t numThreads;
+                std::vector<std::filesystem::path> paths;
+            };
 
-                    s_paths.emplace_back().emplace_back(std::filesystem::canonical("C:"));
-                    s_paths.emplace_back().emplace_back(std::filesystem::canonical("W:"));
+            static const std::vector<ThreadPoolSpec>& specs()
+            {
+                static const std::vector<ThreadPoolSpec> s_specs = []() {
+                    std::vector<ThreadPoolSpec> s_paths;
+
+                    for (auto&& specJson : cfg::g_config["ext"]["thread_pools"])
+                    {
+                        auto& spec = s_paths.emplace_back();
+                        specJson["threads"].get_to(spec.numThreads);
+                        for (auto&& path : specJson["paths"])
+                        {
+                            spec.paths.emplace_back(path.get<std::string>());
+                        }
+                    }
 
                     return s_paths;
                 }();
 
-                return s_paths;
+                return s_specs;
             }
 
             static ThreadPool& instance()
             {
-                static ThreadPool s_instance{};
+                static ThreadPool s_instance(cfg::g_config["ext"]["default_thread_pool"]["threads"].get<std::size_t>());
                 return s_instance;
             }
 
@@ -622,10 +652,14 @@ namespace ext
                 static std::vector<std::unique_ptr<ThreadPool>> s_instances = []() {
                     std::vector<std::unique_ptr<ThreadPool>> s_instances;
 
-                    const std::size_t size = paths().size();
-                    for (std::size_t i = 0; i < size; ++i)
+                    for (auto&& spec : specs())
                     {
-                        s_instances.emplace_back(new ThreadPool{});
+                        detail::log(": Creating thread pool for paths: ");
+                        for (auto&& path : spec.paths)
+                        {
+                            detail::log(":     ", path);
+                        }
+                        s_instances.emplace_back(new ThreadPool(spec.numThreads));
                     }
 
                     return s_instances;
@@ -722,6 +756,7 @@ namespace ext
             ThreadPool(std::size_t numThreads = defaultNumThreads) :
                 m_done(false)
             {
+                detail::log(": Creating thread pool with ", numThreads, " threads.");
                 m_threads.reserve(numThreads);
                 for (std::size_t i = 0; i < numThreads; ++i)
                 {
@@ -732,10 +767,10 @@ namespace ext
             static std::size_t poolIndexForPath(const std::filesystem::path& path)
             {
                 auto absolute = std::filesystem::canonical(path);
-                const auto& poolPaths = paths();
-                for (std::size_t i = 0; i < poolPaths.size(); ++i)
+                const auto& poolSpecs = specs();
+                for (std::size_t i = 0; i < poolSpecs.size(); ++i)
                 {
-                    auto& ps = poolPaths[i];
+                    auto&& [n, ps] = poolSpecs[i];
                     for (const auto& path : ps)
                     {
                         auto originalPath = absolute;
