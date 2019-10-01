@@ -1,8 +1,10 @@
 #pragma once
 
+#include "Configuration.h"
 #include "EnumMap.h"
 #include "External.h"
 #include "GameClassification.h"
+#include "MemoryAmount.h"
 #include "Pgn.h"
 #include "PositionSignature.h"
 #include "StorageHeader.h"
@@ -48,7 +50,7 @@ namespace persistence
             static constexpr bool useIndex = true;
 
             // Have ranges of mixed values be at most this long
-            static constexpr std::size_t indexGranularity = 1024;
+            static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["local"]["index_granularity"].get<std::size_t>();
 
             struct Entry
             {
@@ -572,11 +574,9 @@ namespace persistence
 
                     lock.unlock();
 
-                    constexpr std::size_t indexRangeSize = 1024;
-
                     if (job.createIndex)
                     {
-                        detail::Index index = ext::makeIndex(job.buffer, indexRangeSize, std::less<>{}, detail::extractEntryKey);
+                        detail::Index index = ext::makeIndex(job.buffer, detail::indexGranularity, std::less<>{}, detail::extractEntryKey);
                         detail::writeIndexFor(job.path, index);
                         job.promise.set_value(std::move(index));
                     }
@@ -600,8 +600,7 @@ namespace persistence
 
         struct Partition
         {
-            // TODO: make configurable
-            static constexpr std::size_t mergeMemory = 1024 * 1024 * 1024;
+            static inline const std::size_t mergeMemory = cfg::g_config["persistence"]["local"]["max_merge_buffer_size"].get<MemoryAmount>();
 
             Partition() = default;
 
@@ -964,7 +963,7 @@ namespace persistence
                 * cardinality<GameResult>();
 
             // TODO: maybe make it configurable, though it doesn't need to be big.
-            static constexpr std::size_t m_pgnParserMemory = 4ull * 1024ull * 1024ull;
+            static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["local"]["pgn_parser_memory"].get<MemoryAmount>();
 
         public:
 

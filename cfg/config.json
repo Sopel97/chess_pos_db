@@ -1,0 +1,154 @@
+{
+    /*
+        Options for disk storage management api.
+    */
+    "ext" : {
+        /*
+            Thread pools are used for performing async io.
+            There is always one default thread pool
+            that is used when nothing else matches.
+            Not all drives have to be enumerated,
+            in particular it's wasteful to enumerage
+            paths that are not used at all by the program.
+            A path can be any path, for example
+            "C:/tmp" would match all files that are
+            children of the tmp directory.
+        */
+        "thread_pools" : [
+            { "threads" : 8, "paths" : ["C:"] },
+            { "threads" : 1, "paths" : ["D:", "F:"] },
+            { "threads" : 8, "paths" : ["W:"] }
+        ],
+
+        /*
+            Options for the always present thread pool
+            that serves paths that don't have specialized ones.
+        */
+        "default_thread_pool" : {
+            "threads" : 4
+        },
+
+        /*
+            Sum of the following should be below the limit
+            of the standard C file library.
+            Pooled files are usually used when the number
+            of files to manage is unbounded (so high), hence
+            the limit is higher than for unpooled files.
+        */
+        "max_concurrent_open_pooled_files" : 256,
+        "max_concurrent_open_unpooled_files" : 128,
+
+        "merge" : {
+            /*
+                Maximum number of files being merged at once.
+                Should be kept below max_concurrent_open_pooled_files.
+                High values may be bad for low seek time drives.
+            */
+            "max_batch_size" : 192,
+
+            /*
+                Specifies how much bigger can the output
+                buffer size be compared to the largest
+                input file buffer.
+                Usually we want sligtly bigger output
+                buffers than input buffers because we merge
+                many files into one.
+            */
+            "max_output_buffer_size_multiplier" : 8
+        },
+
+        "equal_range" : {
+            /*
+                When performing the search we do a lot of random
+                file seeks. It's beneficial to read as much as possible
+                at each access, but not too much. The best value depends on
+                drive characteristics. Going below 32kB is ill advised.
+            */
+            "max_random_read_size" : "32KiB"
+        },
+
+        "index" : {
+            /*
+                Specifies the size of the read buffer used
+                when building an index of a file.
+                Index building is fast so this should be
+                high enough to maximize disk read speed.
+            */
+            "builder_buffer_size" : "8MiB"
+        }
+    },
+
+    /*
+        Options for various position database components
+    */
+    "persistence" : {
+        /*
+            Specifies the number of bytes that can be used
+            by a single header for buffering output when
+            a database is being populated.
+        */
+        "header_writer_memory" : "16MiB",
+
+        /*
+            Options for the 'local' storage format.
+            It uses 20 bytes for each position.
+            Database is split among 9 directories - each one
+            is managed separately.
+        */
+        "local" : {
+            /*
+                Specifies the density of entries in an index.
+                Higher values make the index more sparse.
+                Lower values make the index denser.
+                The denser the index the more space it takes.
+                Should not be higher than max_sequential_read_size/32
+                for maximal query performance.
+            */
+            "index_granularity" : 1024,
+
+            /*
+                The total size of the buffers used for file
+                merging, specified in bytes.
+                Large sizes incur overhead because the whole
+                buffer needs to be filled before the merging
+                process starts. Optimal values depend on merge
+                settings and the total file size. 1GiB is
+                good assuming large files (>4GiB in total) are
+                being merged.
+            */
+            "max_merge_buffer_size" : "1GiB",
+
+            /*
+                Specifies the number of bytes that can be used
+                by a single PGN parser as a buffer.
+                This also creates a limit on how much space a single
+                PGN game record may take (they are usually at most a few kB).
+                Only half of the buffer is used at a time.
+                Buffers in the order of a few MiB should be preferred as
+                PGN parsing is fast and may run in parallel with other
+                disk io.
+            */
+            "pgn_parser_memory" : "4MiB"
+        }
+    },
+
+    "app" : {
+        /*
+            Total memory used for buffers when importing PGN
+            files into the database.
+            Should be kept as high as possible.
+            On windows values around 65-75% of free memory are recommended.
+            Values higher than that can inhibit system's
+            disk read-ahead/file buffering and/or cause
+            stalls due to large memory allocations causing
+            movement to pagefile.
+            Generally, higher values can decrease disk seeks.
+            Higher values also result in the importer creating
+            less but bigger files. This is benefial both for
+            querying and merging performance.
+            For the 'local' format individual files have size
+            about 1/9 of pgn_import_memory.
+        */
+        "pgn_import_memory" : "2GiB"
+    }
+}

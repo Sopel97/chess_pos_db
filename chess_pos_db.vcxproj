@@ -249,6 +249,7 @@
     <ClInclude Include="Coding.h" />
     <ClInclude Include="CodingTest.h" />
     <ClInclude Include="Compression.h" />
+    <ClInclude Include="Configuration.h" />
     <ClInclude Include="Date.h" />
     <ClInclude Include="Eco.h" />
     <ClInclude Include="Enum.h" />
@@ -258,6 +259,7 @@
     <ClInclude Include="GameClassification.h" />
     <ClInclude Include="Intrinsics.h" />
     <ClInclude Include="LocalStorageFormat.h" />
+    <ClInclude Include="MemoryAmount.h" />
     <ClInclude Include="MoveGenerator.h" />
     <ClInclude Include="MoveGeneratorTest.h" />
     <ClInclude Include="Pgn.h" />

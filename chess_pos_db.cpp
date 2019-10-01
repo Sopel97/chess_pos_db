@@ -25,12 +25,15 @@
 #include "MoveGenerator.h"
 #include "MoveGeneratorTest.h"
 #include "External.h"
+#include "Configuration.h"
 
 #include "lib/xxhash/xxhash_cpp.h"
 
 #include "lib/robin_hood/robin_hood.h"
 
 #include "CodingTest.h"
+
+const std::size_t pgnMemory = cfg::g_config["app"]["pgn_import_memory"].get<MemoryAmount>();
 
 void print(Bitboard bb)
 {
@@ -216,7 +219,7 @@ void build()
         {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Human}
-        }, 2u * 1024u * 1024u * 1024u);
+        }, pgnMemory);
         */
     //e.importPgns(std::execution::par_unseq, {
     e.importPgns(std::execution::seq, {
@@ -232,7 +235,7 @@ void build()
         {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Engine},
         {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine}
-        }, 2u * 1024u * 1024u * 1024u);
+        }, pgnMemory);
 }
 
 void buildccrl()
@@ -240,7 +243,7 @@ void buildccrl()
     persistence::local::Database e("c:/dev/chess_pos_db/.tmpccrl", 4ull * 1024ull * 1024ull);
     e.importPgns(std::execution::seq, {
         {"w:/catobase/data/CCRL-4040.[1086555].pgn", GameLevel::Human}
-        }, 2u * 1024u * 1024u * 1024u);
+        }, pgnMemory);
 }
 
 void buildsmall()
@@ -249,7 +252,7 @@ void buildsmall()
     persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     e.importPgns(std::execution::seq, {
         {"w:/catobase/data/Server Games LiChess 2019-1.pgn", GameLevel::Human}
-        }, 2u * 1024u * 1024u * 1024u);
+        }, pgnMemory);
 }
 
 struct AggregatedQueryResult
@@ -440,8 +443,8 @@ void printAggregatedResult(const AggregatedQueryResult& res)
 void query2(const Position& pos)
 {
     std::cout << "Loading db\n";
-    persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
-    //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
+    //persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     std::cout << "Loaded db\n";
 
     auto agg = queryAggregate(e, pos, true, true, true, false);
@@ -573,6 +576,7 @@ void benchPgnParsePar()
         {
             for (auto&& position : game.positions())
             {
+                (void)position;
                 ++c;
             }
         }
@@ -621,7 +625,7 @@ void buildbig()
         {"w:/catobase/data/lichess_db_standard_rated_2014-10.pgn", GameLevel::Server},
         {"w:/catobase/data/lichess_db_standard_rated_2014-11.pgn", GameLevel::Server},
         {"w:/catobase/data/lichess_db_standard_rated_2014-12.pgn", GameLevel::Server}
-        }, 2u * 1024u * 1024u * 1024u);
+        }, pgnMemory);
 
     //e.mergeAll();
 }
@@ -651,17 +655,22 @@ int main()
     //buildsmall();
     //mergeAll();
     //query2(Position::fromFen("r1b1kb1r/1pq2ppp/p1p1pn2/8/4P3/2NB4/PPP2PPP/R1BQ1RK1 w kq - 0 9"));
+    //std::cout << "\n\n\n";
     //query2(Position::startPosition());
 
+    std::cout << static_cast<std::size_t>(cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>()) << '\n';
+    std::cout << persistence::local::detail::indexGranularity << '\n';
+
+
     //buildbig();
-    replicateMergeAll();
+    //replicateMergeAll();
 
     return 0;
     /*
     persistence::Database e("w:/catobase/.tmp");
     e.importPgns({
         "data/lichess_db_standard_rated_2013-01.pgn"
-        }, GameLevel::Human, 2u * 1024u * 1024u * 1024u);
+        }, GameLevel::Human, pgnMemory);
         */
     {
         auto t0 = std::chrono::high_resolution_clock::now();

@@ -4,6 +4,9 @@
 
 #include "Assert.h"
 
+#include "Configuration.h"
+#include "MemoryAmount.h"
+
 #include <iostream>
 
 #include <atomic>
@@ -205,7 +208,7 @@ namespace ext
 
             struct FilePool
             {
-                static constexpr std::size_t numMaxConcurrentOpenFiles = 256;
+                static inline const std::size_t numMaxConcurrentOpenFiles = cfg::g_config["ext"]["max_concurrent_open_pooled_files"].get<std::size_t>();
 
                 FilePool() = default;
 
@@ -449,7 +452,7 @@ namespace ext
             using NativeFileHandle = std::FILE*;
 
         public:
-            static constexpr std::size_t maxUnpooledOpenFiles = 128;
+            static inline const std::size_t maxUnpooledOpenFiles = cfg::g_config["ext"]["max_concurrent_open_unpooled_files"].get<std::size_t>();
 
             File(std::filesystem::path path, std::string openmode) :
                 m_path(std::move(path)),
@@ -2332,8 +2335,9 @@ namespace ext
 
     namespace detail::merge
     {
-        static constexpr std::size_t maxOutputBufferSizeMultiplier = 8;
-        static constexpr std::size_t maxNumMergedInputs = 192;
+        static inline const std::size_t maxOutputBufferSizeMultiplier = cfg::g_config["ext"]["merge"]["max_output_buffer_size_multiplier"].get<std::size_t>();
+        static inline const std::size_t maxNumMergedInputs = cfg::g_config["ext"]["merge"]["max_batch_size"].get<std::size_t>();
+        
         static constexpr std::size_t priorityQueueMergeThreshold = 32;
 
         [[nodiscard]] std::size_t merge_assess_work(
@@ -3127,9 +3131,10 @@ namespace ext
             )
         {
             // 32KiB should be about how much we can read using 'constant' time.
-            constexpr std::size_t maxSeqReadSize = 32 * 1024;
-            constexpr std::size_t maxNumSeqReadElements = std::max(static_cast<std::size_t>(3), maxSeqReadSize / sizeof(EntryType));
-            static_assert(maxNumSeqReadElements >= 3, "We need at least 3 values at once to properly narrow the search");
+            static const std::size_t maxSeqReadSize = cfg::g_config["ext"]["equal_range"]["max_random_read_size"].get<MemoryAmount>();
+
+            const std::size_t maxNumSeqReadElements = std::max(static_cast<std::size_t>(3), maxSeqReadSize / sizeof(EntryType));
+            ASSERT(maxNumSeqReadElements >= 3);
 
             const std::size_t end = data.size();
 
@@ -3966,6 +3971,8 @@ namespace ext
         return detail::makeIndexImpl(values.begin(), values.end(), maxNumEntriesInRange, cmp, key);
     }
 
+    static inline const std::size_t defaultIndexBuilderMemoryAmount = cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>();
+
     template <
         typename EntryType,
         typename CompareT = std::less<>,
@@ -3977,7 +3984,9 @@ namespace ext
                                               // but only when lowValue == highValue
             CompareT cmp = CompareT{},
             KeyExtractT key = KeyExtractT{},
-            DoubleBuffer<EntryType> buffer = DoubleBuffer<EntryType>(1024 * 1024 * 8 / sizeof(EntryType))
+            DoubleBuffer<EntryType> buffer = DoubleBuffer<EntryType>(
+                defaultIndexBuilderMemoryAmount / sizeof(EntryType)
+                )
         )
     {
         ASSERT(values.size() > 0);
