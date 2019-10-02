@@ -441,6 +441,10 @@ struct App
             {
                 return;
             }
+            else
+            {
+                std::cout << "Unknown command: " << cmd << '\n';
+            }
         }
     }
 
@@ -451,7 +455,7 @@ private:
     struct AggregatedQueryResult
     {
         EnumMap2<GameLevel, GameResult, std::size_t> counts;
-        EnumMap2<GameLevel, GameResult, std::optional<persistence::PackedGameHeader>> games;
+        EnumMap2<GameLevel, GameResult, std::optional<persistence::GameHeader>> games;
     };
 
     struct AggregatedQueryResults
@@ -559,7 +563,7 @@ private:
 
                         if (fetchFirstGameForContinuations && count > 0)
                         {
-                            aggResult.games[level][result] = *it++;
+                            aggResult.games[level][result] = persistence::GameHeader(*it++);
                         }
                     }
                 }
@@ -574,7 +578,7 @@ private:
 
                     if (fetchFirstGame && count > 0)
                     {
-                        aggResult.games[level][result] = *it++;
+                        aggResult.games[level][result] = persistence::GameHeader(*it++);
                     }
                 }
             }
@@ -602,7 +606,7 @@ private:
 
         std::cout << '\n';
 
-        const persistence::PackedGameHeader* firstGame = nullptr;
+        const persistence::GameHeader* firstGame = nullptr;
         for (auto& gg : res.games)
         {
             for (auto& g : gg)
@@ -621,12 +625,13 @@ private:
 
         if (firstGame)
         {
+            std::string plyCount = firstGame->plyCount() ? std::to_string(*firstGame->plyCount()) : "-"s;
             std::cout
                 << firstGame->date().toString()
                 << ' ' << toString(firstGame->result())
                 << ' ' << firstGame->eco().toString()
                 << ' ' << firstGame->event()
-                << ' ' << firstGame->plyCount()
+                << ' ' << plyCount
                 << ' ' << firstGame->white()
                 << ' ' << firstGame->black()
                 << '\n';

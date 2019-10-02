@@ -152,6 +152,70 @@ namespace persistence
     };
     static_assert(sizeof(PackedGameHeader) == 2 + 2 + 4 + 2 + 2 + 768);
 
+    struct GameHeader
+    {
+        GameHeader() = default;
+
+        explicit GameHeader(const PackedGameHeader& header) :
+            m_result(header.result()),
+            m_date(header.date()),
+            m_eco(header.eco()),
+            m_plyCount(std::nullopt),
+            m_event(header.event()),
+            m_white(header.white()),
+            m_black(header.black())
+        {
+            if (header.plyCount() != PackedGameHeader::unknownPlyCount)
+            {
+                m_plyCount = header.plyCount();
+            }
+        }
+
+        [[nodiscard]] GameResult result() const
+        {
+            return m_result;
+        }
+
+        [[nodiscard]] Date date() const
+        {
+            return m_date;
+        }
+
+        [[nodiscard]] Eco eco() const
+        {
+            return m_eco;
+        }
+
+        [[nodiscard]] std::optional<std::uint16_t> plyCount() const
+        {
+            return m_plyCount;
+        }
+
+        [[nodiscard]] const std::string& event() const
+        {
+            return m_event;
+        }
+
+        [[nodiscard]] const std::string& white() const
+        {
+            return m_white;
+        }
+
+        [[nodiscard]] const std::string& black() const
+        {
+            return m_black;
+        }
+
+    private:
+        GameResult m_result;
+        Date m_date;
+        Eco m_eco;
+        std::optional<std::uint16_t> m_plyCount;
+        std::string m_event;
+        std::string m_white;
+        std::string m_black;
+    };
+
     struct Header
     {
         static inline const std::filesystem::path headerPath = "header";
