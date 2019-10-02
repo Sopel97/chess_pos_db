@@ -255,354 +255,6 @@ void buildsmall()
         }, pgnMemory);
 }
 
-struct AggregatedQueryResult
-{
-    EnumMap2<GameLevel, GameResult, std::size_t> counts;
-    EnumMap2<GameLevel, GameResult, std::optional<persistence::PackedGameHeader>> games;
-};
-
-struct AggregatedQueryResults
-{
-    Position mainPosition;
-    AggregatedQueryResult main;
-    std::vector<std::pair<Move, AggregatedQueryResult>> continuations;
-};
-
-AggregatedQueryResults queryAggregate(persistence::local::Database& db, const Position& pos, bool queryContinuations, bool fetchFirstGame, bool fetchFirstGameForContinuations, bool removeEmptyContinuations)
-{
-    Position basePosition = pos;
-    std::vector<Position> positions;
-    std::vector<Move> moves;
-    if (queryContinuations)
-    {
-        movegen::forEachLegalMove(basePosition, [&](Move move) {
-            positions.emplace_back(basePosition.afterMove(move));
-            moves.emplace_back(move);
-            });
-    }
-    positions.emplace_back(basePosition);
-
-    AggregatedQueryResults aggResults;
-    aggResults.mainPosition = pos;
-    std::vector<std::uint32_t> gameQueries;
-    auto results = db.queryRanges(positions);
-    for (int i = 0; i < moves.size(); ++i)
-    {
-        AggregatedQueryResult aggResult;
-        std::size_t totalCount = 0;
-        for (GameLevel level : values<GameLevel>())
-        {
-            for (GameResult result : values<GameResult>())
-            {
-                const std::size_t count = results[level][result][i].count();
-                aggResult.counts[level][result] = count;
-                totalCount += count;
-
-                if (fetchFirstGameForContinuations && count > 0)
-                {
-                    gameQueries.emplace_back(results[level][result][i].firstGameIndex());
-                }
-            }
-        }
-
-        if (removeEmptyContinuations && totalCount == 0)
-        {
-            continue;
-        }
-
-        aggResults.continuations.emplace_back(moves[i], aggResult);
-    }
-
-    {
-        AggregatedQueryResult aggResult;
-        for (GameLevel level : values<GameLevel>())
-        {
-            for (GameResult result : values<GameResult>())
-            {
-                const std::size_t count = results[level][result].back().count();
-                aggResult.counts[level][result] = count;
-
-                if (fetchFirstGame && count > 0)
-                {
-                    gameQueries.emplace_back(results[level][result].back().firstGameIndex());
-                }
-            }
-        }
-        aggResults.main = aggResult;
-    }
-
-    {
-        std::vector<persistence::PackedGameHeader> headers = db.queryHeaders(gameQueries);
-        auto it = headers.begin();
-        for (int i = 0; i < moves.size(); ++i)
-        {
-            AggregatedQueryResult& aggResult = aggResults.continuations[i].second;
-            for (GameLevel level : values<GameLevel>())
-            {
-                for (GameResult result : values<GameResult>())
-                {
-                    const std::size_t count = aggResult.counts[level][result];
-
-                    if (fetchFirstGameForContinuations && count > 0)
-                    {
-                        aggResult.games[level][result] = *it++;
-                    }
-                }
-            }
-        }
-
-        AggregatedQueryResult& aggResult = aggResults.main;
-        for (GameLevel level : values<GameLevel>())
-        {
-            for (GameResult result : values<GameResult>())
-            {
-                const std::size_t count = aggResult.counts[level][result];
-
-                if (fetchFirstGame && count > 0)
-                {
-                    aggResult.games[level][result] = *it++;
-                }
-            }
-        }
-    }
-
-    return aggResults;
-}
-
-std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
-{
-    auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin]);
-    str += std::string("=") + std::to_string(results[GameResult::Draw]);
-    str += std::string("-") + std::to_string(results[GameResult::BlackWin]);
-    return str;
-}
-
-std::string toString(GameResult res)
-{
-    switch (res)
-    {
-    case GameResult::WhiteWin:
-        return "win";
-    case GameResult::BlackWin:
-        return "loss";
-    case GameResult::Draw:
-        return "draw";
-    }
-}
-
-void printAggregatedResult(const AggregatedQueryResult& res)
-{
-    std::size_t total = 0;
-    for (auto& cc : res.counts)
-    {
-        for (auto& c : cc)
-        {
-            total += c;
-        }
-    }
-    std::cout << std::setw(9) << total << ' ';
-
-    for (auto& cc : res.counts)
-    {
-        std::cout << std::setw(19) << resultsToString(cc) << ' ';
-    }
-
-    std::cout << '\n';
-
-    const persistence::PackedGameHeader* firstGame = nullptr;
-    for (auto& gg : res.games)
-    {
-        for (auto& g : gg)
-        {
-            if (!g.has_value())
-            {
-                continue;
-            }
-
-            if (firstGame == nullptr || g->date() < firstGame->date())
-            {
-                firstGame = &*g;
-            }
-        }
-    }
-
-    if (firstGame)
-    {
-        std::cout 
-            << firstGame->date().toString() 
-            << ' ' << toString(firstGame->result())
-            << ' ' << firstGame->eco().toString() 
-            << ' ' << firstGame->event() 
-            << ' ' << firstGame->plyCount() 
-            << ' ' << firstGame->white() 
-            << ' ' << firstGame->black()
-            << '\n';
-    }
-}
-
-void query2(const Position& pos)
-{
-    std::cout << "Loading db\n";
-    //persistence::local::Database e("w:/catobase/.tmp", 4ull * 1024ull * 1024ull);
-    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
-    std::cout << "Loaded db\n";
-
-    auto agg = queryAggregate(e, pos, true, true, true, false);
-    
-    printAggregatedResult(agg.main);
-    std::cout << "\n";
-    for (auto&& [move, res] : agg.continuations)
-    {
-        std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Capture>(pos, move) << " ";
-        printAggregatedResult(res);
-    }
-}
-
-
-void query(const Position& pos)
-{
-    std::cout << "Loading db\n";
-    persistence::local::Database e("w:/catobase/.tmp_indexed", 4ull * 1024ull * 1024ull);
-    //persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
-    std::cout << "Loaded db\n";
-
-    Position basePosition = pos;
-    std::vector<Position> positions;
-    std::vector<Move> moves;
-    movegen::forEachLegalMove(basePosition, [&](Move move) {
-        positions.emplace_back(basePosition.afterMove(move));
-        moves.emplace_back(move);
-    });
-    positions.emplace_back(basePosition);
-
-    auto results = e.queryRanges(positions);
-    for (int i = 0; i < moves.size(); ++i)
-    {
-        std::cout << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check>(basePosition, moves[i]) << '\n';
-        std::size_t total = 0;
-        for (GameLevel level : values<GameLevel>())
-        {
-            for (GameResult result : values<GameResult>())
-            {
-                auto& r = results[level][result][i];
-                const std::size_t thisCount = r.count();
-                std::cout << '\t' << static_cast<int>(level) << ' ' << static_cast<int>(result) << ' ' << thisCount << '\n';
-                total += thisCount;
-            }
-        }
-        std::cout << "Total: " << total << "\n\n";
-    }
-    std::cout << "\nFor base position:\n";
-    {
-        std::size_t total = 0;
-        for (GameLevel level : values<GameLevel>())
-        {
-            for (GameResult result : values<GameResult>())
-            {
-                auto& r = results[level][result].back();
-                const std::size_t thisCount = r.count();
-                std::cout << '\t' << static_cast<int>(level) << ' ' << static_cast<int>(result) << ' ' << thisCount;
-                total += thisCount;
-
-                if (thisCount != 0)
-                {
-                    auto h = e.queryHeaders({ results[level][result].back().firstGameIndex() })[0];
-                    std::cout << ": " << h.date().toString() << ' ' << h.eco().toString() << ' ' << h.event() << ' ' << h.plyCount() << ' ' << h.white() << ' ' << h.black();
-                }
-                std::cout << '\n';
-            }
-        }
-        std::cout << "Total: " << total;
-    }
-}
-
-void benchPgnParse()
-{
-    std::vector<persistence::local::PgnFile> files{
-        {"c:/dev/chess_pos_db/data/lichess_db_standard_rated_2014-12.pgn", GameLevel::Human}
-    };
-
-    std::size_t ct = 0;
-    double tot = 0;
-    std::size_t iterations = 5;
-    std::size_t size = 0;
-    {
-        // warmup
-        for (auto&& file : files)
-        {
-            pgn::LazyPgnFileReader reader(file.path(), 4 * 1024 * 1024);
-            std::size_t c = 0;
-            for (auto&& game : reader)
-            {
-                for (auto&& position : game.positions())
-                {
-                    ++c;
-                }
-            }
-        }
-    }
-    for (auto&& file : files)
-    {
-        for (int i = 0; i < iterations; ++i)
-        {
-            pgn::LazyPgnFileReader reader(file.path(), 4 * 1024 * 1024);
-            std::size_t c = 0;
-            auto t0 = std::chrono::high_resolution_clock::now();
-            for (auto&& game : reader)
-            {
-                for (auto&& position : game.positions())
-                {
-                    ++c;
-                }
-            }
-            auto t1 = std::chrono::high_resolution_clock::now();
-            double s = (t1 - t0).count() / 1e9;
-            tot += s;
-            std::cout << c << " positions in " << s << "s\n";
-            size = std::filesystem::file_size(file.path());
-            std::cout << "Throughput of " << size / s / 1e6 << " MB/s\n";
-            ct += c;
-        }
-    }
-    std::cout << ct << " positions in " << tot << "s\n";
-    std::cout << "Throughput of " << size / tot / 1e6 * iterations << " MB/s\n";
-}
-
-void benchPgnParsePar()
-{
-    std::vector<persistence::local::PgnFile> files{
-        {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
-        { "w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Server },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-04.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-05.pgn", GameLevel::Engine },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-06.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-07.pgn", GameLevel::Engine },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-08.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-09.pgn", GameLevel::Server },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Engine },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine }
-    };
-
-    std::atomic<std::size_t> ct = 0;
-    std::for_each(std::execution::par, files.begin(), files.end(), [&ct](auto&& file) {
-        pgn::LazyPgnFileReader reader(file.path(), 1024 * 1024);
-        std::size_t c = 0;
-        for (auto&& game : reader)
-        {
-            for (auto&& position : game.positions())
-            {
-                (void)position;
-                ++c;
-            }
-        }
-        std::cout << c << '\n';
-        ct += c;
-        });
-    std::cout << ct << '\n';
-}
-
 void mergeAll()
 {
     std::cout << "Loading db\n";
@@ -656,13 +308,342 @@ void replicateMergeAll()
     e.replicateMergeAll("c:/dev/chess_pos_db/.tmp");
 }
 
+std::pair<std::string, std::vector<std::string>> parseCommand(const std::string& cmd)
+{
+    std::pair<std::string, std::vector<std::string>> parts;
+
+    bool escaped = false;
+    bool args = false;
+    for (char c : cmd)
+    {
+        if (c == '`')
+        {
+            escaped = !escaped;
+            continue;
+        }
+
+        if (!escaped && std::isspace(c))
+        {
+            parts.second.emplace_back();
+            args = true;
+        }
+        else if (args)
+        {
+            parts.second.back() += c;
+        }
+        else
+        {
+            parts.first += c;
+        }
+    }
+
+    return parts;
+}
+
+struct App
+{
+    App()
+    {
+    }
+
+    void bench(const std::vector<std::filesystem::path>& paths) const
+    {
+        std::size_t ct = 0;
+        std::size_t size = 0;
+        double time = 0;
+        for (auto&& path : paths)
+        {
+            size += std::filesystem::file_size(path);
+
+            pgn::LazyPgnFileReader reader(path, 4 * 1024 * 1024);
+            std::size_t c = 0;
+            auto t0 = std::chrono::high_resolution_clock::now();
+            for (auto&& game : reader)
+            {
+                for (auto&& position : game.positions())
+                {
+                    ++c;
+                }
+            }
+            auto t1 = std::chrono::high_resolution_clock::now();
+            time += (t1 - t0).count() / 1e9;
+            ct += c;
+        }
+        std::cout << ct << " positions in " << time << "s\n";
+        std::cout << "Throughput of " << size / time / 1e6 << " MB/s\n";
+    }
+
+    void load(const std::filesystem::path& path)
+    {
+        m_database = std::make_unique<persistence::local::Database>(path);
+    }
+
+    void query(const Position& pos)
+    {
+        if (m_database == nullptr)
+        {
+            std::cout << "You have to open a database first.\n";
+            return;
+        }
+
+        auto agg = queryAggregate(*m_database, pos, true, true, true, false);
+
+        printAggregatedResult(agg.main);
+        std::cout << "\n";
+        for (auto&& [move, res] : agg.continuations)
+        {
+            std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check>(pos, move) << " ";
+            printAggregatedResult(res);
+        }
+    }
+
+    void run()
+    {
+        for (;;)
+        {
+            std::string cmdline;
+            std::getline(std::cin, cmdline);
+            auto [cmd, args] = parseCommand(cmdline);
+
+            if (cmd == "bench"sv)
+            {
+                std::vector<std::filesystem::path> paths;
+                for (auto&& path : args) paths.emplace_back(path);
+                bench(paths);
+            }
+            else if (cmd == "open"sv)
+            {
+                if (args.size() != 1)
+                {
+                    std::cout << "open takes one path as an argument.\n";
+                }
+                else
+                {
+                    load(args.front());
+                }
+            }
+            else if (cmd == "query"sv)
+            {
+                if (args.size() != 1)
+                {
+                    std::cout << "query takes a fen as an argument.\n";
+                }
+                else
+                {
+                    query(Position::fromFen(args.front().c_str()));
+                }
+            }
+            else if (cmd == "close"sv)
+            {
+                m_database.reset();
+            }
+            else if (cmd == "exit"sv)
+            {
+                return;
+            }
+        }
+    }
+
+private:
+    std::unique_ptr<persistence::local::Database> m_database;
+
+
+    struct AggregatedQueryResult
+    {
+        EnumMap2<GameLevel, GameResult, std::size_t> counts;
+        EnumMap2<GameLevel, GameResult, std::optional<persistence::PackedGameHeader>> games;
+    };
+
+    struct AggregatedQueryResults
+    {
+        Position mainPosition;
+        AggregatedQueryResult main;
+        std::vector<std::pair<Move, AggregatedQueryResult>> continuations;
+    };
+
+    std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
+    {
+        auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin]);
+        str += std::string("=") + std::to_string(results[GameResult::Draw]);
+        str += std::string("-") + std::to_string(results[GameResult::BlackWin]);
+        return str;
+    }
+
+    std::string toString(GameResult res)
+    {
+        switch (res)
+        {
+        case GameResult::WhiteWin:
+            return "win";
+        case GameResult::BlackWin:
+            return "loss";
+        case GameResult::Draw:
+            return "draw";
+        }
+    }
+
+    AggregatedQueryResults queryAggregate(persistence::local::Database& db, const Position& pos, bool queryContinuations, bool fetchFirstGame, bool fetchFirstGameForContinuations, bool removeEmptyContinuations)
+    {
+        Position basePosition = pos;
+        std::vector<Position> positions;
+        std::vector<Move> moves;
+        if (queryContinuations)
+        {
+            movegen::forEachLegalMove(basePosition, [&](Move move) {
+                positions.emplace_back(basePosition.afterMove(move));
+                moves.emplace_back(move);
+                });
+        }
+        positions.emplace_back(basePosition);
+
+        AggregatedQueryResults aggResults;
+        aggResults.mainPosition = pos;
+        std::vector<std::uint32_t> gameQueries;
+        auto results = db.queryRanges(positions);
+        for (int i = 0; i < moves.size(); ++i)
+        {
+            AggregatedQueryResult aggResult;
+            std::size_t totalCount = 0;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    const std::size_t count = results[level][result][i].count();
+                    aggResult.counts[level][result] = count;
+                    totalCount += count;
+
+                    if (fetchFirstGameForContinuations && count > 0)
+                    {
+                        gameQueries.emplace_back(results[level][result][i].firstGameIndex());
+                    }
+                }
+            }
+
+            if (removeEmptyContinuations && totalCount == 0)
+            {
+                continue;
+            }
+
+            aggResults.continuations.emplace_back(moves[i], aggResult);
+        }
+
+        {
+            AggregatedQueryResult aggResult;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    const std::size_t count = results[level][result].back().count();
+                    aggResult.counts[level][result] = count;
+
+                    if (fetchFirstGame && count > 0)
+                    {
+                        gameQueries.emplace_back(results[level][result].back().firstGameIndex());
+                    }
+                }
+            }
+            aggResults.main = aggResult;
+        }
+
+        {
+            std::vector<persistence::PackedGameHeader> headers = db.queryHeaders(gameQueries);
+            auto it = headers.begin();
+            for (int i = 0; i < moves.size(); ++i)
+            {
+                AggregatedQueryResult& aggResult = aggResults.continuations[i].second;
+                for (GameLevel level : values<GameLevel>())
+                {
+                    for (GameResult result : values<GameResult>())
+                    {
+                        const std::size_t count = aggResult.counts[level][result];
+
+                        if (fetchFirstGameForContinuations && count > 0)
+                        {
+                            aggResult.games[level][result] = *it++;
+                        }
+                    }
+                }
+            }
+
+            AggregatedQueryResult& aggResult = aggResults.main;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    const std::size_t count = aggResult.counts[level][result];
+
+                    if (fetchFirstGame && count > 0)
+                    {
+                        aggResult.games[level][result] = *it++;
+                    }
+                }
+            }
+        }
+
+        return aggResults;
+    }
+
+    void printAggregatedResult(const AggregatedQueryResult& res)
+    {
+        std::size_t total = 0;
+        for (auto& cc : res.counts)
+        {
+            for (auto& c : cc)
+            {
+                total += c;
+            }
+        }
+        std::cout << std::setw(9) << total << ' ';
+
+        for (auto& cc : res.counts)
+        {
+            std::cout << std::setw(19) << resultsToString(cc) << ' ';
+        }
+
+        std::cout << '\n';
+
+        const persistence::PackedGameHeader* firstGame = nullptr;
+        for (auto& gg : res.games)
+        {
+            for (auto& g : gg)
+            {
+                if (!g.has_value())
+                {
+                    continue;
+                }
+
+                if (firstGame == nullptr || g->date() < firstGame->date())
+                {
+                    firstGame = &*g;
+                }
+            }
+        }
+
+        if (firstGame)
+        {
+            std::cout
+                << firstGame->date().toString()
+                << ' ' << toString(firstGame->result())
+                << ' ' << firstGame->eco().toString()
+                << ' ' << firstGame->event()
+                << ' ' << firstGame->plyCount()
+                << ' ' << firstGame->white()
+                << ' ' << firstGame->black()
+                << '\n';
+        }
+    }
+};
+
 int main()
 {
+    App app;
+    app.run();
+
     {
         //std::vector<char>(4'000'000'000ull);
     }
 
-    benchPgnParse();
+    //benchPgnParse();
     //benchPgnParsePar();
 
     //testMoveGenerator();

@@ -883,6 +883,8 @@ private:
     CastlingRights m_castlingRights;
 };
 
+static_assert(sizeof(Position) == 192);
+
 static_assert(Position::startPosition().afterMove(Move{ A2, A4 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR b KQkq -"));
 static_assert(Position::startPosition().afterMove(Move{ E2, E3 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq -"));
 static_assert(Position::startPosition().afterMove(Move{ G1, F3 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq -"));

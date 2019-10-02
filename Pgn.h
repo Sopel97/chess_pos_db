@@ -400,8 +400,8 @@ namespace pgn
             using pointer = const Position*;
 
             UnparsedPositionsIterator(std::string_view moveSection) noexcept :
-                m_moveSection(moveSection),
-                m_position(Position::startPosition())
+                m_position(Position::startPosition()),
+                m_moveSection(moveSection)
             {
                 ASSERT(m_moveSection.front() == '1');
             }
@@ -452,8 +452,8 @@ namespace pgn
             }
 
         private:
-            std::string_view m_moveSection;
             Position m_position;
+            std::string_view m_moveSection;
         };
 
     public:

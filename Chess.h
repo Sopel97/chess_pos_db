@@ -355,10 +355,10 @@ struct FlatSquareOffset
     std::int8_t value;
 
     constexpr FlatSquareOffset(int files, int ranks) noexcept :
-        value(static_cast<unsigned>(files) + static_cast<unsigned>(ranks) * cardinality<File>())
+        value(files + ranks * cardinality<File>())
     {
-        ASSERT(files + ranks * cardinality<File>() >= 0);
-        ASSERT(files + ranks * cardinality<File>() < cardinality<File>() * cardinality<Rank>());
+        ASSERT(files + ranks * cardinality<File>() >= std::numeric_limits<std::int8_t>::min());
+        ASSERT(files + ranks * cardinality<File>() <= std::numeric_limits<std::int8_t>::max());
     }
 };
 
