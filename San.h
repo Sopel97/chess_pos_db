@@ -78,6 +78,16 @@ namespace san
             str += static_cast<char>('1' + ordinal(sq.rank()));
         }
 
+        inline void appendRankToString(Rank r, std::string& str)
+        {
+            str += static_cast<char>('1' + ordinal(r));
+        }
+
+        inline void appendFileToString(File f, std::string& str)
+        {
+            str += static_cast<char>('a' + ordinal(f));
+        }
+
         [[nodiscard]] constexpr bool contains(std::string_view s, char c)
         {
             return s.find(c) != std::string::npos;
@@ -475,9 +485,10 @@ namespace san
         Capture = 0x1,
         Check = 0x2,
 
+        Compact = 0x8
+
         // not yet supported
-        // Mate = 0x4, 
-        // Compact = 0x8
+        // Mate = 0x4
     };
 
     [[nodiscard]] constexpr SanSpec operator|(SanSpec lhs, SanSpec rhs)
@@ -494,6 +505,80 @@ namespace san
     [[nodiscard]] constexpr bool contains(SanSpec lhs, SanSpec rhs)
     {
         return (lhs & rhs) == rhs;
+    }
+
+    namespace detail
+    {
+        void appendUnambiguousCompactFrom(const Position& pos, const Move& move, std::string& san)
+        {
+            const Piece piece = pos.pieceAt(move.from);
+
+            const PieceType type = piece.type();
+
+            const bool isCapture =
+                (move.type == MoveType::EnPassant)
+                || (pos.pieceAt(move.to) != Piece::none());
+
+            if (type == PieceType::Pawn)
+            {
+                if (isCapture)
+                {
+                    detail::appendFileToString(move.from.file(), san);
+                    return;
+                }
+                return;
+            }
+            
+            // There is only one king so no disambiguation needed.
+            if (type == PieceType::King)
+            {
+                detail::appendSquareToString(move.to, san);
+                return;
+            }
+
+            // We have to find out whether disambiguation is needed
+            // We don't care about performance here so we do it the easy but slow way.
+            Bitboard candidates = pos.piecesBB(piece);
+            candidates &= bb::attacks(type, move.to, pos.piecesBB());
+            if (candidates.exactlyOne())
+            {
+                // Do nothing, no disambiguation needed.
+                return;
+            }
+                
+            for (Square fromSq : candidates)
+            {
+                const Move candidateMove{ fromSq, move.to };
+                if (pos.createsDiscoveredAttackOnOwnKing(candidateMove))
+                {
+                    candidates ^= fromSq;
+                }
+            }
+
+            if (candidates.exactlyOne())
+            {
+                // Do nothing, no disambiguation needed
+                // as there is only one legal move.
+                return;
+            }
+
+            if ((candidates & bb::file(move.from.file())).exactlyOne())
+            {
+                // Adding file disambiguates.
+                detail::appendFileToString(move.from.file(), san);
+                return;
+            }
+
+            if ((candidates & bb::rank(move.from.rank())).exactlyOne())
+            {
+                // Adding rank disambiguates.
+                detail::appendRankToString(move.from.rank(), san);
+                return;
+            }
+
+            // Full square is needed.
+            detail::appendSquareToString(move.from, san);
+        }
     }
 
     template <SanSpec SpecV>
@@ -525,19 +610,27 @@ namespace san
         {
             const Piece piece = pos.pieceAt(move.from);
 
-            if (piece.type() != PieceType::Pawn)
+            const PieceType type = piece.type();
+
+            if (type != PieceType::Pawn)
             {
                 san += detail::pieceTypeToChar(piece.type());
             }
 
-            detail::appendSquareToString(move.from, san);
+            if constexpr (contains(SpecV, SanSpec::Compact))
+            {
+                detail::appendUnambiguousCompactFrom(pos, move, san);
+            }
+            else
+            {
+                detail::appendSquareToString(move.from, san);
+            }
 
             if constexpr (contains(SpecV, SanSpec::Capture))
             {
                 const bool isCapture =
                     (move.type == MoveType::EnPassant)
-                    ? true
-                    : (pos.pieceAt(move.to) != Piece::none());
+                    || (pos.pieceAt(move.to) != Piece::none());
 
                 if (isCapture)
                 {

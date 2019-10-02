@@ -371,7 +371,7 @@ namespace app
         std::cout << "\n";
         for (auto&& [move, res] : agg.continuations)
         {
-            std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check>(pos, move) << " ";
+            std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check | san::SanSpec::Compact>(pos, move) << " ";
             printAggregatedResult(res);
         }
     }
