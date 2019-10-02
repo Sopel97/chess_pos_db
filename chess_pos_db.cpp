@@ -33,7 +33,7 @@
 
 #include "CodingTest.h"
 
-const std::size_t pgnMemory = cfg::g_config["app"]["pgn_import_memory"].get<MemoryAmount>();
+const std::size_t importMemory = cfg::g_config["app"]["pgn_import_memory"].get<MemoryAmount>();
 
 void print(Bitboard bb)
 {
@@ -219,7 +219,7 @@ void build()
         {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Human}
-        }, pgnMemory);
+        }, importMemory);
         */
     //e.importPgns(std::execution::par_unseq, {
     e.importPgns(std::execution::seq, {
@@ -235,7 +235,7 @@ void build()
         {"w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Engine},
         {"w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human},
         {"w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine}
-        }, pgnMemory);
+        }, importMemory);
 }
 
 void buildccrl()
@@ -243,7 +243,7 @@ void buildccrl()
     persistence::local::Database e("c:/dev/chess_pos_db/.tmpccrl", 4ull * 1024ull * 1024ull);
     e.importPgns(std::execution::seq, {
         {"w:/catobase/data/CCRL-4040.[1086555].pgn", GameLevel::Human}
-        }, pgnMemory);
+        }, importMemory);
 }
 
 void buildsmall()
@@ -252,7 +252,7 @@ void buildsmall()
     persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
     e.importPgns(std::execution::seq, {
         {"w:/catobase/data/Server Games LiChess 2019-1.pgn", GameLevel::Human}
-        }, pgnMemory);
+        }, importMemory);
 }
 
 void mergeAll()
@@ -267,7 +267,7 @@ void mergeAll()
 
 void buildbig()
 {
-    persistence::local::Database e("w:/catobase/.tmp_big", 4ull * 1024ull * 1024ull);
+    persistence::local::Database e("c:/dev/chess_pos_db/.tmp", 4ull * 1024ull * 1024ull);
 
     e.importPgns(std::execution::seq, {
         {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Server},
@@ -294,9 +294,11 @@ void buildbig()
         {"w:/catobase/data/lichess_db_standard_rated_2014-10.pgn", GameLevel::Server},
         {"w:/catobase/data/lichess_db_standard_rated_2014-11.pgn", GameLevel::Server},
         {"w:/catobase/data/lichess_db_standard_rated_2014-12.pgn", GameLevel::Server}
-        }, pgnMemory);
+        }, importMemory);
 
-    //e.mergeAll();
+    e.replicateMergeAll("w:/catobase/.big");
+
+    e.clear();
 }
 
 void replicateMergeAll()
@@ -397,6 +399,54 @@ struct App
         }
     }
 
+    void help()
+    {
+        std::cout << "Commands:\n";
+        std::cout << "bench, open, query, help, info, close, exit, merge, create\n";
+        std::cout << "arguments are split at spaces\n";
+        std::cout << "arguments with spaces can be escaped with `` (tilde)\n";
+        std::cout << "for example bench `c:/pgn a.pgn`\n\n";
+
+        std::cout << "bench <path> - counts the number of moves in pgn file at `path` and measures time taken\n\n";
+
+        std::cout << "open <path> - opens an already existing database located at `path`\n\n";
+
+        std::cout << "query <fen> - queries the currently open database with a position specified by fen. NOTE: you most likely want to use `` as fens usually have spaces in them.\n\n";
+
+        std::cout << "help - brings up this page\n\n";
+
+        std::cout << "info - outputs information about the currently open database. For example file locations, sizes, partitions...\n\n";
+
+        std::cout << "close - closes the currently open database\n\n";
+
+        std::cout << "exit - gracefully exits the program, ensures everything is cleaned up\n\n";
+
+        std::cout << "merge <path_to> - replicates the currently open database into `path_to`, and merges the files along the way.\n\n";
+
+        std::cout << "merge - merges the files in the currently open database\n\n";
+
+        std::cout <<
+            "create <path> <pgn_list_file_path> [<path_temp>] - creates a database from files given in file at `pgn_list_file_path` (more about it below). "
+            "If `path_temp` IS NOT specified then the files are not merged after the import is done. "
+            "If `path_temp` IS specified then pgns are first imported into the temporary directory and then merged into the final directory. "
+            "Both `path` and `path_temp` must either point to a non-esistent directory or the directory must be empty. "
+            "A file at `pgn_list_file_path` specifies the pgn files to be imported. Each line contains 2 values separated by a semicolon (;). "
+            "The first value is one of human, engine, server. The second value is the path to the pgn file.\n\n";
+
+        std::cout << "delete - closes and deletes the currently open database.\n\n";
+    }
+
+    void info()
+    {
+        if (m_database == nullptr)
+        {
+            std::cout << "No database opened.\n";
+            return;
+        }
+
+        m_database->printInfo(std::cout);
+    }
+
     void run()
     {
         for (;;)
@@ -419,7 +469,15 @@ struct App
                 }
                 else
                 {
-                    load(args.front());
+                    auto path = args[0];
+                    if (!std::filesystem::exists(path) || std::filesystem::is_empty(path))
+                    {
+                        std::cout << "No database at: " << path << '\n';
+                    }
+                    else
+                    {
+                        load(path);
+                    }
                 }
             }
             else if (cmd == "query"sv)
@@ -430,12 +488,115 @@ struct App
                 }
                 else
                 {
-                    query(Position::fromFen(args.front().c_str()));
+                    query(Position::fromFen(args[0].c_str()));
                 }
+            }
+            else if (cmd == "help"sv)
+            {
+                help();
+            }
+            else if (cmd == "info"sv)
+            {
+                info();
             }
             else if (cmd == "close"sv)
             {
                 m_database.reset();
+            }
+            else if (cmd == "merge"sv)
+            {
+                if (m_database == nullptr)
+                {
+                    std::cout << "No database. Nothing to merge.\n";
+                }
+                else if (args.size() == 1)
+                {
+                    const std::filesystem::path destination(args[0]);
+                    if (std::filesystem::exists(destination) && !std::filesystem::is_empty(destination))
+                    {
+                        std::cout << "The destination directory is not empty.\n";
+                    }
+                    else
+                    {
+                        // merge
+                        m_database->replicateMergeAll(destination);
+                    }
+                }
+                else if (args.size() == 0)
+                {
+                    m_database->mergeAll();
+                }
+            }
+            else if (cmd == "create"sv)
+            {
+                if (args.size() == 3)
+                {
+                    const std::filesystem::path destination(args[0]);
+                    const std::filesystem::path temp(args[2]);
+                    if (std::filesystem::exists(destination) && !std::filesystem::is_empty(destination))
+                    {
+                        std::cout << "The destination directory is not empty.\n";
+                    }
+                    else if (std::filesystem::exists(temp) && !std::filesystem::is_empty(temp))
+                    {
+                        std::cout << "The temporary directory is not empty.\n";
+                    }
+                    else
+                    {
+                        auto pgns = parsePgnListFile(args[1]);
+                        if (pgns.size() == 0)
+                        {
+                            std::cout << "No pgns listed.\n";
+                        }
+                        else
+                        {
+                            {
+                                persistence::local::Database db(temp);
+                                db.importPgns(pgns, importMemory);
+                                db.replicateMergeAll(destination);
+                            }
+                            std::filesystem::remove_all(temp);
+                        }
+                    }
+                }
+                else if (args.size() == 2)
+                {
+                    const std::filesystem::path destination(args[0]);
+                    if (std::filesystem::exists(destination) && !std::filesystem::is_empty(destination))
+                    {
+                        std::cout << "The destination directory is not empty.\n";
+                    }
+                    else
+                    {
+                        auto pgns = parsePgnListFile(args[1]);
+                        if (pgns.size() == 0)
+                        {
+                            std::cout << "No pgns listed.\n";
+                        }
+                        else
+                        {
+                            persistence::local::Database db(destination);
+                            db.importPgns(pgns, importMemory);
+                        }
+                    }
+                }
+                else
+                {
+                    std::cout << "At least 2 arguments are required for create. See help.\n";
+                }
+            }
+            else if (cmd == "delete"sv)
+            {
+                if (m_database == nullptr)
+                {
+                    std::cout << "Nothing to delete.\n";
+                }
+                else
+                {
+                    auto path = m_database->path();
+                    m_database.reset();
+                    std::filesystem::remove_all(path);
+                }
             }
             else if (cmd == "exit"sv)
             {
@@ -464,6 +625,40 @@ private:
         AggregatedQueryResult main;
         std::vector<std::pair<Move, AggregatedQueryResult>> continuations;
     };
+
+    std::optional<GameLevel> gameLevelFromString(const std::string& str) const
+    {
+        if (str == "human"sv) return GameLevel::Human;
+        if (str == "engine"sv) return GameLevel::Engine;
+        if (str == "server"sv) return GameLevel::Server;
+        return {};
+    }
+
+    persistence::local::PgnFiles parsePgnListFile(const std::filesystem::path& path) const
+    {
+        persistence::local::PgnFiles pgns;
+
+        std::ifstream file(path);
+        std::string line;
+        while (std::getline(file, line))
+        {
+            std::istringstream ss(line);
+            std::string levelStr, pgnPath;
+            std::getline(ss, levelStr, ';');
+            if (levelStr.empty()) continue;
+            const auto levelOpt = gameLevelFromString(levelStr);
+            if (!levelOpt.has_value())
+            {
+                std::cerr << "Invalid level: " << levelStr << '\n';
+                continue;
+            }
+
+            std::getline(ss, pgnPath, ';');
+            pgns.emplace_back(pgnPath, *levelOpt);
+        }
+
+        return pgns;
+    }
 
     std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
     {
@@ -641,6 +836,8 @@ private:
 
 int main()
 {
+    //buildbig();
+
     //replicateMergeAll();
 
     App app;
@@ -669,8 +866,6 @@ int main()
 
     ext::detail::ThreadPool::instance("");
     */
-
-    //buildbig();
     //replicateMergeAll();
 
     return 0;
@@ -678,7 +873,7 @@ int main()
     persistence::Database e("w:/catobase/.tmp");
     e.importPgns({
         "data/lichess_db_standard_rated_2013-01.pgn"
-        }, GameLevel::Human, pgnMemory);
+        }, GameLevel::Human, importMemory);
         */
     {
         auto t0 = std::chrono::high_resolution_clock::now();

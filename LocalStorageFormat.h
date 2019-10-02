@@ -216,6 +216,13 @@ namespace persistence
                 return m_entries;
             }
 
+            void printInfo(std::ostream& out) const
+            {
+                std::cout << "Location: " << m_entries.path() << "\n";
+                std::cout << "Entry count: " << m_entries.size() << "\n";
+                std::cout << "Index size: " << m_index.size() << "\n";
+            }
+
             void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignature>& keys) const;
 
         private:
@@ -694,6 +701,17 @@ namespace persistence
                 return m_path;
             }
 
+            void printInfo(std::ostream& out) const
+            {
+                std::cout << "Location: " << m_path << "\n";
+                std::cout << "Files: \n";
+                for (auto&& file : m_files)
+                {
+                    file.printInfo(out);
+                    std::cout << "\n";
+                }
+            }
+
             void clear()
             {
                 collectFutureFiles();
@@ -1005,12 +1023,27 @@ namespace persistence
                 return m_name;
             }
 
+            void printInfo(std::ostream& out) const
+            {
+                std::cout << "Location: " << m_path << "\n";
+                forEach(m_partitions, [&out](auto&& partition, GameLevel level, GameResult result) {
+                    std::cout << "Partition " << static_cast<unsigned>(level) << ' ' << static_cast<unsigned>(result) << ":\n";
+                    partition.printInfo(out);
+                    std::cout << "\n";
+                    });
+            }
+
             void clear()
             {
                 m_header.clear();
                 forEach(m_partitions, [](auto&& partition, GameLevel level, GameResult result) {
                     partition.clear();
                     });
+            }
+
+            const std::filesystem::path& path() const
+            {
+                return m_path;
             }
 
             [[nodiscard]] std::vector<PackedGameHeader> queryHeaders(const std::vector<std::uint32_t>& indices)
@@ -1630,6 +1663,18 @@ namespace persistence
 
             template <typename T, typename FuncT>
             static void forEach(PerPartition<T>& data, FuncT&& f)
+            {
+                for (const auto& level : values<GameLevel>())
+                {
+                    for (const auto& result : values<GameResult>())
+                    {
+                        f(data[level][result], level, result);
+                    }
+                }
+            }
+
+            template <typename T, typename FuncT>
+            static void forEach(const PerPartition<T>& data, FuncT&& f)
             {
                 for (const auto& level : values<GameLevel>())
                 {
