@@ -3,8 +3,10 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <iomanip>
+#include <map>
 #include <memory>
 
 #include "Bitboard.h"
@@ -35,6 +37,233 @@ namespace app
             std::cout << '\n';
         }
         std::cout << "\n\n";
+    }
+
+    struct AggregatedQueryResult
+    {
+        EnumMap2<GameLevel, GameResult, std::size_t> counts;
+        EnumMap2<GameLevel, GameResult, std::optional<persistence::GameHeader>> games;
+    };
+
+    struct AggregatedQueryResults
+    {
+        Position mainPosition;
+        AggregatedQueryResult main;
+        std::vector<std::pair<Move, AggregatedQueryResult>> continuations;
+    };
+
+    std::optional<GameLevel> gameLevelFromString(const std::string& str)
+    {
+        if (str == "human"sv) return GameLevel::Human;
+        if (str == "engine"sv) return GameLevel::Engine;
+        if (str == "server"sv) return GameLevel::Server;
+        return {};
+    }
+
+    persistence::local::PgnFiles parsePgnListFile(const std::filesystem::path& path)
+    {
+        persistence::local::PgnFiles pgns;
+
+        std::ifstream file(path);
+        std::string line;
+        while (std::getline(file, line))
+        {
+            std::istringstream ss(line);
+            std::string levelStr, pgnPath;
+            std::getline(ss, levelStr, ';');
+            if (levelStr.empty()) continue;
+            const auto levelOpt = gameLevelFromString(levelStr);
+            if (!levelOpt.has_value())
+            {
+                std::cerr << "Invalid level: " << levelStr << '\n';
+                continue;
+            }
+
+            std::getline(ss, pgnPath, ';');
+            pgns.emplace_back(pgnPath, *levelOpt);
+        }
+
+        return pgns;
+    }
+
+    std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
+    {
+        auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin]);
+        str += std::string("=") + std::to_string(results[GameResult::Draw]);
+        str += std::string("-") + std::to_string(results[GameResult::BlackWin]);
+        return str;
+    }
+
+    std::string toString(GameResult res)
+    {
+        switch (res)
+        {
+        case GameResult::WhiteWin:
+            return "win";
+        case GameResult::BlackWin:
+            return "loss";
+        case GameResult::Draw:
+            return "draw";
+        }
+    }
+
+    AggregatedQueryResults queryAggregate(
+        persistence::local::Database& db, // querying requires reads that need to flush streams, so this cannot be const
+        const Position& pos, 
+        bool queryContinuations, 
+        bool fetchFirstGame, 
+        bool fetchFirstGameForContinuations, 
+        bool removeEmptyContinuations
+    )
+    {
+        Position basePosition = pos;
+        std::vector<Position> positions;
+        std::vector<Move> moves;
+        if (queryContinuations)
+        {
+            movegen::forEachLegalMove(basePosition, [&](Move move) {
+                positions.emplace_back(basePosition.afterMove(move));
+                moves.emplace_back(move);
+                });
+        }
+        positions.emplace_back(basePosition);
+
+        AggregatedQueryResults aggResults;
+        aggResults.mainPosition = pos;
+        std::vector<std::uint32_t> gameQueries;
+        auto results = db.queryRanges(positions);
+        for (int i = 0; i < moves.size(); ++i)
+        {
+            AggregatedQueryResult aggResult;
+            std::size_t totalCount = 0;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    const std::size_t count = results[level][result][i].count();
+                    aggResult.counts[level][result] = count;
+                    totalCount += count;
+
+                    if (fetchFirstGameForContinuations && count > 0)
+                    {
+                        gameQueries.emplace_back(results[level][result][i].firstGameIndex());
+                    }
+                }
+            }
+
+            if (removeEmptyContinuations && totalCount == 0)
+            {
+                continue;
+            }
+
+            aggResults.continuations.emplace_back(moves[i], aggResult);
+        }
+
+        {
+            AggregatedQueryResult aggResult;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    const std::size_t count = results[level][result].back().count();
+                    aggResult.counts[level][result] = count;
+
+                    if (fetchFirstGame && count > 0)
+                    {
+                        gameQueries.emplace_back(results[level][result].back().firstGameIndex());
+                    }
+                }
+            }
+            aggResults.main = aggResult;
+        }
+
+        {
+            std::vector<persistence::PackedGameHeader> headers = db.queryHeaders(gameQueries);
+            auto it = headers.begin();
+            for (int i = 0; i < moves.size(); ++i)
+            {
+                AggregatedQueryResult& aggResult = aggResults.continuations[i].second;
+                for (GameLevel level : values<GameLevel>())
+                {
+                    for (GameResult result : values<GameResult>())
+                    {
+                        const std::size_t count = aggResult.counts[level][result];
+
+                        if (fetchFirstGameForContinuations && count > 0)
+                        {
+                            aggResult.games[level][result] = persistence::GameHeader(*it++);
+                        }
+                    }
+                }
+            }
+
+            AggregatedQueryResult& aggResult = aggResults.main;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    const std::size_t count = aggResult.counts[level][result];
+
+                    if (fetchFirstGame && count > 0)
+                    {
+                        aggResult.games[level][result] = persistence::GameHeader(*it++);
+                    }
+                }
+            }
+        }
+
+        return aggResults;
+    }
+
+    void printAggregatedResult(const AggregatedQueryResult& res)
+    {
+        std::size_t total = 0;
+        for (auto& cc : res.counts)
+        {
+            for (auto& c : cc)
+            {
+                total += c;
+            }
+        }
+        std::cout << std::setw(9) << total << ' ';
+
+        for (auto& cc : res.counts)
+        {
+            std::cout << std::setw(19) << resultsToString(cc) << ' ';
+        }
+
+        std::cout << '\n';
+
+        const persistence::GameHeader* firstGame = nullptr;
+        for (auto& gg : res.games)
+        {
+            for (auto& g : gg)
+            {
+                if (!g.has_value())
+                {
+                    continue;
+                }
+
+                if (firstGame == nullptr || g->date() < firstGame->date())
+                {
+                    firstGame = &*g;
+                }
+            }
+        }
+
+        if (firstGame)
+        {
+            std::string plyCount = firstGame->plyCount() ? std::to_string(*firstGame->plyCount()) : "-"s;
+            std::cout
+                << firstGame->date().toString()
+                << ' ' << toString(firstGame->result())
+                << ' ' << firstGame->eco().toString()
+                << ' ' << firstGame->event()
+                << ' ' << plyCount
+                << ' ' << firstGame->white()
+                << ' ' << firstGame->black()
+                << '\n';
+        }
     }
 
     std::pair<std::string, std::vector<std::string>> parseCommand(const std::string& cmd)
@@ -69,109 +298,153 @@ namespace app
         return parts;
     }
 
+    struct InvalidCommand : std::runtime_error
+    {
+        using std::runtime_error::runtime_error;
+    };
+
+    void assertDirectoryNotEmpty(const std::filesystem::path& path)
+    {
+        if (!std::filesystem::exists(path) || std::filesystem::is_empty(path))
+        {
+            throw InvalidCommand("Directory " + path.string() + " doesn't exist or is empty");
+        }
+    }
+
+    void assertDirectoryEmpty(const std::filesystem::path& path)
+    {
+        if (std::filesystem::exists(path) && !std::filesystem::is_empty(path))
+        {
+            throw InvalidCommand("Directory " + path.string() + " is not empty");
+        }
+    }
+
+    [[noreturn]] void invalidCommand(const std::string& command)
+    {
+        throw InvalidCommand("Invalid command: " + command);
+    }
+
+    [[noreturn]] void invalidArguments()
+    {
+        throw InvalidCommand("Invalid arguments. See help.");
+    }
+
+    void bench(const std::vector<std::filesystem::path>& paths)
+    {
+        std::size_t ct = 0;
+        std::size_t size = 0;
+        double time = 0;
+        for (auto&& path : paths)
+        {
+            size += std::filesystem::file_size(path);
+
+            pgn::LazyPgnFileReader reader(path, 4 * 1024 * 1024);
+            std::size_t c = 0;
+            auto t0 = std::chrono::high_resolution_clock::now();
+            for (auto&& game : reader)
+            {
+                for (auto&& position : game.positions())
+                {
+                    ++c;
+                }
+            }
+            auto t1 = std::chrono::high_resolution_clock::now();
+            time += (t1 - t0).count() / 1e9;
+            ct += c;
+        }
+        std::cout << ct << " positions in " << time << "s\n";
+        std::cout << "Throughput of " << size / time / 1e6 << " MB/s\n";
+    }
+
+    [[nodiscard]] std::unique_ptr<persistence::local::Database> open(const std::filesystem::path& path)
+    {
+        assertDirectoryNotEmpty(path);
+
+        return std::make_unique<persistence::local::Database>(path);
+    }
+
+    void query(persistence::local::Database& db, const Position& pos)
+    {
+        auto agg = queryAggregate(db, pos, true, true, true, false);
+
+        printAggregatedResult(agg.main);
+        std::cout << "\n";
+        for (auto&& [move, res] : agg.continuations)
+        {
+            std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check>(pos, move) << " ";
+            printAggregatedResult(res);
+        }
+    }
+
+    void merge(persistence::local::Database& db, const std::filesystem::path& destination)
+    {
+        assertDirectoryNotEmpty(destination);
+
+        db.replicateMergeAll(destination);
+    }
+
+    void merge(persistence::local::Database& db)
+    {
+        db.mergeAll();
+    }
+
+    void info(const persistence::local::Database& db, std::ostream& out)
+    {
+        db.printInfo(out);
+    }
+
+    void create(const std::filesystem::path& destination, const persistence::local::PgnFiles& pgns, const std::filesystem::path& temp)
+    {
+        assertDirectoryEmpty(destination);
+        assertDirectoryEmpty(temp);
+
+        {
+            persistence::local::Database db(temp);
+            db.importPgns(pgns, importMemory);
+            db.replicateMergeAll(destination);
+        }
+        std::filesystem::remove_all(temp);
+    }
+
+    void create(const std::filesystem::path& destination, const persistence::local::PgnFiles& pgns)
+    {
+        assertDirectoryEmpty(destination);
+
+        persistence::local::Database db(destination);
+        db.importPgns(pgns, importMemory);
+    }
+
+    void destroy(std::unique_ptr<persistence::local::Database> db)
+    {
+        if (db == nullptr)
+        {
+            return;
+        }
+
+        const auto path = db->path();
+        db.reset();
+        std::filesystem::remove_all(path);
+    }
+
     struct App
     {
+    private:
+        using Args = std::vector<std::string>;
+
+        using CommandFunction = std::function<void(App*, const Args&)>;
+
+        void assertDatabaseOpened() const
+        {
+            if (m_database == nullptr)
+            {
+                throw InvalidCommand("No database opened.");
+            }
+        }
+
+    public:
+
         App()
         {
-        }
-
-        void bench(const std::vector<std::filesystem::path>& paths) const
-        {
-            std::size_t ct = 0;
-            std::size_t size = 0;
-            double time = 0;
-            for (auto&& path : paths)
-            {
-                size += std::filesystem::file_size(path);
-
-                pgn::LazyPgnFileReader reader(path, 4 * 1024 * 1024);
-                std::size_t c = 0;
-                auto t0 = std::chrono::high_resolution_clock::now();
-                for (auto&& game : reader)
-                {
-                    for (auto&& position : game.positions())
-                    {
-                        ++c;
-                    }
-                }
-                auto t1 = std::chrono::high_resolution_clock::now();
-                time += (t1 - t0).count() / 1e9;
-                ct += c;
-            }
-            std::cout << ct << " positions in " << time << "s\n";
-            std::cout << "Throughput of " << size / time / 1e6 << " MB/s\n";
-        }
-
-        void load(const std::filesystem::path& path)
-        {
-            m_database = std::make_unique<persistence::local::Database>(path);
-        }
-
-        void query(const Position& pos)
-        {
-            if (m_database == nullptr)
-            {
-                std::cout << "You have to open a database first.\n";
-                return;
-            }
-
-            auto agg = queryAggregate(*m_database, pos, true, true, true, false);
-
-            printAggregatedResult(agg.main);
-            std::cout << "\n";
-            for (auto&& [move, res] : agg.continuations)
-            {
-                std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check>(pos, move) << " ";
-                printAggregatedResult(res);
-            }
-        }
-
-        void help()
-        {
-            std::cout << "Commands:\n";
-            std::cout << "bench, open, query, help, info, close, exit, merge, create\n";
-            std::cout << "arguments are split at spaces\n";
-            std::cout << "arguments with spaces can be escaped with `` (tilde)\n";
-            std::cout << "for example bench `c:/pgn a.pgn`\n\n";
-
-            std::cout << "bench <path> - counts the number of moves in pgn file at `path` and measures time taken\n\n";
-
-            std::cout << "open <path> - opens an already existing database located at `path`\n\n";
-
-            std::cout << "query <fen> - queries the currently open database with a position specified by fen. NOTE: you most likely want to use `` as fens usually have spaces in them.\n\n";
-
-            std::cout << "help - brings up this page\n\n";
-
-            std::cout << "info - outputs information about the currently open database. For example file locations, sizes, partitions...\n\n";
-
-            std::cout << "close - closes the currently open database\n\n";
-
-            std::cout << "exit - gracefully exits the program, ensures everything is cleaned up\n\n";
-
-            std::cout << "merge <path_to> - replicates the currently open database into `path_to`, and merges the files along the way.\n\n";
-
-            std::cout << "merge - merges the files in the currently open database\n\n";
-
-            std::cout <<
-                "create <path> <pgn_list_file_path> [<path_temp>] - creates a database from files given in file at `pgn_list_file_path` (more about it below). "
-                "If `path_temp` IS NOT specified then the files are not merged after the import is done. "
-                "If `path_temp` IS specified then pgns are first imported into the temporary directory and then merged into the final directory. "
-                "Both `path` and `path_temp` must either point to a non-esistent directory or the directory must be empty. "
-                "A file at `pgn_list_file_path` specifies the pgn files to be imported. Each line contains 2 values separated by a semicolon (;). "
-                "The first value is one of human, engine, server. The second value is the path to the pgn file.\n\n";
-
-            std::cout << "delete - closes and deletes the currently open database.\n\n";
-        }
-
-        void info()
-        {
-            if (m_database == nullptr)
-            {
-                std::cout << "No database opened.\n";
-                return;
-            }
-
-            m_database->printInfo(std::cout);
         }
 
         void run()
@@ -182,156 +455,22 @@ namespace app
                 std::getline(std::cin, cmdline);
                 auto [cmd, args] = parseCommand(cmdline);
 
-                if (cmd == "bench"sv)
-                {
-                    std::vector<std::filesystem::path> paths;
-                    for (auto&& path : args) paths.emplace_back(path);
-                    bench(paths);
-                }
-                else if (cmd == "open"sv)
-                {
-                    if (args.size() != 1)
-                    {
-                        std::cout << "open takes one path as an argument.\n";
-                    }
-                    else
-                    {
-                        auto path = args[0];
-                        if (!std::filesystem::exists(path) || std::filesystem::is_empty(path))
-                        {
-                            std::cout << "No database at: " << path << '\n';
-                        }
-                        else
-                        {
-                            load(path);
-                        }
-                    }
-                }
-                else if (cmd == "query"sv)
-                {
-                    if (args.size() != 1)
-                    {
-                        std::cout << "query takes a fen as an argument.\n";
-                    }
-                    else
-                    {
-                        query(Position::fromFen(args[0].c_str()));
-                    }
-                }
-                else if (cmd == "help"sv)
-                {
-                    help();
-                }
-                else if (cmd == "info"sv)
-                {
-                    info();
-                }
-                else if (cmd == "close"sv)
-                {
-                    m_database.reset();
-                }
-                else if (cmd == "merge"sv)
-                {
-                    if (m_database == nullptr)
-                    {
-                        std::cout << "No database. Nothing to merge.\n";
-                    }
-                    else if (args.size() == 1)
-                    {
-                        const std::filesystem::path destination(args[0]);
-                        if (std::filesystem::exists(destination) && !std::filesystem::is_empty(destination))
-                        {
-                            std::cout << "The destination directory is not empty.\n";
-                        }
-                        else
-                        {
-                            // merge
-                            m_database->replicateMergeAll(destination);
-                        }
-                    }
-                    else if (args.size() == 0)
-                    {
-                        m_database->mergeAll();
-                    }
-                }
-                else if (cmd == "create"sv)
-                {
-                    if (args.size() == 3)
-                    {
-                        const std::filesystem::path destination(args[0]);
-                        const std::filesystem::path temp(args[2]);
-                        if (std::filesystem::exists(destination) && !std::filesystem::is_empty(destination))
-                        {
-                            std::cout << "The destination directory is not empty.\n";
-                        }
-                        else if (std::filesystem::exists(temp) && !std::filesystem::is_empty(temp))
-                        {
-                            std::cout << "The temporary directory is not empty.\n";
-                        }
-                        else
-                        {
-                            auto pgns = parsePgnListFile(args[1]);
-                            if (pgns.size() == 0)
-                            {
-                                std::cout << "No pgns listed.\n";
-                            }
-                            else
-                            {
-                                {
-                                    persistence::local::Database db(temp);
-                                    db.importPgns(pgns, importMemory);
-                                    db.replicateMergeAll(destination);
-                                }
-                                std::filesystem::remove_all(temp);
-                            }
-                        }
-                    }
-                    else if (args.size() == 2)
-                    {
-                        const std::filesystem::path destination(args[0]);
-                        if (std::filesystem::exists(destination) && !std::filesystem::is_empty(destination))
-                        {
-                            std::cout << "The destination directory is not empty.\n";
-                        }
-                        else
-                        {
-                            auto pgns = parsePgnListFile(args[1]);
-                            if (pgns.size() == 0)
-                            {
-                                std::cout << "No pgns listed.\n";
-                            }
-                            else
-                            {
-                                persistence::local::Database db(destination);
-                                db.importPgns(pgns, importMemory);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        std::cout << "At least 2 arguments are required for create. See help.\n";
-                    }
-                }
-                else if (cmd == "delete"sv)
-                {
-                    if (m_database == nullptr)
-                    {
-                        std::cout << "Nothing to delete.\n";
-                    }
-                    else
-                    {
-                        auto path = m_database->path();
-                        m_database.reset();
-                        std::filesystem::remove_all(path);
-                    }
-                }
-                else if (cmd == "exit"sv)
+                if (cmd == "exit"sv)
                 {
                     return;
                 }
-                else
+
+                try
                 {
-                    std::cout << "Unknown command: " << cmd << '\n';
+                    m_commands.at(cmd)(this, args);
+                }
+                catch (std::out_of_range&)
+                {
+                    std::cout << "Unknown command." << '\n';
+                }
+                catch (InvalidCommand& e)
+                {
+                    std::cout << e.what() << '\n';
                 }
             }
         }
@@ -339,226 +478,133 @@ namespace app
     private:
         std::unique_ptr<persistence::local::Database> m_database;
 
-
-        struct AggregatedQueryResult
+        void help(const Args& args) const
         {
-            EnumMap2<GameLevel, GameResult, std::size_t> counts;
-            EnumMap2<GameLevel, GameResult, std::optional<persistence::GameHeader>> games;
+            std::cout << "Commands:\n";
+            std::cout << "bench, open, query, help, info, close, exit, merge, create, destroy\n";
+            std::cout << "arguments are split at spaces\n";
+            std::cout << "arguments with spaces can be escaped with `` (tilde)\n";
+            std::cout << "for example bench `c:/pgn a.pgn`\n\n\n";
+
+            std::cout << "bench <path> - counts the number of moves in pgn file at `path` and measures time taken\n\n";
+            std::cout << "open <path> - opens an already existing database located at `path`\n\n";
+            std::cout <<
+                "query <fen> - queries the currently open database with a position specified by fen. "
+                "NOTE: you most likely want to use `` as fens usually have spaces in them.\n\n";
+            std::cout << "help - brings up this page\n\n";
+            std::cout << "info - outputs information about the currently open database. For example file locations, sizes, partitions...\n\n";
+            std::cout << "close - closes the currently open database\n\n";
+            std::cout << "exit - gracefully exits the program, ensures everything is cleaned up\n\n";
+            std::cout << "merge <path_to> - replicates the currently open database into `path_to`, and merges the files along the way.\n\n";
+            std::cout << "merge - merges the files in the currently open database\n\n";
+            std::cout <<
+                "create <path> <pgn_list_file_path> [<path_temp>] - creates a database from files given in file at `pgn_list_file_path` (more about it below). "
+                "If `path_temp` IS NOT specified then the files are not merged after the import is done. "
+                "If `path_temp` IS specified then pgns are first imported into the temporary directory and then merged into the final directory. "
+                "Both `path` and `path_temp` must either point to a non-esistent directory or the directory must be empty. "
+                "A file at `pgn_list_file_path` specifies the pgn files to be imported. Each line contains 2 values separated by a semicolon (;). "
+                "The first value is one of human, engine, server. The second value is the path to the pgn file.\n\n";
+            std::cout << "destroy - closes and deletes the currently open database.\n\n";
+        }
+
+        void bench(const Args& args)
+        {
+            std::vector<std::filesystem::path> paths;
+            for (auto&& path : args) paths.emplace_back(path);
+            app::bench(paths);
+        }
+
+        void open(const Args& args)
+        {
+            if (args.size() != 1)
+            {
+                invalidArguments();
+            }
+
+            m_database = app::open(args[0]);
+        }
+
+        void query(const Args& args)
+        {
+            assertDatabaseOpened();
+
+            if (args.size() != 1)
+            {
+                invalidArguments();
+            }
+
+            app::query(*m_database, Position::fromFen(args[0].c_str()));
+        }
+
+        void info(const Args& args)
+        {
+            assertDatabaseOpened();
+
+            app::info(*m_database, std::cout);
+        }
+
+        void merge(const Args& args)
+        {
+            assertDatabaseOpened();
+
+            if (args.size() > 1)
+            {
+                invalidArguments();
+            }
+
+            if (args.size() == 1)
+            {
+                app::merge(*m_database, args[0]);
+            }
+            else if (args.size() == 0)
+            {
+                app::merge(*m_database);
+            }
+        }
+
+        void close(const Args& args)
+        {
+            m_database.reset();
+        }
+
+        void create(const Args& args)
+        {
+            if (args.size() < 2 || args.size() > 3)
+            {
+                invalidArguments();
+            }
+
+            const std::filesystem::path destination(args[0]);
+            auto pgns = parsePgnListFile(args[1]);
+            if (args.size() == 3)
+            {
+                const std::filesystem::path temp(args[2]);
+                app::create(destination, pgns, temp);
+            }
+            else if (args.size() == 2)
+            {
+                app::create(destination, pgns);
+            }
+        }
+
+        void destroy(const Args& args)
+        {
+            assertDatabaseOpened();
+
+            app::destroy(std::move(m_database));
+        }
+
+        static inline const std::map<std::string_view, CommandFunction> m_commands = {
+            { "bench"sv, &bench },
+            { "open"sv, &open },
+            { "query"sv, &query },
+            { "help"sv, &help },
+            { "info"sv, &info },
+            { "close"sv, &close },
+            { "merge"sv, &merge },
+            { "create"sv, &create },
+            { "destroy"sv, &destroy }
         };
-
-        struct AggregatedQueryResults
-        {
-            Position mainPosition;
-            AggregatedQueryResult main;
-            std::vector<std::pair<Move, AggregatedQueryResult>> continuations;
-        };
-
-        std::optional<GameLevel> gameLevelFromString(const std::string& str) const
-        {
-            if (str == "human"sv) return GameLevel::Human;
-            if (str == "engine"sv) return GameLevel::Engine;
-            if (str == "server"sv) return GameLevel::Server;
-            return {};
-        }
-
-        persistence::local::PgnFiles parsePgnListFile(const std::filesystem::path& path) const
-        {
-            persistence::local::PgnFiles pgns;
-
-            std::ifstream file(path);
-            std::string line;
-            while (std::getline(file, line))
-            {
-                std::istringstream ss(line);
-                std::string levelStr, pgnPath;
-                std::getline(ss, levelStr, ';');
-                if (levelStr.empty()) continue;
-                const auto levelOpt = gameLevelFromString(levelStr);
-                if (!levelOpt.has_value())
-                {
-                    std::cerr << "Invalid level: " << levelStr << '\n';
-                    continue;
-                }
-
-                std::getline(ss, pgnPath, ';');
-                pgns.emplace_back(pgnPath, *levelOpt);
-            }
-
-            return pgns;
-        }
-
-        std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
-        {
-            auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin]);
-            str += std::string("=") + std::to_string(results[GameResult::Draw]);
-            str += std::string("-") + std::to_string(results[GameResult::BlackWin]);
-            return str;
-        }
-
-        std::string toString(GameResult res)
-        {
-            switch (res)
-            {
-            case GameResult::WhiteWin:
-                return "win";
-            case GameResult::BlackWin:
-                return "loss";
-            case GameResult::Draw:
-                return "draw";
-            }
-        }
-
-        AggregatedQueryResults queryAggregate(persistence::local::Database& db, const Position& pos, bool queryContinuations, bool fetchFirstGame, bool fetchFirstGameForContinuations, bool removeEmptyContinuations)
-        {
-            Position basePosition = pos;
-            std::vector<Position> positions;
-            std::vector<Move> moves;
-            if (queryContinuations)
-            {
-                movegen::forEachLegalMove(basePosition, [&](Move move) {
-                    positions.emplace_back(basePosition.afterMove(move));
-                    moves.emplace_back(move);
-                    });
-            }
-            positions.emplace_back(basePosition);
-
-            AggregatedQueryResults aggResults;
-            aggResults.mainPosition = pos;
-            std::vector<std::uint32_t> gameQueries;
-            auto results = db.queryRanges(positions);
-            for (int i = 0; i < moves.size(); ++i)
-            {
-                AggregatedQueryResult aggResult;
-                std::size_t totalCount = 0;
-                for (GameLevel level : values<GameLevel>())
-                {
-                    for (GameResult result : values<GameResult>())
-                    {
-                        const std::size_t count = results[level][result][i].count();
-                        aggResult.counts[level][result] = count;
-                        totalCount += count;
-
-                        if (fetchFirstGameForContinuations && count > 0)
-                        {
-                            gameQueries.emplace_back(results[level][result][i].firstGameIndex());
-                        }
-                    }
-                }
-
-                if (removeEmptyContinuations && totalCount == 0)
-                {
-                    continue;
-                }
-
-                aggResults.continuations.emplace_back(moves[i], aggResult);
-            }
-
-            {
-                AggregatedQueryResult aggResult;
-                for (GameLevel level : values<GameLevel>())
-                {
-                    for (GameResult result : values<GameResult>())
-                    {
-                        const std::size_t count = results[level][result].back().count();
-                        aggResult.counts[level][result] = count;
-
-                        if (fetchFirstGame && count > 0)
-                        {
-                            gameQueries.emplace_back(results[level][result].back().firstGameIndex());
-                        }
-                    }
-                }
-                aggResults.main = aggResult;
-            }
-
-            {
-                std::vector<persistence::PackedGameHeader> headers = db.queryHeaders(gameQueries);
-                auto it = headers.begin();
-                for (int i = 0; i < moves.size(); ++i)
-                {
-                    AggregatedQueryResult& aggResult = aggResults.continuations[i].second;
-                    for (GameLevel level : values<GameLevel>())
-                    {
-                        for (GameResult result : values<GameResult>())
-                        {
-                            const std::size_t count = aggResult.counts[level][result];
-
-                            if (fetchFirstGameForContinuations && count > 0)
-                            {
-                                aggResult.games[level][result] = persistence::GameHeader(*it++);
-                            }
-                        }
-                    }
-                }
-
-                AggregatedQueryResult& aggResult = aggResults.main;
-                for (GameLevel level : values<GameLevel>())
-                {
-                    for (GameResult result : values<GameResult>())
-                    {
-                        const std::size_t count = aggResult.counts[level][result];
-
-                        if (fetchFirstGame && count > 0)
-                        {
-                            aggResult.games[level][result] = persistence::GameHeader(*it++);
-                        }
-                    }
-                }
-            }
-
-            return aggResults;
-        }
-
-        void printAggregatedResult(const AggregatedQueryResult& res)
-        {
-            std::size_t total = 0;
-            for (auto& cc : res.counts)
-            {
-                for (auto& c : cc)
-                {
-                    total += c;
-                }
-            }
-            std::cout << std::setw(9) << total << ' ';
-
-            for (auto& cc : res.counts)
-            {
-                std::cout << std::setw(19) << resultsToString(cc) << ' ';
-            }
-
-            std::cout << '\n';
-
-            const persistence::GameHeader* firstGame = nullptr;
-            for (auto& gg : res.games)
-            {
-                for (auto& g : gg)
-                {
-                    if (!g.has_value())
-                    {
-                        continue;
-                    }
-
-                    if (firstGame == nullptr || g->date() < firstGame->date())
-                    {
-                        firstGame = &*g;
-                    }
-                }
-            }
-
-            if (firstGame)
-            {
-                std::string plyCount = firstGame->plyCount() ? std::to_string(*firstGame->plyCount()) : "-"s;
-                std::cout
-                    << firstGame->date().toString()
-                    << ' ' << toString(firstGame->result())
-                    << ' ' << firstGame->eco().toString()
-                    << ' ' << firstGame->event()
-                    << ' ' << plyCount
-                    << ' ' << firstGame->white()
-                    << ' ' << firstGame->black()
-                    << '\n';
-            }
-        }
     };
 }
 
