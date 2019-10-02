@@ -595,15 +595,15 @@ namespace app
         }
 
         static inline const std::map<std::string_view, CommandFunction> m_commands = {
-            { "bench"sv, &bench },
-            { "open"sv, &open },
-            { "query"sv, &query },
-            { "help"sv, &help },
-            { "info"sv, &info },
-            { "close"sv, &close },
-            { "merge"sv, &merge },
-            { "create"sv, &create },
-            { "destroy"sv, &destroy }
+            { "bench"sv, &App::bench },
+            { "open"sv, &App::open },
+            { "query"sv, &App::query },
+            { "help"sv, &App::help },
+            { "info"sv, &App::info },
+            { "close"sv, &App::close },
+            { "merge"sv, &App::merge },
+            { "create"sv, &App::create },
+            { "destroy"sv, &App::destroy }
         };
     };
 }
