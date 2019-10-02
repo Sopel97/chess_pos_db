@@ -1090,17 +1090,12 @@ namespace persistence
 
             void replicateMergeAll(const std::filesystem::path& path)
             {
-                PerPartition<std::filesystem::path> partitionPaths;
+                if (std::filesystem::exists(path) && !std::filesystem::is_empty(path))
                 {
-                    // just a dummy db to initialize the partitions
-                    // and clear the existing content
-                    Database db(path, 1);
-                    db.clear();
-
-                    forEach(db.m_partitions, [&partitionPaths](auto&& partition, GameLevel level, GameResult result) {
-                        partitionPaths[level][result] = partition.path();
-                        });
+                    throw std::runtime_error("Destination for replicating merge must be empty.");
                 }
+
+                PerPartition<std::filesystem::path> partitionPaths = initializePartitionDirectories(path);
 
                 m_header.replicateTo(path);
 
@@ -1613,6 +1608,24 @@ namespace persistence
                 }
 
                 m_partitions[level][result].storeUnordered(pipeline, std::move(entries), id);
+            }
+
+            static PerPartition<std::filesystem::path> initializePartitionDirectories(const std::filesystem::path& path)
+            {
+                PerPartition<std::filesystem::path> paths;
+
+                for (const auto& level : values<GameLevel>())
+                {
+                    const std::filesystem::path levelPath = path / m_pathByGameLevel[level];
+                    for (const auto& result : values<GameResult>())
+                    {
+                        const std::filesystem::path resultPath = levelPath / m_pathByGameResult[result];
+                        paths[level][result] = resultPath;
+                        std::filesystem::create_directories(resultPath);
+                    }
+                }
+
+                return paths;
             }
 
             template <typename T, typename FuncT>

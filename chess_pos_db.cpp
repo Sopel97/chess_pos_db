@@ -305,7 +305,7 @@ void replicateMergeAll()
     persistence::local::Database e("w:/catobase/.tmp_big", 4ull * 1024ull * 1024ull);
     std::cout << "Loaded db\n";
 
-    e.replicateMergeAll("c:/dev/chess_pos_db/.tmp");
+    e.replicateMergeAll("c:/dev/chess_pos_db/.tmp2");
 }
 
 std::pair<std::string, std::vector<std::string>> parseCommand(const std::string& cmd)
@@ -641,6 +641,8 @@ private:
 
 int main()
 {
+    //replicateMergeAll();
+
     App app;
     app.run();
 
