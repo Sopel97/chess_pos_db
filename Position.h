@@ -853,6 +853,7 @@ struct Position : public Board
 
     [[nodiscard]] constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept
     {
+        // TODO: ep and castling rights equality
         return lhs.m_sideToMove == rhs.m_sideToMove && static_cast<const Board&>(lhs) == static_cast<const Board&>(rhs);
     }
 

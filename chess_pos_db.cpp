@@ -298,6 +298,260 @@ namespace app
         return parts;
     }
 
+    struct Query
+    {
+        std::vector<std::string> fens;
+        std::vector<GameLevel> levels;
+        std::vector<GameResult> results;
+        bool fetchFirstGame;
+        bool fetchLastGame;
+        bool continuations;
+        bool fetchFirstGameForEachContinuation;
+        bool fetchLastGameForEachContinuation;
+    };
+
+    struct QueryResultForPosition
+    {
+        QueryResultForPosition() :
+            level(GameLevel::Human),
+            result(GameResult::Draw),
+            count(0)
+        {
+        }
+
+        QueryResultForPosition(GameLevel level, GameResult result, std::size_t count) :
+            level(level),
+            result(result),
+            count(count)
+        {
+        }
+
+        GameLevel level;
+        GameResult result;
+        std::size_t count;
+        std::optional<persistence::GameHeader> firstGame;
+        std::optional<persistence::GameHeader> lastGame;
+    };
+
+    struct QueryResultForFen
+    {
+        QueryResultForFen(std::string fen) :
+            fen(std::move(fen))
+        {
+        }
+
+        std::string fen;
+        QueryResultForPosition main;
+        std::vector<std::pair<Move, QueryResultForPosition>> continuations;
+    };
+
+    struct QueryResult
+    {
+        std::vector<QueryResultForFen> subResults;
+    };
+
+    // Gathers positions, removes duplicates, provides mapping to retrieve
+    // which fen corresponds to which position and which position
+    // arose as a continuation of a given fen.
+    [[nodiscard]] auto gatherPositionsForQuery(const std::vector<std::string>& fens, bool continuations)
+    {
+        struct PositionOrigin
+        {
+            std::size_t fenId;
+            Move move;
+        };
+
+        struct PositionMetaData
+        {
+            // One position can have multiple origins if it
+            // shows up multiple times.
+            std::vector<PositionOrigin> origins;
+        };
+
+        auto hasher = [](const Position& pos)
+        {
+            return std::hash<PositionSignature>{}(PositionSignature(pos));
+        };
+
+        // we store position in a map to remove duplicates - so we don't query duplicates
+        // we also keep mappings so we know which position originated
+        // from which fen
+        std::unordered_map<Position, PositionMetaData, decltype(hasher)> positions({}, hasher);
+
+        for (std::size_t i = 0; i < fens.size(); ++i)
+        {
+            auto&& fen = fens[i];
+            Position pos = Position::fromFen(fen.c_str());
+            positions[pos].origins.emplace_back(PositionOrigin{ i, Move::null() });
+
+            if (continuations)
+            {
+                movegen::forEachLegalMove(pos, [&](Move move) {
+                    positions[pos.afterMove(move)].origins.emplace_back(PositionOrigin{ i, move });
+                });
+            }
+        }
+
+        std::vector<Position> distinctPositions;
+        std::vector<PositionMetaData> metas;
+        for (auto&& [pos, meta] : positions)
+        {
+            distinctPositions.emplace_back(pos);
+            metas.emplace_back(std::move(meta));
+        }
+
+        return std::make_pair(std::move(distinctPositions), std::move(metas));
+    }
+
+    [[nodiscard]] QueryResult executeQuery(persistence::local::Database& db, const Query& query)
+    {
+        auto [positions, metas] = gatherPositionsForQuery(query.fens, query.continuations);
+
+        std::vector<persistence::local::QueryTarget> targets;
+        for (auto&& level : query.levels)
+        {
+            for (auto&& result : query.results)
+            {
+                targets.emplace_back(persistence::local::QueryTarget{ level, result });
+            }
+        }
+
+        // perform the query only for the chosen targets
+        EnumMap2<GameLevel, GameResult, std::vector<persistence::local::QueryResult>> rangeResults = db.queryRanges(targets, positions);
+
+        // Next we slowly populate the QueryResult with retrieved data.
+        // This requires some remapping.
+        QueryResult queryResult;
+        // Each initial fen has a result, NOT each distinct position.
+        // Each fen 'owns' N positions.
+        for (std::size_t i = 0; i < query.fens.size(); ++i)
+        {
+            queryResult.subResults.emplace_back(query.fens[i]);
+        }
+
+        // We want to batch the header queries so we have to do some bookkeeping
+        std::vector<std::uint32_t> headerQueries;
+        struct HeaderFor
+        {
+            using HeaderMemberPtr = std::optional<persistence::GameHeader> QueryResultForPosition::*;
+
+            HeaderFor(std::size_t fenId, std::size_t continuationId, HeaderMemberPtr headerPtr) :
+                fenId(fenId),
+                continuationId(continuationId),
+                headerPtr(headerPtr)
+            {
+            }
+
+            std::size_t fenId;
+            std::size_t continuationId; // if -1 then main
+            HeaderMemberPtr headerPtr;
+        };
+        // We have to know where to assign the header later
+        // We cannot keep a vector of std::pairs because the query function
+        // requires a vector of ints.
+        std::vector<HeaderFor> headerQueriesMappings;
+
+        // We only care about the targets specified for the query.
+        for (auto&& level : query.levels)
+        {
+            for (auto&& result : query.results)
+            {
+                for (std::size_t i = 0; i < positions.size(); ++i)
+                {
+                    auto&& rangeResult = rangeResults[level][result][i];
+                    auto count = rangeResult.count();
+
+                    // These are not always present but we don't want to defer getting the indices.
+                    auto firstGameIdx = count > 0 ? rangeResult.firstGameIndex() : 0;
+                    auto lastGameIdx = count > 0 ? rangeResult.lastGameIndex() : 0;
+
+                    // One position maps to at least one fen.
+                    // The mapping is only on our side to reduce queries, the client
+                    // wants to see multiple instances of the same position.
+                    // If move != Move::null() it is a continuation of a fen.
+                    for (auto&& [fenId, move] : metas[i].origins)
+                    {
+                        auto& subResult = queryResult.subResults[fenId];
+                        if (move == Move::null())
+                        {
+                            // Main position
+                            auto& positionResults = subResult.main;
+                            positionResults.count = count;
+                            positionResults.level = level;
+                            positionResults.result = result;
+
+                            // We schedule header queries if the client wants them.
+                            // We pass -1 as a continuation index to signify that it's
+                            // a main position. This is done so we don't complicate the function further.
+                            if (count > 0)
+                            {
+                                if (query.fetchFirstGame)
+                                {
+                                    headerQueries.emplace_back(firstGameIdx);
+                                    headerQueriesMappings.emplace_back(fenId, -1, &QueryResultForPosition::firstGame);
+                                }
+                                if (query.fetchLastGame)
+                                {
+                                    headerQueries.emplace_back(lastGameIdx);
+                                    headerQueriesMappings.emplace_back(fenId, -1, &QueryResultForPosition::lastGame);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Continuation
+                            const auto id = subResult.continuations.size();
+
+                            // We have to assign a move to
+                            subResult.continuations.emplace_back(
+                                std::piecewise_construct,
+                                std::forward_as_tuple(move),
+                                std::forward_as_tuple(level, result, count)
+                            );
+
+                            // We schedule header queries if the client wants them
+                            if (count > 0)
+                            {
+                                if (query.fetchFirstGameForEachContinuation)
+                                {
+                                    headerQueries.emplace_back(firstGameIdx);
+                                    headerQueriesMappings.emplace_back(fenId, id, &QueryResultForPosition::firstGame);
+                                }
+                                if (query.fetchLastGameForEachContinuation)
+                                {
+                                    headerQueries.emplace_back(lastGameIdx);
+                                    headerQueriesMappings.emplace_back(fenId, id, &QueryResultForPosition::lastGame);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Query all headers at once and assign them to
+        // their respective positions.
+        auto packedHeaders = db.queryHeaders(headerQueries);
+        for (std::size_t i = 0; i < packedHeaders.size(); ++i)
+        {
+            auto& packedHeader = packedHeaders[i];
+            auto [fenId, continuationId, headerPtr] = headerQueriesMappings[i];
+
+            // Again, a special value for the main position. Refactoring it
+            // would probably add too much complexity for nothing.
+            if (continuationId == -1)
+            {
+                (queryResult.subResults[fenId].main.*headerPtr).emplace(packedHeader);
+            }
+            else
+            {
+                (queryResult.subResults[fenId].continuations[continuationId].second.*headerPtr).emplace(packedHeader);
+            }
+        }
+
+        return queryResult;
+    }
+
     struct InvalidCommand : std::runtime_error
     {
         using std::runtime_error::runtime_error;
