@@ -177,22 +177,33 @@ namespace pgn
 
         inline void seekNextMove(std::string_view& s)
         {
+            // We know that after a move there is at least one space.
+            // Or at the beginning of movetext there is one digit.
+            std::size_t idx = 1;
+
             for (;;)
             {
                 // skip characters we don't care about
                 {
-                    std::size_t idx = 0;
-                    const std::size_t size = s.size();
                     while (lookup::seekNextMove::skip[static_cast<unsigned char>(s[idx])])
                     {
                         ++idx;
-                        if (idx >= size)
-                        {
-                            s.remove_prefix(size);
-                            return;
-                        }
+                        // We don't guard against going past the end because:
+                        // 1. It is not needed for valid pgns.
+                        // 2. In case of invalid pgns we will go to the
+                        //    end of the buffer which is null-terminated.
                     }
-                    s.remove_prefix(idx);
+
+                    if (idx >= s.size())
+                    {
+                        // This only happens when the movetext is malformed.
+                        s.remove_prefix(s.size());
+                        return;
+                    }
+                    else
+                    {
+                        s.remove_prefix(idx);
+                    }
                 }
 
                 if (san::isValidSanMoveStart(s[0]))
@@ -213,6 +224,10 @@ namespace pgn
                     s.remove_prefix(s.size());
                     return;
                 }
+
+                // After a variation or a comment there
+                // may be no space before the san.
+                idx = 0;
             }
         }
 
@@ -277,7 +292,7 @@ namespace pgn
             }();
         }
 
-        inline std::string_view extractMove(std::string_view s)
+        inline std::string_view extractMoveAdvance(std::string_view& s)
         {
             constexpr std::size_t minSanLength = 2;
 
@@ -285,17 +300,21 @@ namespace pgn
             ASSERT(s.size() > minSanLength);
 
             std::size_t idx = minSanLength;
-            const std::size_t size = s.size();
             while (lookup::extractMove::skip[static_cast<unsigned char>(s[idx])])
             {
                 ++idx;
-                if (idx > size)
-                {
-                    return {};
-                }
             }
 
-            return s.substr(0, idx);
+            if (idx > s.size())
+            {
+                s.remove_prefix(s.size());
+                return s;
+            }
+
+            auto ret = s.substr(0, idx);
+            s.remove_prefix(idx);
+
+            return ret;
         }
 
         // NOTE: We don't support escaping quotation marks inside a tag value.
@@ -400,17 +419,14 @@ namespace pgn
                     return *this;
                 }
 
-                const std::string_view san = detail::extractMove(m_moveSection);
+                const std::string_view san = detail::extractMoveAdvance(m_moveSection);
                 if (san.empty())
                 {
-                    m_moveSection.remove_prefix(m_moveSection.size());
                     return *this;
                 }
 
                 const Move move = san::sanToMove(m_position, san);
                 m_position.doMove(move);
-
-                m_moveSection.remove_prefix(san.size());
             
                 return *this;
             }

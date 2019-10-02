@@ -165,6 +165,7 @@ public:
         m_pieces.fill(Piece::none());
         m_pieceBB.fill(Bitboard::none());
         m_pieceBB[Piece::none()] = Bitboard::all();
+        m_piecesByColorBB.fill(Bitboard::none());
     }
 
     // returns side to move
@@ -284,9 +285,15 @@ public:
     {
         ASSERT(sq.isOk());
 
-        m_pieceBB[m_pieces[sq]] ^= sq;
+        auto oldPiece = m_pieces[sq];
+        m_pieceBB[oldPiece] ^= sq;
+        if (oldPiece != Piece::none())
+        {
+            m_piecesByColorBB[oldPiece.color()] ^= sq;
+        }
         m_pieces[sq] = piece;
         m_pieceBB[piece] |= sq;
+        m_piecesByColorBB[piece.color()] |= sq;
     }
 
     constexpr void print(std::ostream& out) const
@@ -319,6 +326,13 @@ public:
             m_pieceBB[capturedPiece] ^= move.to;
             m_pieceBB[Piece::none()] ^= move.from;
 
+            m_piecesByColorBB[piece.color()] ^= move.to;
+            m_piecesByColorBB[piece.color()] ^= move.from;
+            if (capturedPiece != Piece::none())
+            {
+                m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+            }
+
             return capturedPiece;
         }
         else if (move.type == MoveType::Promotion)
@@ -337,6 +351,13 @@ public:
 
             m_pieceBB[capturedPiece] ^= move.to;
             m_pieceBB[Piece::none()] ^= move.from;
+
+            m_piecesByColorBB[fromPiece.color()] ^= move.to;
+            m_piecesByColorBB[fromPiece.color()] ^= move.from;
+            if (capturedPiece != Piece::none())
+            {
+                m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+            }
 
             return capturedPiece;
         }
@@ -359,6 +380,10 @@ public:
 
             m_pieceBB[capturedPiece] ^= capturedPieceSq;
             m_pieceBB[Piece::none()] ^= capturedPieceSq;
+
+            m_piecesByColorBB[movedPiece.color()] ^= move.to;
+            m_piecesByColorBB[movedPiece.color()] ^= move.from;
+            m_piecesByColorBB[capturedPiece.color()] ^= capturedPieceSq;
 
             return capturedPiece;
         }
@@ -393,6 +418,11 @@ public:
             m_pieceBB[Piece::none()] ^= kingFromSq;
             m_pieceBB[Piece::none()] ^= kingToSq;
 
+            m_piecesByColorBB[color] ^= rookFromSq;
+            m_piecesByColorBB[color] ^= rookToSq;
+            m_piecesByColorBB[color] ^= kingFromSq;
+            m_piecesByColorBB[color] ^= kingToSq;
+
             return Piece::none();
         }
     }
@@ -412,6 +442,13 @@ public:
 
             m_pieceBB[capturedPiece] ^= move.to;
             m_pieceBB[Piece::none()] ^= move.from;
+
+            m_piecesByColorBB[fromPiece.color()] ^= move.to;
+            m_piecesByColorBB[fromPiece.color()] ^= move.from;
+            if (capturedPiece != Piece::none())
+            {
+                m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+            }
         }
         else if (move.type == MoveType::EnPassant)
         {
@@ -432,6 +469,10 @@ public:
             // on ep move there are 3 squares involved
             m_pieceBB[capturedPiece] ^= capturedPieceSq;
             m_pieceBB[Piece::none()] ^= capturedPieceSq;
+
+            m_piecesByColorBB[movedPiece.color()] ^= move.to;
+            m_piecesByColorBB[movedPiece.color()] ^= move.from;
+            m_piecesByColorBB[capturedPiece.color()] ^= capturedPieceSq;
         }
         else // if (move.type == MoveType::Castle)
         {
@@ -464,6 +505,11 @@ public:
 
             m_pieceBB[Piece::none()] ^= kingFromSq;
             m_pieceBB[Piece::none()] ^= kingToSq;
+
+            m_piecesByColorBB[color] ^= rookFromSq;
+            m_piecesByColorBB[color] ^= rookToSq;
+            m_piecesByColorBB[color] ^= kingFromSq;
+            m_piecesByColorBB[color] ^= kingToSq;
         }
     }
 
@@ -594,13 +640,7 @@ public:
 
     [[nodiscard]] constexpr Bitboard piecesBB(Color c) const
     {
-        return
-            m_pieceBB[Piece(PieceType::Pawn, c)]
-            | m_pieceBB[Piece(PieceType::Knight, c)]
-            | m_pieceBB[Piece(PieceType::Bishop, c)]
-            | m_pieceBB[Piece(PieceType::Rook, c)]
-            | m_pieceBB[Piece(PieceType::Queen, c)]
-            | m_pieceBB[Piece(PieceType::King, c)];
+        return m_piecesByColorBB[c];
     }
 
     [[nodiscard]] INTRIN_CONSTEXPR Square kingSquare(Color c) const
@@ -638,6 +678,7 @@ public:
 private:
     EnumMap<Square, Piece> m_pieces;
     EnumMap<Piece, Bitboard> m_pieceBB;
+    EnumMap<Color, Bitboard> m_piecesByColorBB;
 
     // NOTE: currently we don't track it because it's not 
     // required to perform ep if we don't need to check validity
@@ -698,7 +739,7 @@ struct Position : public Board
 
     // TODO: if performance of setting special moves flags becomes 
     //       a problem then make a separate function that doesn't set it
-    constexpr std::pair<Piece, CastlingRights> doMove(Move move)
+    constexpr std::pair<Piece, CastlingRights> doMove(const Move& move)
     {
         ASSERT(move.from.isOk() && move.to.isOk());
 
@@ -746,7 +787,7 @@ struct Position : public Board
         return { captured, oldCastlingRights };
     }
 
-    constexpr void undoMove(Move move, Piece capturedPiece, CastlingRights castlingRights)
+    constexpr void undoMove(const Move& move, Piece capturedPiece, CastlingRights castlingRights)
     {
         BaseType::undoMove(move, capturedPiece);
 

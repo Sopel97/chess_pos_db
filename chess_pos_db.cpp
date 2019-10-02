@@ -519,36 +519,53 @@ void query(const Position& pos)
 void benchPgnParse()
 {
     std::vector<persistence::local::PgnFile> files{
-        {"w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human},
-        { "w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Server },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-03.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-04.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-05.pgn", GameLevel::Engine },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-06.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-07.pgn", GameLevel::Engine },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-08.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-09.pgn", GameLevel::Server },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-10.pgn", GameLevel::Engine },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-11.pgn", GameLevel::Human },
-        { "w:/catobase/data/lichess_db_standard_rated_2013-12.pgn", GameLevel::Engine }
+        {"c:/dev/chess_pos_db/data/lichess_db_standard_rated_2014-12.pgn", GameLevel::Human}
     };
 
     std::size_t ct = 0;
-    for (auto&& file : files)
+    double tot = 0;
+    std::size_t iterations = 5;
+    std::size_t size = 0;
     {
-        pgn::LazyPgnFileReader reader(file.path(), 1024*1024);
-        std::size_t c = 0;
-        for (auto&& game : reader)
+        // warmup
+        for (auto&& file : files)
         {
-            for (auto&& position : game.positions())
+            pgn::LazyPgnFileReader reader(file.path(), 4 * 1024 * 1024);
+            std::size_t c = 0;
+            for (auto&& game : reader)
             {
-                ++c;
+                for (auto&& position : game.positions())
+                {
+                    ++c;
+                }
             }
         }
-        std::cout << c << '\n';
-        ct += c;
     }
-    std::cout << ct << '\n';
+    for (auto&& file : files)
+    {
+        for (int i = 0; i < iterations; ++i)
+        {
+            pgn::LazyPgnFileReader reader(file.path(), 4 * 1024 * 1024);
+            std::size_t c = 0;
+            auto t0 = std::chrono::high_resolution_clock::now();
+            for (auto&& game : reader)
+            {
+                for (auto&& position : game.positions())
+                {
+                    ++c;
+                }
+            }
+            auto t1 = std::chrono::high_resolution_clock::now();
+            double s = (t1 - t0).count() / 1e9;
+            tot += s;
+            std::cout << c << " positions in " << s << "s\n";
+            size = std::filesystem::file_size(file.path());
+            std::cout << "Throughput of " << size / s / 1e6 << " MB/s\n";
+            ct += c;
+        }
+    }
+    std::cout << ct << " positions in " << tot << "s\n";
+    std::cout << "Throughput of " << size / tot / 1e6 * iterations << " MB/s\n";
 }
 
 void benchPgnParsePar()
@@ -645,7 +662,7 @@ int main()
         //std::vector<char>(4'000'000'000ull);
     }
 
-    //benchPgnParse();
+    benchPgnParse();
     //benchPgnParsePar();
 
     //testMoveGenerator();
@@ -658,10 +675,12 @@ int main()
     //std::cout << "\n\n\n";
     //query2(Position::startPosition());
 
+    /*
     std::cout << static_cast<std::size_t>(cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>()) << '\n';
     std::cout << persistence::local::detail::indexGranularity << '\n';
 
     ext::detail::ThreadPool::instance("");
+    */
 
     //buildbig();
     //replicateMergeAll();

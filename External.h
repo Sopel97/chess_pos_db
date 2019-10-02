@@ -770,8 +770,8 @@ namespace ext
                 const auto& poolSpecs = specs();
                 for (std::size_t i = 0; i < poolSpecs.size(); ++i)
                 {
-                    auto&& [n, ps] = poolSpecs[i];
-                    for (const auto& path : ps)
+                    auto&& spec = poolSpecs[i];
+                    for (const auto& path : spec.paths)
                     {
                         auto originalPath = absolute;
                         for (;;)

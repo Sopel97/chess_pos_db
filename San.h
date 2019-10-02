@@ -65,10 +65,8 @@ namespace san
             return fromOrdinal<File>(c - 'a');
         }
 
-        [[nodiscard]] constexpr Square parseSquare(std::string_view s)
+        [[nodiscard]] constexpr Square parseSquare(const char* s)
         {
-            ASSERT(s.size() >= 2u);
-
             const File file = parseFile(s[0]);
             const Rank rank = parseRank(s[1]);
             return Square(file, rank);
@@ -157,14 +155,14 @@ namespace san
             {
                 *cur = '\0';
                 --cur;
+                --length;
                 if (cur == san)
                 {
                     return 0;
                 }
             }
 
-            const std::size_t newLength = cur - san + 1u;
-            return removeSanCapture(san, newLength);
+            return removeSanCapture(san, length);
         }
 
         [[nodiscard]] constexpr PieceType parsePromotedPieceType(char c)
@@ -205,7 +203,7 @@ namespace san
             return '\0';
         }
 
-        [[nodiscard]] constexpr Move sanToMove_Pawn(const Position& pos, std::string_view san)
+        [[nodiscard]] constexpr Move sanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
         {
             // since we remove capture information it's either
             // 012345 idx
@@ -213,8 +211,6 @@ namespace san
             // aa1
             // a1=Q
             // aa1=Q
-
-            const std::size_t sanLen = san.size();
 
             ASSERT(sanLen >= 2 && sanLen <= 5);
 
@@ -307,7 +303,7 @@ namespace san
         }
 
         template <PieceType PieceTypeV>
-        [[nodiscard]] constexpr Move sanToMove(const Position& pos, std::string_view san)
+        [[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san, std::size_t sanLen)
         {
             static_assert(
                 PieceTypeV == PieceType::Knight
@@ -322,11 +318,9 @@ namespace san
             // 1a1
             // a1a1
 
-            const std::size_t sanLen = san.size();
-
             ASSERT(sanLen >= 2 && sanLen <= 4);
 
-            const Square toSq = parseSquare(san.substr(sanLen - 2u));
+            const Square toSq = parseSquare(san + (sanLen - 2u));
 
             if (sanLen == 4)
             {
@@ -381,7 +375,8 @@ namespace san
             // if we have a knight then attacks==pseudoAttacks
             if (PieceTypeV != PieceType::Knight)
             {
-                candidates &= bb::attacks<PieceTypeV>(toSq, pos.piecesBB());
+                auto occ = pos.piecesBB();
+                candidates &= bb::attacks<PieceTypeV>(toSq, occ);
 
                 if (candidates.exactlyOne())
                 {
@@ -412,7 +407,7 @@ namespace san
             return Move::null();
         }
 
-        [[nodiscard]] INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, std::string_view san)
+        [[nodiscard]] INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, const char* san, std::size_t length)
         {
             // since we remove captures the only possible case is 
             // a1
@@ -425,14 +420,14 @@ namespace san
             return Move{ fromSq, toSq };
         }
 
-        [[nodiscard]] constexpr Move sanToMove_Castle(const Position& pos, std::string_view san)
+        [[nodiscard]] constexpr Move sanToMove_Castle(const Position& pos, const char* san, std::size_t length)
         {
             // either:
             // 012345 - idx
             // O-O-O
             // O-O
 
-            const CastleType ct = san.size() == 3u ? CastleType::Short : CastleType::Long;
+            const CastleType ct = length == 3u ? CastleType::Short : CastleType::Long;
             const Color c = pos.sideToMove();
 
             const Move move = Move::castle(ct, c);
@@ -458,19 +453,19 @@ namespace san
         switch (san[0])
         {
         case 'N':
-            return detail::sanToMove<PieceType::Knight>(pos, std::string_view(san + 1, length - 1));
+            return detail::sanToMove<PieceType::Knight>(pos, san + 1, length - 1);
         case 'B':
-            return detail::sanToMove<PieceType::Bishop>(pos, std::string_view(san + 1, length - 1));
+            return detail::sanToMove<PieceType::Bishop>(pos, san + 1, length - 1);
         case 'R':
-            return detail::sanToMove<PieceType::Rook>(pos, std::string_view(san + 1, length - 1));
+            return detail::sanToMove<PieceType::Rook>(pos, san + 1, length - 1);
         case 'Q':
-            return detail::sanToMove<PieceType::Queen>(pos, std::string_view(san + 1, length - 1));
+            return detail::sanToMove<PieceType::Queen>(pos, san + 1, length - 1);
         case 'K':
-            return detail::sanToMove_King(pos, std::string_view(san + 1, length - 1));
+            return detail::sanToMove_King(pos, san + 1, length - 1);
         case 'O':
-            return detail::sanToMove_Castle(pos, std::string_view(san, length));
+            return detail::sanToMove_Castle(pos, san, length);
         default:
-            return detail::sanToMove_Pawn(pos, std::string_view(san, length));
+            return detail::sanToMove_Pawn(pos, san, length);
         }
     }
 

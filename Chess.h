@@ -355,10 +355,10 @@ struct FlatSquareOffset
     std::int8_t value;
 
     constexpr FlatSquareOffset(int files, int ranks) noexcept :
-        value(files + ranks * cardinality<File>())
+        value(static_cast<unsigned>(files) + static_cast<unsigned>(ranks) * cardinality<File>())
     {
-        ASSERT(files + ranks * cardinality<File>() >= std::numeric_limits<std::int8_t>::min());
-        ASSERT(files + ranks * cardinality<File>() <= std::numeric_limits<std::int8_t>::max());
+        ASSERT(files + ranks * cardinality<File>() >= 0);
+        ASSERT(files + ranks * cardinality<File>() < cardinality<File>() * cardinality<Rank>());
     }
 };
 
@@ -500,12 +500,14 @@ public:
 
     [[nodiscard]] constexpr File file() const
     {
-        return File(m_id % cardinality<Rank>());
+        ASSERT(isOk());
+        return File(static_cast<unsigned>(m_id) % cardinality<Rank>());
     }
 
     [[nodiscard]] constexpr Rank rank() const
     {
-        return Rank(m_id / cardinality<Rank>());
+        ASSERT(isOk());
+        return Rank(static_cast<unsigned>(m_id) / cardinality<Rank>());
     }
 
     [[nodiscard]] constexpr SquareCoords coords() const
@@ -515,7 +517,8 @@ public:
 
     [[nodiscard]] constexpr Color color() const
     {
-        return fromOrdinal<Color>((~m_id) & 1);
+        ASSERT(isOk());
+        return fromOrdinal<Color>((~static_cast<unsigned>(m_id)) & 1);
     }
 
     constexpr void flipVertically()
@@ -690,16 +693,21 @@ struct Move
         return Move{ Square::none(), Square::none() };
     }
 
-    [[nodiscard]] constexpr static Move castle(CastleType ct, Color c)
-    {
-        constexpr EnumMap2<CastleType, Color, Move> moves = {{
-            {{ { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } }},
-            {{ { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }}
-        }};
-
-        return moves[ct][c];
-    }
+    [[nodiscard]] constexpr static Move castle(CastleType ct, Color c);
 };
+
+namespace detail::castle
+{
+    constexpr EnumMap2<CastleType, Color, Move> moves = { {
+        {{ { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } }},
+        {{ { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }}
+    } };
+}
+
+[[nodiscard]] constexpr Move Move::castle(CastleType ct, Color c)
+{
+    return detail::castle::moves[ct][c];
+}
 
 static_assert(A4 + Offset{ 0, 1 } == A5);
 static_assert(A4 + Offset{ 0, 2 } == A6);
