@@ -21,6 +21,8 @@
 #include "PositionSignature.h"
 #include "San.h"
 
+#include "lib/json/json.hpp"
+
 namespace app
 {
     const static std::size_t importMemory = cfg::g_config["app"]["pgn_import_memory"].get<MemoryAmount>();
@@ -92,19 +94,6 @@ namespace app
         str += std::string("=") + std::to_string(results[GameResult::Draw]);
         str += std::string("-") + std::to_string(results[GameResult::BlackWin]);
         return str;
-    }
-
-    std::string toString(GameResult res)
-    {
-        switch (res)
-        {
-        case GameResult::WhiteWin:
-            return "win";
-        case GameResult::BlackWin:
-            return "loss";
-        case GameResult::Draw:
-            return "draw";
-        }
     }
 
     AggregatedQueryResults queryAggregate(
@@ -256,7 +245,7 @@ namespace app
             std::string plyCount = firstGame->plyCount() ? std::to_string(*firstGame->plyCount()) : "-"s;
             std::cout
                 << firstGame->date().toString()
-                << ' ' << toString(firstGame->result())
+                << ' ' << toString(GameResultWordFormat{}, firstGame->result())
                 << ' ' << firstGame->eco().toString()
                 << ' ' << firstGame->event()
                 << ' ' << plyCount
@@ -308,6 +297,66 @@ namespace app
         bool continuations;
         bool fetchFirstGameForEachContinuation;
         bool fetchLastGameForEachContinuation;
+
+        friend void to_json(nlohmann::json& j, const RemoteQuery& query)
+        {
+            std::vector<std::string_view> levelsStr;
+            levelsStr.reserve(query.levels.size());
+            for (auto&& level : query.levels)
+            {
+                levelsStr.emplace_back(toString(level));
+            }
+
+            std::vector<std::string_view> resultsStr;
+            resultsStr.reserve(resultsStr.size());
+            for (auto&& result : query.results)
+            {
+                resultsStr.emplace_back(toString(GameResultWordFormat{}, result));
+            }
+
+            j = nlohmann::json{ 
+                { "fens", query.fens },
+                { "levels", levelsStr },
+                { "results", resultsStr },
+                { "fetch_first_game", query.fetchFirstGame },
+                { "fetch_last_game", query.fetchLastGame },
+                { "continuations", query.continuations },
+                { "fetch_first_game_for_each_continuation", query.fetchFirstGameForEachContinuation },
+                { "fetch_last_game_for_each_continuation", query.fetchLastGameForEachContinuation }
+            };
+        }
+
+        friend void from_json(const nlohmann::json& j, RemoteQuery& query)
+        {
+            query.fens.clear();
+            query.levels.clear();
+            query.results.clear();
+
+            {
+                std::vector<std::string_view> levelsStr;
+                j["levels"].get_to(levelsStr);
+                for (auto&& levelStr : levelsStr)
+                {
+                    query.levels.emplace_back(fromString<GameLevel>(levelStr));
+                }
+            }
+
+            {
+                std::vector<std::string_view> resultsStr;
+                j["results"].get_to(resultsStr);
+                for (auto&& resultStr : resultsStr)
+                {
+                    query.results.emplace_back(fromString<GameResult>(GameResultWordFormat{}, resultStr));
+                }
+            }
+
+            j["fens"].get_to(query.fens);
+            j["fetch_first_game"].get_to(query.fetchFirstGame);
+            j["fetch_last_game"].get_to(query.fetchLastGame);
+            j["continuations"].get_to(query.continuations);
+            j["fetch_first_game_for_each_continuation"].get_to(query.fetchFirstGameForEachContinuation);
+            j["fetch_last_game_for_each_continuation"].get_to(query.fetchLastGameForEachContinuation);
+        }
     };
 
     struct RemoteQueryResultForPosition
@@ -866,8 +915,24 @@ namespace app
 
 int main()
 {
+    app::RemoteQuery q;
+    q.fens = { "asd", "dsa" };
+    q.fetchFirstGame = false;
+    q.fetchLastGame = true;
+    q.fetchFirstGameForEachContinuation = false;
+    q.fetchLastGameForEachContinuation = true;
+    q.continuations = false;
+    q.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
+    q.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
+    auto j = nlohmann::json(q);
+    std::cout << j.dump() << '\n';
+    q = j;
+    std::cout << nlohmann::json(q).dump() << '\n';
+
+    /*
     app::App app;
     app.run();
+    */
 
     return 0;
 }

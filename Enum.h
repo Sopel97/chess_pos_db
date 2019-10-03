@@ -37,6 +37,30 @@ template <typename EnumT>
     return EnumTraits<EnumT>::ordinal(v);
 }
 
+template <typename EnumT>
+[[nodiscard]] decltype(auto) toString(EnumT v)
+{
+    return EnumTraits<EnumT>::toString(v);
+}
+
+template <typename EnumT, typename FormatT>
+[[nodiscard]] decltype(auto) toString(FormatT&& f, EnumT v)
+{
+    return EnumTraits<EnumT>::toString(std::forward<FormatT>(f), v);
+}
+
+template <typename EnumT>
+[[nodiscard]] EnumT fromString(std::string_view str)
+{
+    return EnumTraits<EnumT>::fromString(str);
+}
+
+template <typename EnumT, typename FormatT>
+[[nodiscard]] EnumT fromString(FormatT&& f, std::string_view str)
+{
+    return EnumTraits<EnumT>::fromString(std::forward<FormatT>(f), str);
+}
+
 template <>
 struct EnumTraits<bool>
 {
