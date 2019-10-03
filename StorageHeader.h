@@ -258,6 +258,12 @@ namespace persistence
             return static_cast<std::uint32_t>(m_index.size());
         }
 
+        void flush()
+        {
+            m_header.flush();
+            m_index.flush();
+        }
+
         void clear()
         {
             m_header.clear();

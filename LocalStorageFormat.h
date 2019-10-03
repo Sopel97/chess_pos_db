@@ -1203,6 +1203,8 @@ namespace persistence
                 pipeline.waitForCompletion();
                 collectFutureFiles();
 
+                flush();
+
                 return stats;
             }
 
@@ -1262,6 +1264,8 @@ namespace persistence
                 pipeline.waitForCompletion();
                 collectFutureFiles();
 
+                flush();
+
                 detail::log(": Completed.");
 
                 detail::log(": Imported ", statsTotal.numGames, " games with ", statsTotal.numPositions, " positions. Skipped ", statsTotal.numSkippedGames, " games.");
@@ -1272,6 +1276,11 @@ namespace persistence
             ImportStats importPgns(const PgnFiles& pgns, std::size_t memory)
             {
                 return importPgns(std::execution::seq, pgns, memory);
+            }
+
+            void flush()
+            {
+                m_header.flush();
             }
 
         private:
