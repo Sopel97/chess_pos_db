@@ -725,7 +725,7 @@ struct ReverseMove
 
 struct PackedReverseMove
 {
-    static constexpr std::uint32_t mask = 0xFFFFFFu;
+    static constexpr std::uint32_t mask = 0x3FFFFFFu;
     static constexpr std::uint32_t squareMask = 0b111111u;
     static constexpr std::uint32_t pieceMask = 0b1111u;
     static constexpr std::uint32_t pieceTypeMask = 0b111u;
