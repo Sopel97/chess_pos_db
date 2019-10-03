@@ -532,7 +532,6 @@ namespace san
             // There is only one king so no disambiguation needed.
             if (type == PieceType::King)
             {
-                detail::appendSquareToString(move.to, san);
                 return;
             }
 
