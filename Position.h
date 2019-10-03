@@ -698,6 +698,74 @@ private:
     }
 };
 
+struct ReverseMove
+{
+    Move move;
+    Piece capturedPiece;
+    Square oldEpSquare;
+    CastlingRights oldCastlingRights;
+
+    // We need a well defined case for the starting position.
+    constexpr ReverseMove() :
+        move(Move::null()),
+        capturedPiece(Piece::none()),
+        oldEpSquare(Square::none()),
+        oldCastlingRights(CastlingRights::All)
+    {
+    }
+
+    constexpr ReverseMove(const Move& move, Piece capturedPiece, Square oldEpSquare, CastlingRights oldCastlingRights) :
+        move(move),
+        capturedPiece(capturedPiece),
+        oldEpSquare(oldEpSquare),
+        oldCastlingRights(oldCastlingRights)
+    {
+    }
+};
+
+struct PackedReverseMove
+{
+    static constexpr std::uint32_t mask = 0xFFFFFFu;
+    static constexpr std::uint32_t squareMask = 0b111111u;
+    static constexpr std::uint32_t pieceMask = 0b1111u;
+    static constexpr std::uint32_t pieceTypeMask = 0b111u;
+    static constexpr std::uint32_t castlingRightsMask = 0b1111;
+    static constexpr std::uint32_t fileMask = 0b111;
+
+    constexpr PackedReverseMove(const ReverseMove& reverseMove) :
+        m_packed(
+            0u
+            // The only move when square is none() is null move and
+            // then both squares are none(). No other move is like that
+            // so we don't lose any information by storing only
+            // the 6 bits of each square.
+            | ((ordinal(reverseMove.move.from) & squareMask) << 21)
+            | ((ordinal(reverseMove.move.to) & squareMask) << 15)
+            // Other masks are just for code clarity, they should
+            // never change the values.
+            | ((ordinal(reverseMove.capturedPiece) & pieceMask) << 11)
+            | ((ordinal(reverseMove.oldCastlingRights) & castlingRightsMask) << 7)
+            | ((ordinal(reverseMove.move.promotedPiece.type()) & pieceTypeMask) << 4)
+            | (((reverseMove.oldEpSquare != Square::none()) & 1) << 3)
+            // We probably could omit the squareMask here but for clarity it's left.
+            | (ordinal(Square(ordinal(reverseMove.oldEpSquare) & squareMask).file()) & fileMask)
+        )
+    {
+    }
+
+private:
+    // Uses only 27 lowest bits.
+    // Bit meaning from highest to lowest.
+    // - 6 bits from
+    // - 6 bits to
+    // - 4 bits for the captured piece
+    // - 4 bits for prev castling rights
+    // - 3 bits promoted piece type
+    // - 1 bit  to specify if the ep square was valid (false if none())
+    // - 3 bits for prev ep square file
+    std::uint32_t m_packed;
+};
+
 struct Position : public Board
 {
     using BaseType = Board;
@@ -739,12 +807,13 @@ struct Position : public Board
 
     // TODO: if performance of setting special moves flags becomes 
     //       a problem then make a separate function that doesn't set it
-    constexpr std::pair<Piece, CastlingRights> doMove(const Move& move)
+    constexpr ReverseMove doMove(const Move& move)
     {
         ASSERT(move.from.isOk() && move.to.isOk());
 
         m_epSquare = Square::none();
         const PieceType movedPiece = pieceAt(move.from).type();
+        const Square oldEpSquare = m_epSquare;
         const CastlingRights oldCastlingRights = m_castlingRights;
         switch (movedPiece)
         {
@@ -784,22 +853,16 @@ struct Position : public Board
 
         const Piece captured = BaseType::doMove(move);
         m_sideToMove = !m_sideToMove;
-        return { captured, oldCastlingRights };
+        return { move, captured, oldEpSquare, oldCastlingRights };
     }
 
-    constexpr void undoMove(const Move& move, Piece capturedPiece, CastlingRights castlingRights)
+    constexpr void undoMove(const ReverseMove& reverseMove)
     {
-        BaseType::undoMove(move, capturedPiece);
+        const Move& move = reverseMove.move;
+        BaseType::undoMove(move, reverseMove.capturedPiece);
 
-        m_epSquare = Square::none();
-        if (move.type == MoveType::EnPassant)
-        {
-            m_epSquare = move.to;
-        }
-        else if (move.type == MoveType::Castle)
-        {
-            m_castlingRights = castlingRights;
-        }
+        m_epSquare = reverseMove.oldEpSquare;
+        m_castlingRights = reverseMove.oldCastlingRights;
 
         m_sideToMove = !m_sideToMove;
     }
@@ -860,10 +923,10 @@ struct Position : public Board
     // these are supposed to be used only for testing
     // that's why there's this assert in afterMove
 
-    [[nodiscard]] constexpr Position beforeMove(Move move, Piece captured, CastlingRights castlingRights) const
+    [[nodiscard]] constexpr Position beforeMove(const ReverseMove& reverseMove) const
     {
         Position cpy(*this);
-        cpy.undoMove(move, captured, castlingRights);
+        cpy.undoMove(reverseMove);
         return cpy;
     }
 
