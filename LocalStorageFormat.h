@@ -1046,7 +1046,7 @@ namespace persistence
                 return m_path;
             }
 
-            [[nodiscard]] std::vector<PackedGameHeader> queryHeaders(const std::vector<std::uint32_t>& indices)
+            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices)
             {
                 return m_header.query(indices);
             }

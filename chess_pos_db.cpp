@@ -178,7 +178,7 @@ namespace app
         }
 
         {
-            std::vector<persistence::PackedGameHeader> headers = db.queryHeaders(gameQueries);
+            std::vector<persistence::PackedGameHeader> headers = db.queryHeadersByIndices(gameQueries);
             auto it = headers.begin();
             for (int i = 0; i < moves.size(); ++i)
             {
@@ -298,7 +298,7 @@ namespace app
         return parts;
     }
 
-    struct Query
+    struct RemoteQuery
     {
         std::vector<std::string> fens;
         std::vector<GameLevel> levels;
@@ -310,16 +310,16 @@ namespace app
         bool fetchLastGameForEachContinuation;
     };
 
-    struct QueryResultForPosition
+    struct RemoteQueryResultForPosition
     {
-        QueryResultForPosition() :
+        RemoteQueryResultForPosition() :
             level(GameLevel::Human),
             result(GameResult::Draw),
             count(0)
         {
         }
 
-        QueryResultForPosition(GameLevel level, GameResult result, std::size_t count) :
+        RemoteQueryResultForPosition(GameLevel level, GameResult result, std::size_t count) :
             level(level),
             result(result),
             count(count)
@@ -333,21 +333,21 @@ namespace app
         std::optional<persistence::GameHeader> lastGame;
     };
 
-    struct QueryResultForFen
+    struct RemoteQueryResultForFen
     {
-        QueryResultForFen(std::string fen) :
+        RemoteQueryResultForFen(std::string fen) :
             fen(std::move(fen))
         {
         }
 
         std::string fen;
-        QueryResultForPosition main;
-        std::vector<std::pair<Move, QueryResultForPosition>> continuations;
+        RemoteQueryResultForPosition main;
+        std::vector<std::pair<Move, RemoteQueryResultForPosition>> continuations;
     };
 
-    struct QueryResult
+    struct RemoteQueryResult
     {
-        std::vector<QueryResultForFen> subResults;
+        std::vector<RemoteQueryResultForFen> subResults;
     };
 
     // Gathers positions, removes duplicates, provides mapping to retrieve
@@ -358,15 +358,16 @@ namespace app
         struct PositionOrigin
         {
             std::size_t fenId;
+
+            // Not null move here means that it is the base position
+            // straight from the provided fen.
+            // It does NOT mean an actual null move where the side to move would change.
             Move move;
         };
 
-        struct PositionMetaData
-        {
-            // One position can have multiple origins if it
-            // shows up multiple times.
-            std::vector<PositionOrigin> origins;
-        };
+        // One position can have multiple origins if it
+        // shows up multiple times.
+        using PositionOrigins = std::vector<PositionOrigin>;
 
         auto hasher = [](const Position& pos)
         {
@@ -376,36 +377,36 @@ namespace app
         // we store position in a map to remove duplicates - so we don't query duplicates
         // we also keep mappings so we know which position originated
         // from which fen
-        std::unordered_map<Position, PositionMetaData, decltype(hasher)> positions({}, hasher);
+        std::unordered_map<Position, PositionOrigins, decltype(hasher)> positions({}, hasher);
 
         for (std::size_t i = 0; i < fens.size(); ++i)
         {
             auto&& fen = fens[i];
             Position pos = Position::fromFen(fen.c_str());
-            positions[pos].origins.emplace_back(PositionOrigin{ i, Move::null() });
+            positions[pos].emplace_back(PositionOrigin{ i, Move::null() });
 
             if (continuations)
             {
                 movegen::forEachLegalMove(pos, [&](Move move) {
-                    positions[pos.afterMove(move)].origins.emplace_back(PositionOrigin{ i, move });
+                    positions[pos.afterMove(move)].emplace_back(PositionOrigin{ i, move });
                 });
             }
         }
 
         std::vector<Position> distinctPositions;
-        std::vector<PositionMetaData> metas;
-        for (auto&& [pos, meta] : positions)
+        std::vector<PositionOrigins> origins;
+        for (auto&& [pos, origin] : positions)
         {
             distinctPositions.emplace_back(pos);
-            metas.emplace_back(std::move(meta));
+            origins.emplace_back(std::move(origin));
         }
 
-        return std::make_pair(std::move(distinctPositions), std::move(metas));
+        return std::make_pair(std::move(distinctPositions), std::move(origins));
     }
 
-    [[nodiscard]] QueryResult executeQuery(persistence::local::Database& db, const Query& query)
+    [[nodiscard]] RemoteQueryResult executeQuery(persistence::local::Database& db, const RemoteQuery& query)
     {
-        auto [positions, metas] = gatherPositionsForQuery(query.fens, query.continuations);
+        auto [positions, origins] = gatherPositionsForQuery(query.fens, query.continuations);
 
         std::vector<persistence::local::QueryTarget> targets;
         for (auto&& level : query.levels)
@@ -421,7 +422,7 @@ namespace app
 
         // Next we slowly populate the QueryResult with retrieved data.
         // This requires some remapping.
-        QueryResult queryResult;
+        RemoteQueryResult queryResult;
         // Each initial fen has a result, NOT each distinct position.
         // Each fen 'owns' N positions.
         for (std::size_t i = 0; i < query.fens.size(); ++i)
@@ -433,7 +434,7 @@ namespace app
         std::vector<std::uint32_t> headerQueries;
         struct HeaderFor
         {
-            using HeaderMemberPtr = std::optional<persistence::GameHeader> QueryResultForPosition::*;
+            using HeaderMemberPtr = std::optional<persistence::GameHeader> RemoteQueryResultForPosition::*;
 
             HeaderFor(std::size_t fenId, std::size_t continuationId, HeaderMemberPtr headerPtr) :
                 fenId(fenId),
@@ -446,6 +447,8 @@ namespace app
             std::size_t continuationId; // if -1 then main
             HeaderMemberPtr headerPtr;
         };
+        constexpr std::size_t noContinuationId = -1;
+
         // We have to know where to assign the header later
         // We cannot keep a vector of std::pairs because the query function
         // requires a vector of ints.
@@ -458,18 +461,20 @@ namespace app
             {
                 for (std::size_t i = 0; i < positions.size(); ++i)
                 {
-                    auto&& rangeResult = rangeResults[level][result][i];
-                    auto count = rangeResult.count();
+                    const auto& rangeResult = rangeResults[level][result][i];
+                    const auto count = rangeResult.count();
+                    // We initialize the results even if count == 0.
+                    // We want to present that information to the user.
 
                     // These are not always present but we don't want to defer getting the indices.
-                    auto firstGameIdx = count > 0 ? rangeResult.firstGameIndex() : 0;
-                    auto lastGameIdx = count > 0 ? rangeResult.lastGameIndex() : 0;
+                    const auto firstGameIdx = count > 0 ? rangeResult.firstGameIndex() : 0;
+                    const auto lastGameIdx = count > 0 ? rangeResult.lastGameIndex() : 0;
 
                     // One position maps to at least one fen.
                     // The mapping is only on our side to reduce queries, the client
                     // wants to see multiple instances of the same position.
                     // If move != Move::null() it is a continuation of a fen.
-                    for (auto&& [fenId, move] : metas[i].origins)
+                    for (const auto& [fenId, move] : origins[i])
                     {
                         auto& subResult = queryResult.subResults[fenId];
                         if (move == Move::null())
@@ -488,12 +493,12 @@ namespace app
                                 if (query.fetchFirstGame)
                                 {
                                     headerQueries.emplace_back(firstGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, -1, &QueryResultForPosition::firstGame);
+                                    headerQueriesMappings.emplace_back(fenId, noContinuationId, &RemoteQueryResultForPosition::firstGame);
                                 }
                                 if (query.fetchLastGame)
                                 {
                                     headerQueries.emplace_back(lastGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, -1, &QueryResultForPosition::lastGame);
+                                    headerQueriesMappings.emplace_back(fenId, noContinuationId, &RemoteQueryResultForPosition::lastGame);
                                 }
                             }
                         }
@@ -515,12 +520,12 @@ namespace app
                                 if (query.fetchFirstGameForEachContinuation)
                                 {
                                     headerQueries.emplace_back(firstGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, id, &QueryResultForPosition::firstGame);
+                                    headerQueriesMappings.emplace_back(fenId, id, &RemoteQueryResultForPosition::firstGame);
                                 }
                                 if (query.fetchLastGameForEachContinuation)
                                 {
                                     headerQueries.emplace_back(lastGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, id, &QueryResultForPosition::lastGame);
+                                    headerQueriesMappings.emplace_back(fenId, id, &RemoteQueryResultForPosition::lastGame);
                                 }
                             }
                         }
@@ -531,7 +536,7 @@ namespace app
 
         // Query all headers at once and assign them to
         // their respective positions.
-        auto packedHeaders = db.queryHeaders(headerQueries);
+        auto packedHeaders = db.queryHeadersByIndices(headerQueries);
         for (std::size_t i = 0; i < packedHeaders.size(); ++i)
         {
             auto& packedHeader = packedHeaders[i];
@@ -539,14 +544,11 @@ namespace app
 
             // Again, a special value for the main position. Refactoring it
             // would probably add too much complexity for nothing.
-            if (continuationId == -1)
-            {
-                (queryResult.subResults[fenId].main.*headerPtr).emplace(packedHeader);
-            }
-            else
-            {
-                (queryResult.subResults[fenId].continuations[continuationId].second.*headerPtr).emplace(packedHeader);
-            }
+            auto& pos = continuationId == noContinuationId
+                ? queryResult.subResults[fenId].main
+                : queryResult.subResults[fenId].continuations[continuationId].second;
+
+            (pos.*headerPtr).emplace(packedHeader);
         }
 
         return queryResult;
