@@ -289,6 +289,7 @@ namespace app
 
     struct RemoteQuery
     {
+        std::string token; // token can be used to match queries to results by the client
         std::vector<std::string> fens;
         std::vector<GameLevel> levels;
         std::vector<GameResult> results;
@@ -297,6 +298,7 @@ namespace app
         bool continuations;
         bool fetchFirstGameForEachContinuation;
         bool fetchLastGameForEachContinuation;
+        bool excludeTranspositions;
 
         friend void to_json(nlohmann::json& j, const RemoteQuery& query)
         {
@@ -315,6 +317,7 @@ namespace app
             }
 
             j = nlohmann::json{ 
+                { "token", query.token },
                 { "fens", query.fens },
                 { "levels", levelsStr },
                 { "results", resultsStr },
@@ -322,7 +325,8 @@ namespace app
                 { "fetch_last_game", query.fetchLastGame },
                 { "continuations", query.continuations },
                 { "fetch_first_game_for_each_continuation", query.fetchFirstGameForEachContinuation },
-                { "fetch_last_game_for_each_continuation", query.fetchLastGameForEachContinuation }
+                { "fetch_last_game_for_each_continuation", query.fetchLastGameForEachContinuation },
+                { "exclude_transpositions", query.excludeTranspositions }
             };
         }
 
@@ -350,12 +354,14 @@ namespace app
                 }
             }
 
+            j["token"].get_to(query.token);
             j["fens"].get_to(query.fens);
             j["fetch_first_game"].get_to(query.fetchFirstGame);
             j["fetch_last_game"].get_to(query.fetchLastGame);
             j["continuations"].get_to(query.continuations);
             j["fetch_first_game_for_each_continuation"].get_to(query.fetchFirstGameForEachContinuation);
             j["fetch_last_game_for_each_continuation"].get_to(query.fetchLastGameForEachContinuation);
+            j["exclude_transpositions"].get_to(query.excludeTranspositions);
         }
     };
 
@@ -396,6 +402,7 @@ namespace app
 
     struct RemoteQueryResult
     {
+        RemoteQuery query;
         std::vector<RemoteQueryResultForFen> subResults;
     };
 
@@ -471,7 +478,12 @@ namespace app
 
         // Next we slowly populate the QueryResult with retrieved data.
         // This requires some remapping.
-        RemoteQueryResult queryResult;
+        RemoteQueryResult queryResult{ query };
+
+        // We cannot respect this option with this database
+        // This tells the client about that.
+        queryResult.query.excludeTranspositions = false;
+
         // Each initial fen has a result, NOT each distinct position.
         // Each fen 'owns' N positions.
         for (std::size_t i = 0; i < query.fens.size(); ++i)
@@ -916,11 +928,13 @@ namespace app
 int main()
 {
     app::RemoteQuery q;
+    q.token = "toktok";
     q.fens = { "asd", "dsa" };
     q.fetchFirstGame = false;
     q.fetchLastGame = true;
     q.fetchFirstGameForEachContinuation = false;
     q.fetchLastGameForEachContinuation = true;
+    q.excludeTranspositions = false;
     q.continuations = false;
     q.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
     q.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
