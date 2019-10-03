@@ -929,6 +929,9 @@ int main()
     q = j;
     std::cout << nlohmann::json(q).dump() << '\n';
 
+    std::cout << "\n\n\n";
+    cfg::g_config.print(std::cout);
+
     /*
     app::App app;
     app.run();

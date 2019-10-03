@@ -128,7 +128,7 @@
                 PGN parsing is fast and may run in parallel with other
                 disk io.
             */
-            "pgn_parser_memory" : "4MiB",
+            "pgn_parser_memory" : "4MiB"
         }
     },
 

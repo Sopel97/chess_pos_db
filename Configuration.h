@@ -116,8 +116,58 @@ namespace cfg
             return m_json[std::forward<T>(arg)];
         }
 
+        void print(std::ostream& out) const
+        {
+            out << m_json.dump(4);
+        }
+
     private:
         nlohmann::json m_json;
+
+        static const nlohmann::json& defaultJson()
+        {
+            static const nlohmann::json s_defaultJson = 
+                R"({
+    "ext" : {
+        "default_thread_pool" : {
+            "threads" : 8
+        },
+
+        "max_concurrent_open_pooled_files" : 256,
+        "max_concurrent_open_unpooled_files" : 128,
+
+        "merge" : {
+            "max_batch_size" : 192,
+
+            "max_output_buffer_size_multiplier" : 8
+        },
+
+        "equal_range" : {
+            "max_random_read_size" : "32KiB"
+        },
+
+        "index" : {
+            "builder_buffer_size" : "8MiB"
+        }
+    },
+
+    "persistence" : {
+        "header_writer_memory" : "16MiB",
+
+        "local" : {
+            "index_granularity" : 1024,
+            "max_merge_buffer_size" : "1GiB",
+            "pgn_parser_memory" : "4MiB"
+        }
+    },
+
+    "app" : {
+        "pgn_import_memory" : "2GiB"
+    }
+})"_json;
+
+            return s_defaultJson;
+        }
 
         Configuration()
         {
@@ -129,7 +179,8 @@ namespace cfg
 
             str = detail::stripComments(str);
 
-            m_json = nlohmann::json::parse(str);
+            m_json = defaultJson();
+            m_json.merge_patch(nlohmann::json::parse(str));
         }
     };
 
