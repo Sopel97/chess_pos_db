@@ -474,6 +474,8 @@ namespace san
             return detail::sanToMove_King(pos, san + 1, length - 1);
         case 'O':
             return detail::sanToMove_Castle(pos, san, length);
+        case '-':
+            return Move::null();
         default:
             return detail::sanToMove_Pawn(pos, san, length);
         }
@@ -674,6 +676,7 @@ namespace san
         validStart['f'] = true;
         validStart['g'] = true;
         validStart['h'] = true;
+        validStart['-'] = true;
 
         return validStart;
     }();

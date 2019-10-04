@@ -426,6 +426,12 @@ namespace pgn
                 }
 
                 const Move move = san::sanToMove(m_position, san);
+                if (move == Move::null())
+                {
+                    m_moveSection.remove_prefix(m_moveSection.size());
+                    return *this;
+                }
+
                 m_position.doMove(move);
             
                 return *this;
