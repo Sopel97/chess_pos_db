@@ -753,6 +753,11 @@ struct PackedReverseMove
     {
     }
 
+    constexpr std::uint32_t packed() const
+    {
+        return m_packed;
+    }
+
 private:
     // Uses only 27 lowest bits.
     // Bit meaning from highest to lowest.
