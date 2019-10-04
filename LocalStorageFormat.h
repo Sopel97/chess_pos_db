@@ -62,7 +62,7 @@ namespace persistence
                 {
                 }
 
-                // TODO: eventually remove this overload
+                // TODO: eventually remove this overload?
                 Entry(const Position& pos, std::uint32_t gameIdx) :
                     m_positionSignature(pos),
                     m_gameIdx(gameIdx)
@@ -426,6 +426,20 @@ namespace persistence
                 ASSERT(!m_ranges.empty());
 
                 return m_ranges.back().lastGameIndex();
+            }
+
+            [[nodiscard]] std::uint32_t firstDirectGameIndex() const
+            {
+                ASSERT(!m_directRanges.empty());
+
+                return m_directRanges.front().firstGameIndex();
+            }
+
+            [[nodiscard]] std::uint32_t lastDirectGameIndex() const
+            {
+                ASSERT(!m_directRanges.empty());
+
+                return m_directRanges.back().lastGameIndex();
             }
 
         private:
@@ -1214,7 +1228,12 @@ namespace persistence
                 return m_header.query(indices);
             }
 
-            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(const std::vector<QueryTarget>& targets, const std::vector<Position>& positions) const
+            // TODO: refactor
+            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(
+                const std::vector<QueryTarget>& targets, 
+                const std::vector<Position>& positions,
+                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
+            ) const
             {
                 const std::size_t numPositions = positions.size();
 
@@ -1226,8 +1245,14 @@ namespace persistence
                 compound.reserve(numPositions);
                 for (std::size_t i = 0; i < numPositions; ++i)
                 {
-                    // TODO: pass the reverse move up to here.
-                    compound.emplace_back(PositionSignatureWithReverseMove(positions[i]), i);
+                    if (reverseMoves.size() > i)
+                    {
+                        compound.emplace_back(PositionSignatureWithReverseMove(positions[i], reverseMoves[i]), i);
+                    }
+                    else
+                    {
+                        compound.emplace_back(PositionSignatureWithReverseMove(positions[i]), i);
+                    }
                 }
 
                 auto cmp = detail::Entry::CompareLessWithReverseMove{};
@@ -1247,6 +1272,10 @@ namespace persistence
                     std::vector<QueryResult> orderedResults;
                     orderedResults.resize(numPositions);
                     m_partitions[level][result].queryRanges(orderedResults, orderedKeys);
+                    if (!reverseMoves.empty())
+                    {
+                        m_partitions[level][result].queryDirectRanges(orderedResults, orderedKeys);
+                    }
 
                     results[level][result].resize(numPositions);
                     for (std::size_t i = 0; i < numPositions; ++i)
@@ -1257,14 +1286,21 @@ namespace persistence
                 return results;
             }
 
-            [[nodiscard]] std::vector<QueryResult> queryRanges(QueryTarget target, const std::vector<Position>& positions) const
+            [[nodiscard]] std::vector<QueryResult> queryRanges(
+                QueryTarget target, 
+                const std::vector<Position>& positions,
+                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
+            ) const
             {
-                return queryRanges(std::vector<QueryTarget>{ { target } }, positions)[target.level][target.result];
+                return queryRanges(std::vector<QueryTarget>{ { target } }, positions, reverseMoves)[target.level][target.result];
             }
 
-            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(const std::vector<Position>& positions) const
+            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(
+                const std::vector<Position>& positions,
+                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
+            ) const
             {
-                return queryRanges(allQueryTargets(), positions);
+                return queryRanges(allQueryTargets(), positions, reverseMoves);
             }
 
             void mergeAll()

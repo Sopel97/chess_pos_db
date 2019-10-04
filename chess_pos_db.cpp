@@ -43,7 +43,8 @@ namespace app
 
     struct AggregatedQueryResult
     {
-        EnumMap2<GameLevel, GameResult, std::size_t> counts;
+        // total, direct
+        EnumMap2<GameLevel, GameResult, std::pair<std::size_t, std::size_t>> counts;
         EnumMap2<GameLevel, GameResult, std::optional<persistence::GameHeader>> games;
     };
 
@@ -88,11 +89,15 @@ namespace app
         return pgns;
     }
 
-    std::string resultsToString(const EnumMap<GameResult, std::size_t>& results)
+    std::string resultsToString(const EnumMap<GameResult, std::pair<std::size_t, std::size_t>>& results)
     {
-        auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin]);
-        str += std::string("=") + std::to_string(results[GameResult::Draw]);
-        str += std::string("-") + std::to_string(results[GameResult::BlackWin]);
+        auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin].first);
+        str += std::string("=") + std::to_string(results[GameResult::Draw].first);
+        str += std::string("-") + std::to_string(results[GameResult::BlackWin].first);
+        str += '/';
+        str += std::string("+") + std::to_string(results[GameResult::WhiteWin].second);
+        str += std::string("=") + std::to_string(results[GameResult::Draw].second);
+        str += std::string("-") + std::to_string(results[GameResult::BlackWin].second);
         return str;
     }
 
@@ -107,20 +112,23 @@ namespace app
     {
         Position basePosition = pos;
         std::vector<Position> positions;
+        std::vector<ReverseMove> reverseMoves;
         std::vector<Move> moves;
         if (queryContinuations)
         {
             movegen::forEachLegalMove(basePosition, [&](Move move) {
-                positions.emplace_back(basePosition.afterMove(move));
+                auto& pos = positions.emplace_back(basePosition);
+                reverseMoves.emplace_back(pos.doMove(move));
                 moves.emplace_back(move);
                 });
         }
+        reverseMoves.emplace_back();
         positions.emplace_back(basePosition);
 
         AggregatedQueryResults aggResults;
         aggResults.mainPosition = pos;
         std::vector<std::uint32_t> gameQueries;
-        auto results = db.queryRanges(positions);
+        auto results = db.queryRanges(positions, reverseMoves);
         for (int i = 0; i < moves.size(); ++i)
         {
             AggregatedQueryResult aggResult;
@@ -130,12 +138,13 @@ namespace app
                 for (GameResult result : values<GameResult>())
                 {
                     const std::size_t count = results[level][result][i].count();
-                    aggResult.counts[level][result] = count;
+                    const std::size_t directCount = results[level][result][i].directCount();
+                    aggResult.counts[level][result] = { count, directCount };
                     totalCount += count;
 
-                    if (fetchFirstGameForContinuations && count > 0)
+                    if (fetchFirstGameForContinuations && directCount > 0)
                     {
-                        gameQueries.emplace_back(results[level][result][i].firstGameIndex());
+                        gameQueries.emplace_back(results[level][result][i].firstDirectGameIndex());
                     }
                 }
             }
@@ -155,8 +164,10 @@ namespace app
                 for (GameResult result : values<GameResult>())
                 {
                     const std::size_t count = results[level][result].back().count();
-                    aggResult.counts[level][result] = count;
+                    const std::size_t directCount = results[level][result].back().directCount();
+                    aggResult.counts[level][result] = { count, directCount };
 
+                    // Main position doesn't have a history
                     if (fetchFirstGame && count > 0)
                     {
                         gameQueries.emplace_back(results[level][result].back().firstGameIndex());
@@ -176,9 +187,9 @@ namespace app
                 {
                     for (GameResult result : values<GameResult>())
                     {
-                        const std::size_t count = aggResult.counts[level][result];
+                        const std::size_t directCount = aggResult.counts[level][result].second;
 
-                        if (fetchFirstGameForContinuations && count > 0)
+                        if (fetchFirstGameForContinuations && directCount > 0)
                         {
                             aggResult.games[level][result] = persistence::GameHeader(*it++);
                         }
@@ -191,7 +202,7 @@ namespace app
             {
                 for (GameResult result : values<GameResult>())
                 {
-                    const std::size_t count = aggResult.counts[level][result];
+                    const std::size_t count = aggResult.counts[level][result].first;
 
                     if (fetchFirstGame && count > 0)
                     {
@@ -207,14 +218,16 @@ namespace app
     void printAggregatedResult(const AggregatedQueryResult& res)
     {
         std::size_t total = 0;
+        std::size_t totalDirect = 0;
         for (auto& cc : res.counts)
         {
-            for (auto& c : cc)
+            for (auto& [c0, c1] : cc)
             {
-                total += c;
+                total += c0;
+                totalDirect += c1;
             }
         }
-        std::cout << std::setw(9) << total << ' ';
+        std::cout << std::setw(5) << total << ' ' << totalDirect << ' ';
 
         for (auto& cc : res.counts)
         {
