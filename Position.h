@@ -833,15 +833,8 @@ struct Position : public Board
         }
         case PieceType::King:
         {
-            if (move.type == MoveType::Castle)
-            {
-                m_castlingRights = CastlingRights::None;
-            }
-            else
-            {
-                if (move.from == E1) m_castlingRights &= ~CastlingRights::White;
-                else if (move.from == E8) m_castlingRights &= ~CastlingRights::Black;
-            }
+            if (move.from == E1) m_castlingRights &= ~CastlingRights::White;
+            else if (move.from == E8) m_castlingRights &= ~CastlingRights::Black;
             break;
         }
         case PieceType::Rook:

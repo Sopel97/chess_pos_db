@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+#include <optional>
 
 #include "Assert.h"
 #include "Chess.h"
@@ -63,6 +64,11 @@ namespace san
             ASSERT(isFile(c));
 
             return fromOrdinal<File>(c - 'a');
+        }
+
+        [[nodiscard]] constexpr bool isSquare(const char* s)
+        {
+            return isFile(s[0]) && isRank(s[1]);
         }
 
         [[nodiscard]] constexpr Square parseSquare(const char* s)
@@ -173,6 +179,11 @@ namespace san
             }
 
             return removeSanCapture(san, length);
+        }
+
+        [[nodiscard]] constexpr bool isPromotedPieceType(char c)
+        {
+            return c == 'N' || c == 'B' || c == 'R' || c == 'Q';
         }
 
         [[nodiscard]] constexpr PieceType parsePromotedPieceType(char c)
@@ -447,6 +458,288 @@ namespace san
 
             return move;
         }
+
+
+        [[nodiscard]] constexpr std::optional<Move> sanToMove_PawnSafe(const Position& pos, const char* san, std::size_t sanLen)
+        {
+            // since we remove capture information it's either
+            // 012345 idx
+            // a1
+            // aa1
+            // a1=Q
+            // aa1=Q
+
+            if (sanLen < 2 || sanLen > 5) return {};
+
+            const Color color = pos.sideToMove();
+
+            Move move{ Square::none(), Square::none(), MoveType::Normal, Piece::none() };
+
+            if (sanLen == 2 || sanLen == 4)
+            {
+                // a1
+                // a1=Q
+
+                if (!isSquare(san)) return {};
+                move.to = parseSquare(san);
+
+                if (color == Color::White)
+                {
+                    if (move.to.rank() < rank3) return {};
+
+                    const Square push1 = move.to + Offset{ 0, -1 };
+                    const Square push2 = move.to + Offset{ 0, -2 };
+                    if (pos.pieceAt(push1).type() == PieceType::Pawn)
+                    {
+                        move.from = push1;
+                    }
+                    else if (pos.pieceAt(push2).type() == PieceType::Pawn)
+                    {
+                        move.from = push2;
+                    }
+                    else
+                    {
+                        return {};
+                    }
+                }
+                else
+                {
+                    if (move.to.rank() > rank6) return {};
+
+                    const Square push1 = move.to + Offset{ 0, 1 };
+                    const Square push2 = move.to + Offset{ 0, 2 };
+                    if (pos.pieceAt(push1).type() == PieceType::Pawn)
+                    {
+                        move.from = push1;
+                    }
+                    else if (pos.pieceAt(push2).type() == PieceType::Pawn)
+                    {
+                        move.from = push2;
+                    }
+                    else
+                    {
+                        return {};
+                    }
+                }
+
+                if (pos.pieceAt(move.to) != Piece::none()) return {};
+            }
+            else if (sanLen == 3 || sanLen == 5)
+            {
+                // aa1
+                // aa1=Q
+
+                if (!isFile(san[0])) return {};
+                if (!isFile(san[1])) return {};
+                if (!isRank(san[2])) return {};
+                const File fromFile = parseFile(san[0]);
+                const File toFile = parseFile(san[1]);
+                const Rank toRank = parseRank(san[2]);
+
+                if (pos.sideToMove() == Color::White)
+                {
+                    move.from = Square(fromFile, toRank - 1);
+                }
+                else
+                {
+                    move.from = Square(fromFile, toRank + 1);
+                }
+
+                move.to = Square(toFile, toRank);
+                if (pos.pieceAt(move.to) == Piece::none())
+                {
+                    move.type = MoveType::EnPassant;
+                    if (move.to != pos.epSquare()) return {};
+                }
+                else
+                {
+                    if (pos.pieceAt(move.to).color() == pos.sideToMove()) return {};
+                }
+            }
+
+            if (sanLen >= 4)
+            {
+                // promotion
+
+                if (!isPromotedPieceType(san[sanLen - 1])) return {};
+                const PieceType promotedPieceType = parsePromotedPieceType(san[sanLen - 1]);
+
+                move.type = MoveType::Promotion;
+                move.promotedPiece = Piece(promotedPieceType, color);
+            }
+ 
+            if (pos.pieceAt(move.from).type() != PieceType::Pawn) return {};
+            if (pos.pieceAt(move.from).color() != pos.sideToMove()) return {};
+            if (!move.from.isOk()) return {};
+            if (!move.to.isOk()) return {};
+            if (pos.createsAttackOnOwnKing(move)) return {};
+
+            return move;
+        }
+
+        template <PieceType PieceTypeV>
+        [[nodiscard]] constexpr std::optional<Move> sanToMoveSafe(const Position& pos, const char* san, std::size_t sanLen)
+        {
+            static_assert(
+                PieceTypeV == PieceType::Knight
+                || PieceTypeV == PieceType::Bishop
+                || PieceTypeV == PieceType::Rook
+                || PieceTypeV == PieceType::Queen);
+
+            // either
+            // 01234 - indices
+            // a1
+            // aa1
+            // 1a1
+            // a1a1
+
+            auto isValid = [&pos](Move move) {
+                if (pos.pieceAt(move.from).type() != PieceTypeV) return false;
+                if (pos.pieceAt(move.from).color() != pos.sideToMove()) return false;
+                if (pos.pieceAt(move.to) != Piece::none() && pos.pieceAt(move.to).color() == pos.sideToMove()) return false;
+                if (pos.createsDiscoveredAttackOnOwnKing(move)) return false;
+                return true;
+            };
+
+            if (sanLen < 2 || sanLen > 4) return {};
+            if (!isSquare(san + (sanLen - 2u))) return {};
+            
+            const Square toSq = parseSquare(san + (sanLen - 2u));
+
+            if (sanLen == 4)
+            {
+                // we have everything we need already in the san
+                if (!isSquare(san)) return {};
+
+                const Square fromSq = parseSquare(san);
+
+                const Move move{ fromSq, toSq };
+                if (!isValid(move)) return {};
+                return move;
+            }
+
+            // first consider all candidates with ray attacks to the toSq
+            Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove()));
+            candidates &= bb::pseudoAttacks<PieceTypeV>(toSq);
+
+            if (candidates.exactlyOne())
+            {
+                const Square fromSq = candidates.first();
+
+                const Move move{ fromSq, toSq };
+                if (!isValid(move)) return {};
+                return move;
+            }
+
+            if (sanLen == 3)
+            {
+                // we have one of the following to disambiguate with:
+                // aa1
+                // 1a1
+
+                if (isFile(san[0]))
+                {
+                    const File fromFile = parseFile(san[0]);
+                    candidates &= bb::file(fromFile);
+                }
+                else if (isRank(san[0]))
+                {
+                    const Rank fromRank = parseRank(san[0]);
+                    candidates &= bb::rank(fromRank);
+                }
+
+                if (candidates.exactlyOne())
+                {
+                    const Square fromSq = candidates.first();
+
+                    const Move move{ fromSq, toSq };
+                    if (!isValid(move)) return {};
+                    return move;
+                }
+            }
+
+            // if we have a knight then attacks==pseudoAttacks
+            if (PieceTypeV != PieceType::Knight)
+            {
+                auto occ = pos.piecesBB();
+                candidates &= bb::attacks<PieceTypeV>(toSq, occ);
+
+                if (candidates.exactlyOne())
+                {
+                    const Square fromSq = candidates.first();
+
+                    const Move move{ fromSq, toSq };
+                    if (!isValid(move)) return {};
+                    return move;
+                }
+            }
+
+            // if we are here then there are (should be) many pseudo-legal moves
+            // but only one of them is legal
+
+            for (Square fromSq : candidates)
+            {
+                const Move move{ fromSq, toSq };
+                if (!pos.createsDiscoveredAttackOnOwnKing(move))
+                {
+                    if (!isValid(move)) return {};
+                    return move;
+                }
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] INTRIN_CONSTEXPR std::optional<Move> sanToMove_KingSafe(const Position& pos, const char* san, std::size_t length)
+        {
+            // since we remove captures the only possible case is 
+            // a1
+
+            if (length != 2) return {};
+            if (!isSquare(san)) return {};
+
+            const Square fromSq = pos.kingSquare(pos.sideToMove());
+            const Square toSq = parseSquare(san);
+
+            const Move move{ fromSq, toSq };
+            if (pos.createsAttackOnOwnKing(move)) return {};
+
+            return move;
+        }
+
+        [[nodiscard]] __declspec(noinline) constexpr std::optional<Move> sanToMove_CastleSafe(const Position& pos, const char* san, std::size_t length)
+        {
+            // either:
+            // 012345 - idx
+            // O-O-O
+            // O-O
+
+            if (length != 3 && length != 5) return {};
+            if (length == 3 && san != "O-O"sv) return {};
+            if (length == 5 && san != "O-O-O"sv) return {};
+
+            const CastleType ct = length == 3u ? CastleType::Short : CastleType::Long;
+            const Color c = pos.sideToMove();
+
+            const CastlingRights castlingRights = pos.castlingRights();
+            const CastlingRights requiredCastlingRights =
+                ct == CastleType::Short
+                ? (c == Color::White ? CastlingRights::WhiteKingSide : CastlingRights::BlackKingSide)
+                : (c == Color::White ? CastlingRights::WhiteQueenSide : CastlingRights::BlackQueenSide);
+
+            const Move move = Move::castle(ct, c);
+
+            if (
+                !contains(castlingRights, requiredCastlingRights)
+                || pos.pieceAt(move.from).type() != PieceType::King
+                || pos.pieceAt(move.to).type() != PieceType::Rook
+                )
+            {
+                return {};
+            }
+            
+            return move;
+        }
     }
 
     // assumes that the the san is correct and the move
@@ -478,6 +771,39 @@ namespace san
             return Move::null();
         default:
             return detail::sanToMove_Pawn(pos, san, length);
+        }
+    }
+
+    [[nodiscard]] constexpr std::optional<Move> sanToMoveSafe(const Position& pos, char* san, std::size_t length)
+    {
+        // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
+        // *above regex contains all valid SAN strings
+        // (but also some invalid ones)
+
+        length = detail::removeSanDecorations(san, length);
+        if (length < 2)
+        {
+            return {};
+        }
+
+        switch (san[0])
+        {
+        case 'N':
+            return detail::sanToMoveSafe<PieceType::Knight>(pos, san + 1, length - 1);
+        case 'B':
+            return detail::sanToMoveSafe<PieceType::Bishop>(pos, san + 1, length - 1);
+        case 'R':
+            return detail::sanToMoveSafe<PieceType::Rook>(pos, san + 1, length - 1);
+        case 'Q':
+            return detail::sanToMoveSafe<PieceType::Queen>(pos, san + 1, length - 1);
+        case 'K':
+            return detail::sanToMove_KingSafe(pos, san + 1, length - 1);
+        case 'O':
+            return detail::sanToMove_CastleSafe(pos, san, length);
+        case '-':
+            return Move::null();
+        default:
+            return detail::sanToMove_PawnSafe(pos, san, length);
         }
     }
 
@@ -697,12 +1023,31 @@ namespace san
 
         return sanToMove(pos, buffer, san.size());
     }
+
+    [[nodiscard]] constexpr std::optional<Move> sanToMoveSafe(const Position& pos, std::string_view san)
+    {
+        constexpr int maxSanLength = 15; // a very generous upper bound
+
+        if (san.size() > maxSanLength)
+        {
+            return {};
+        }
+
+        char buffer[maxSanLength + 1] = { '\0' };
+        detail::strcpy(buffer, san.data(), san.size());
+
+        return sanToMoveSafe(pos, buffer, san.size());
+    }
 }
 
 #if defined(USE_CONSTEXPR_INTRINSICS)
 static_assert(san::sanToMove(Position::startPosition(), "a4") == Move{ A2, A4 });
 static_assert(san::sanToMove(Position::startPosition(), "e3") == Move{ E2, E3 });
 static_assert(san::sanToMove(Position::startPosition(), "Nf3") == Move{ G1, F3 });
+
+static_assert(san::sanToMoveSafe(Position::startPosition(), "a4") == Move{ A2, A4 });
+static_assert(san::sanToMoveSafe(Position::startPosition(), "e3") == Move{ E2, E3 });
+static_assert(san::sanToMoveSafe(Position::startPosition(), "Nf3") == Move{ G1, F3 });
 
 static_assert(san::sanToMove(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -"), "a5") == Move{ A7, A5 });
 static_assert(san::sanToMove(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -"), "e6") == Move{ E7, E6 });

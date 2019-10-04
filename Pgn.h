@@ -206,6 +206,17 @@ namespace pgn
                     }
                 }
 
+                // Handle null move
+                if (s[0] == '-')
+                {
+                    // But we have to be careful not to match result at the end.
+                    if (s.size() < 2 || s[1] != '-')
+                    {
+                        s.remove_prefix(s.size());
+                        return;
+                    }
+                }
+
                 if (san::isValidSanMoveStart(s[0]))
                 {
                     return;
@@ -287,6 +298,7 @@ namespace pgn
                 skip['\t'] = false;
                 skip['\n'] = false;
                 skip[' '] = false;
+                skip['\0'] = false;
 
                 return skip;
             }();
@@ -505,7 +517,7 @@ namespace pgn
                 m_san{},
                 m_moveSection(moveSection)
             {
-                ASSERT(m_moveSection.front() == '1');
+                // ASSERT(m_moveSection.front() == '1'); // The move list may be empty...
                 ++(*this);
             }
 
@@ -673,7 +685,7 @@ namespace pgn
             m_moveSection(moveSection)
         {
             ASSERT(m_tagSection.front() == '[');
-            ASSERT(m_moveSection.front() == '1');
+            // ASSERT(m_moveSection.front() == '1'); // The game may have no moves...
         }
 
         void getResultDateEcoEventWhiteBlack(

@@ -3378,7 +3378,7 @@ namespace ext
                             continue;
                         }
 
-                        ASSERT(extractKey(buf[mid - a]) == key);
+                        // ASSERT(extractKey(buf[mid - a]) == key);
                     }
 
                     // *mid == key here

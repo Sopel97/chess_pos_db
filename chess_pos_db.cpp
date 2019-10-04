@@ -1086,9 +1086,59 @@ void testQuery()
     std::cout << nlohmann::json(result).dump(4) << '\n';
 }
 
+[[nodiscard]] bool verifyPgnTags(const pgn::UnparsedGame& game, std::size_t idx)
+{
+    const auto result = game.result();
+    if (!result.has_value())
+    {
+        std::cerr << "Game " << idx << " has invalid result tag with value \"" << game.tag("Result"sv) << "\"\n";
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool verifyPgnMoves(const pgn::UnparsedGame& game, std::size_t idx)
+{
+    Position pos = Position::startPosition();
+    std::size_t moveCount = 0;
+    for (auto&& san : game.moves())
+    {
+        const std::optional<Move> move = san::sanToMoveSafe(pos, san);
+        if (!move.has_value() || *move == Move::null())
+        {
+            std::cerr << "Game " << idx << " has an invalid move \"" << san << "\"\n";
+            return false;
+        }
+
+        pos.doMove(*move);
+
+        ++moveCount;
+    }
+    if (moveCount == 0)
+    {
+        std::cerr << "Game " << idx << " has no moves\n";
+    }
+    return true;
+}
+
+void verifyPgn(std::filesystem::path path)
+{
+    pgn::LazyPgnFileReader reader(path);
+    std::size_t idx = 0; // 1-based index, increment at the start of the loop
+    for (auto&& game : reader)
+    {
+        ++idx;
+
+        if (!verifyPgnTags(game, idx)) continue;
+        if (!verifyPgnMoves(game, idx)) continue;
+    }
+    std::cerr << "Verified " << idx << " games.\n";
+}
+
 int main()
 {
-    testQuery();
+    //testQuery();
+    verifyPgn("w:/catobase/data/lichess_db_standard_rated_2014-12.pgn");
     return 0;
 
     app::App app;
