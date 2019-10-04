@@ -509,63 +509,39 @@ namespace app
         }
     };
 
-    // Gathers positions, removes duplicates, provides mapping to retrieve
-    // which fen corresponds to which position and which position
-    // arose as a continuation of a given fen.
     [[nodiscard]] auto gatherPositionsForQuery(const std::vector<std::string>& fens, bool continuations)
     {
-        struct PositionOrigin
-        {
-            std::size_t fenId;
+        // NOTE: we don't remove duplicates because there should be no
+        //       duplicates when we consider reverse move
 
-            // Not null move here means that it is the base position
-            // straight from the provided fen.
-            // It does NOT mean an actual null move where the side to move would change.
-            Move move;
-        };
-
-        // One position can have multiple origins if it
-        // shows up multiple times.
-        using PositionOrigins = std::vector<PositionOrigin>;
-
-        auto hasher = [](const Position& pos)
-        {
-            return std::hash<PositionSignature>{}(PositionSignature(pos));
-        };
-
-        // we store position in a map to remove duplicates - so we don't query duplicates
-        // we also keep mappings so we know which position originated
-        // from which fen
-        std::unordered_map<Position, PositionOrigins, decltype(hasher)> positions({}, hasher);
-
+        std::vector<Position> positions;
+        std::vector<std::size_t> fenIds;
+        std::vector<ReverseMove> reverseMoves;
         for (std::size_t i = 0; i < fens.size(); ++i)
         {
             auto&& fen = fens[i];
-            Position pos = Position::fromFen(fen.c_str());
-            positions[pos].emplace_back(PositionOrigin{ i, Move::null() });
+            const Position pos = Position::fromFen(fen.c_str());
+            positions.emplace_back(pos);
+            fenIds.emplace_back(i);
+            reverseMoves.emplace_back();
 
             if (continuations)
             {
                 movegen::forEachLegalMove(pos, [&](Move move) {
-                    positions[pos.afterMove(move)].emplace_back(PositionOrigin{ i, move });
+                    auto posCpy = pos;
+                    reverseMoves.emplace_back(posCpy.doMove(move));
+                    positions.emplace_back(posCpy);
+                    fenIds.emplace_back(i);
                 });
             }
         }
 
-        std::vector<Position> distinctPositions;
-        std::vector<PositionOrigins> origins;
-        for (auto&& [pos, origin] : positions)
-        {
-            distinctPositions.emplace_back(pos);
-            origins.emplace_back(std::move(origin));
-        }
-
-        return std::make_pair(std::move(distinctPositions), std::move(origins));
+        return std::make_tuple(std::move(positions), std::move(fenIds), std::move(reverseMoves));
     }
 
     [[nodiscard]] RemoteQueryResult executeQuery(persistence::local::Database& db, const RemoteQuery& query)
     {
-        auto [positions, origins] = gatherPositionsForQuery(query.fens, query.continuations);
+        auto [positions, fenIds, reverseMoves] = gatherPositionsForQuery(query.fens, query.continuations);
 
         std::vector<persistence::local::QueryTarget> targets;
         for (auto&& level : query.levels)
@@ -577,15 +553,17 @@ namespace app
         }
 
         // perform the query only for the chosen targets
-        EnumMap2<GameLevel, GameResult, std::vector<persistence::local::QueryResult>> rangeResults = db.queryRanges(targets, positions);
+        EnumMap2<GameLevel, GameResult, std::vector<persistence::local::QueryResult>> rangeResults = 
+            db.queryRanges(targets, positions, 
+                // If we pass empty vector then queries for direct instances are not made.
+                query.excludeTranspositions 
+                ? reverseMoves
+                : std::vector<ReverseMove>{}
+            );
 
         // Next we slowly populate the QueryResult with retrieved data.
         // This requires some remapping.
         RemoteQueryResult queryResult{ query };
-
-        // We cannot respect this option with this database
-        // This tells the client about that.
-        queryResult.query.excludeTranspositions = false;
 
         // Each initial fen has a result, NOT each distinct position.
         // Each fen 'owns' N positions.
@@ -630,53 +608,83 @@ namespace app
                 {
                     const auto& rangeResult = rangeResults[level][result][i];
                     const auto count = rangeResult.count();
+                    const auto directCount = rangeResult.directCount();
                     // We initialize the results even if count == 0.
                     // We want to present that information to the user.
 
                     // These are not always present but we don't want to defer getting the indices.
                     const auto firstGameIdx = count > 0 ? rangeResult.firstGameIndex() : 0;
                     const auto lastGameIdx = count > 0 ? rangeResult.lastGameIndex() : 0;
+                    const auto firstDirectGameIdx = directCount > 0 ? rangeResult.firstDirectGameIndex() : 0;
+                    const auto lastDirectGameIdx = directCount > 0 ? rangeResult.lastDirectGameIndex() : 0;
 
                     // One position maps to at least one fen.
                     // The mapping is only on our side to reduce queries, the client
                     // wants to see multiple instances of the same position.
                     // If move != Move::null() it is a continuation of a fen.
-                    for (const auto& [fenId, move] : origins[i])
+                    const auto& fenId = fenIds[i];
+                    const auto& reverseMove = reverseMoves[i];
+                    const auto& move = reverseMove.move;
+                    auto& subResult = queryResult.subResults[fenId];
+
+                    if (move == Move::null())
                     {
-                        auto& subResult = queryResult.subResults[fenId];
-
-                        std::size_t id;
-                        bool fetchFirst;
-                        bool fetchLast;
-                        if (move == Move::null())
-                        {
-                            // Main position
-                            id = subResult.main.size();
-                            subResult.main.emplace_back(level, result, count);
-
-                            fetchFirst = query.fetchFirstGame;
-                            fetchLast = query.fetchLastGame;
-                        }
-                        else
-                        {
-                            // Continuation
-                            auto& bucket = subResult.continuations[move];
-
-                            id = bucket.size();
-                            bucket.emplace_back(level, result, count);
-
-                            fetchFirst = query.fetchFirstGameForEachContinuation;
-                            fetchLast = query.fetchLastGameForEachContinuation;
-                        }
+                        // Main position
+                        const std::size_t id = subResult.main.size();
+                        subResult.main.emplace_back(level, result, count);
 
                         if (count > 0)
                         {
-                            if (fetchFirst)
+                            if (query.fetchFirstGame)
                             {
                                 headerQueries.emplace_back(firstGameIdx);
                                 headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame);
                             }
-                            if (fetchLast)
+                            if (query.fetchLastGame)
+                            {
+                                headerQueries.emplace_back(lastGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Continuation
+                        auto& bucket = subResult.continuations[move];
+
+                        const std::size_t id = bucket.size();
+                        // If we queried transposition info then we have to
+                        // change some values as the expected query response is different.
+                        if (query.excludeTranspositions)
+                        {
+                            bucket.emplace_back(level, result, directCount, count - directCount);
+                        }
+                        else
+                        {
+                            bucket.emplace_back(level, result, count);
+                        }
+
+                        if (query.excludeTranspositions && directCount > 0)
+                        {
+                            if (query.fetchFirstGameForEachContinuation)
+                            {
+                                headerQueries.emplace_back(firstDirectGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame);
+                            }
+                            if (query.fetchLastGameForEachContinuation)
+                            {
+                                headerQueries.emplace_back(lastDirectGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame);
+                            }
+                        }
+                        else if (!query.excludeTranspositions && count > 0)
+                        {
+                            if (query.fetchFirstGameForEachContinuation)
+                            {
+                                headerQueries.emplace_back(firstGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame);
+                            }
+                            if (query.fetchLastGameForEachContinuation)
                             {
                                 headerQueries.emplace_back(lastGameIdx);
                                 headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame);
@@ -1063,22 +1071,26 @@ void testQuery()
 {
     app::RemoteQuery query;
     query.token = "toktok";
-    query.fens = { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" };
+    //query.fens = { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" };
+    query.fens = { "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2" };
     query.fetchFirstGame = true;
     query.fetchLastGame = true;
     query.fetchFirstGameForEachContinuation = true;
     query.fetchLastGameForEachContinuation = true;
-    query.excludeTranspositions = false;
+    query.excludeTranspositions = true;
     query.continuations = true;
     query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
     query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
-    persistence::local::Database db("w:/catobase/.big");
+    persistence::local::Database db("w:/catobase/.tmp");
     auto result = app::executeQuery(db, query);
     std::cout << nlohmann::json(result).dump(4) << '\n';
 }
 
 int main()
 {
+    testQuery();
+    return 0;
+
     app::App app;
     app.run();
 

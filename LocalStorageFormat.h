@@ -404,7 +404,7 @@ namespace persistence
                 return c;
             }
 
-            [[nodiscard]] std::size_t directCount()
+            [[nodiscard]] std::size_t directCount() const
             {
                 std::size_t c = 0;
                 for (auto&& range : m_directRanges)
