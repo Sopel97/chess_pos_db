@@ -10,6 +10,8 @@
 #include <limits>
 #include <string_view>
 
+#include "lib/json/json.hpp"
+
 namespace persistence
 {
     struct PackedGameHeader
@@ -156,6 +158,25 @@ namespace persistence
     {
         GameHeader() = default;
 
+        GameHeader(
+            GameResult result,
+            Date date,
+            Eco eco,
+            std::uint16_t plyCount,
+            std::string event,
+            std::string white,
+            std::string black
+        ) :
+            m_result(result),
+            m_date(date),
+            m_eco(eco),
+            m_plyCount(plyCount),
+            m_event(std::move(event)),
+            m_white(std::move(white)),
+            m_black(std::move(black))
+        {
+        }
+
         explicit GameHeader(const PackedGameHeader& header) :
             m_result(header.result()),
             m_date(header.date()),
@@ -204,6 +225,23 @@ namespace persistence
         [[nodiscard]] const std::string& black() const
         {
             return m_black;
+        }
+
+        friend void to_json(nlohmann::json& j, const GameHeader& data)
+        {
+            j = nlohmann::json{
+                { "result", toString(GameResultPgnFormat{}, data.m_result) },
+                { "date", data.m_date.toString() },
+                { "eco", data.m_eco.toString() },
+                { "event", data.m_event },
+                { "white", data.m_white },
+                { "black", data.m_black }
+            };
+
+            if (data.m_plyCount.has_value())
+            {
+                j["ply_count"] = *data.m_plyCount;
+            }
         }
 
     private:

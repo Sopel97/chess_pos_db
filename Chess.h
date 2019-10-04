@@ -640,6 +640,33 @@ enum struct MoveType : std::uint8_t
     EnPassant
 };
 
+template <>
+struct EnumTraits<MoveType>
+{
+    using IdType = int;
+    using EnumType = MoveType;
+
+    static constexpr int cardinality = 4;
+    static constexpr bool isNaturalIndex = true;
+
+    static constexpr std::array<EnumType, cardinality> values{
+        MoveType::Normal,
+        MoveType::Promotion,
+        MoveType::Castle,
+        MoveType::EnPassant
+    };
+
+    [[nodiscard]] static constexpr int ordinal(EnumType c) noexcept
+    {
+        return static_cast<IdType>(c);
+    }
+
+    [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
+    {
+        return static_cast<EnumType>(id);
+    }
+};
+
 enum struct CastleType : std::uint8_t
 {
     Short,

@@ -370,40 +370,130 @@ namespace app
         RemoteQueryResultForPosition() :
             level(GameLevel::Human),
             result(GameResult::Draw),
-            count(0)
+            count(0),
+            transpositionCount{}
         {
         }
 
         RemoteQueryResultForPosition(GameLevel level, GameResult result, std::size_t count) :
             level(level),
             result(result),
-            count(count)
+            count(count),
+            transpositionCount{}
+        {
+        }
+
+        RemoteQueryResultForPosition(GameLevel level, GameResult result, std::size_t count, std::size_t transpositionCount) :
+            level(level),
+            result(result),
+            count(count),
+            transpositionCount(transpositionCount)
         {
         }
 
         GameLevel level;
         GameResult result;
         std::size_t count;
+        std::optional<std::size_t> transpositionCount;
         std::optional<persistence::GameHeader> firstGame;
         std::optional<persistence::GameHeader> lastGame;
+
+        friend void to_json(nlohmann::json& j, const RemoteQueryResultForPosition& data)
+        {
+            nlohmann::json body = nlohmann::json::object({
+                { "count", data.count }
+            });
+            if (data.transpositionCount.has_value())
+            {
+                body["transposition_count"] = *data.transpositionCount;
+            }
+            if (data.firstGame.has_value())
+            {
+                body["first_game"] = *data.firstGame;
+            }
+            if (data.lastGame.has_value())
+            {
+                body["last_game"] = *data.lastGame;
+            }
+
+            j = nlohmann::json{
+                { 
+                    toString(data.level), {
+                        { toString(GameResultWordFormat{}, data.result), std::move(body) }
+                    }
+                }
+            };
+        }
     };
 
     struct RemoteQueryResultForFen
     {
+        struct MoveCompareLess
+        {
+            [[nodiscard]] bool operator()(const Move& lhs, const Move& rhs) const noexcept
+            {
+                if (ordinal(lhs.from) < ordinal(rhs.from)) return true;
+                if (ordinal(lhs.from) > ordinal(rhs.from)) return false;
+
+                if (ordinal(lhs.to) < ordinal(rhs.to)) return true;
+                if (ordinal(lhs.to) > ordinal(rhs.to)) return false;
+
+                if (ordinal(lhs.type) < ordinal(rhs.type)) return true;
+                if (ordinal(lhs.type) > ordinal(rhs.type)) return false;
+
+                if (ordinal(lhs.promotedPiece) < ordinal(rhs.promotedPiece)) return true;
+
+                return false;
+            }
+        };
+
         RemoteQueryResultForFen(std::string fen) :
             fen(std::move(fen))
         {
         }
 
         std::string fen;
-        RemoteQueryResultForPosition main;
-        std::vector<std::pair<Move, RemoteQueryResultForPosition>> continuations;
+        std::vector<RemoteQueryResultForPosition> main;
+        std::map<Move, std::vector<RemoteQueryResultForPosition>, MoveCompareLess> continuations;
+
+        friend void to_json(nlohmann::json& j, const RemoteQueryResultForFen& data)
+        {
+            const Position position = Position::fromFen(data.fen.c_str());
+
+            j = nlohmann::json{
+                { "fen", data.fen },
+                { "main", data.main }
+            };
+
+            if (!data.continuations.empty())
+            {
+                auto& continuations = j["continuations"];
+                for (auto&& [move, ress] : data.continuations)
+                {
+                    // Move as a key
+                    auto sanStr = san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check | san::SanSpec::Compact>(position, move);
+                    auto& entry = continuations[sanStr];
+                    for (auto&& res : ress)
+                    {
+                        entry.merge_patch(res);
+                    }
+                }
+            }
+        }
     };
 
     struct RemoteQueryResult
     {
         RemoteQuery query;
         std::vector<RemoteQueryResultForFen> subResults;
+
+        friend void to_json(nlohmann::json& j, const RemoteQueryResult& data)
+        {
+            j = nlohmann::json{
+                { "query", data.query },
+                { "results", data.subResults }
+            };
+        }
     };
 
     // Gathers positions, removes duplicates, provides mapping to retrieve
@@ -492,27 +582,30 @@ namespace app
         }
 
         // We want to batch the header queries so we have to do some bookkeeping
+        // We have to know where to assign it later.
         std::vector<std::uint32_t> headerQueries;
         struct HeaderFor
         {
             using HeaderMemberPtr = std::optional<persistence::GameHeader> RemoteQueryResultForPosition::*;
 
-            HeaderFor(std::size_t fenId, std::size_t continuationId, HeaderMemberPtr headerPtr) :
+            HeaderFor(std::size_t fenId, Move move, std::size_t bucketId, HeaderMemberPtr headerPtr) :
                 fenId(fenId),
-                continuationId(continuationId),
+                move(move),
+                bucketId(bucketId),
                 headerPtr(headerPtr)
             {
             }
 
             std::size_t fenId;
-            std::size_t continuationId; // if -1 then main
+            Move move;
+            std::size_t bucketId;
             HeaderMemberPtr headerPtr;
         };
-        constexpr std::size_t noContinuationId = -1;
 
         // We have to know where to assign the header later
         // We cannot keep a vector of std::pairs because the query function
         // requires a vector of ints.
+        // The relationship is implicated by indices.
         std::vector<HeaderFor> headerQueriesMappings;
 
         // We only care about the targets specified for the query.
@@ -538,56 +631,42 @@ namespace app
                     for (const auto& [fenId, move] : origins[i])
                     {
                         auto& subResult = queryResult.subResults[fenId];
+
+                        std::size_t id;
+                        bool fetchFirst;
+                        bool fetchLast;
                         if (move == Move::null())
                         {
                             // Main position
-                            auto& positionResults = subResult.main;
-                            positionResults.count = count;
-                            positionResults.level = level;
-                            positionResults.result = result;
+                            id = subResult.main.size();
+                            subResult.main.emplace_back(level, result, count);
 
-                            // We schedule header queries if the client wants them.
-                            // We pass -1 as a continuation index to signify that it's
-                            // a main position. This is done so we don't complicate the function further.
-                            if (count > 0)
-                            {
-                                if (query.fetchFirstGame)
-                                {
-                                    headerQueries.emplace_back(firstGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, noContinuationId, &RemoteQueryResultForPosition::firstGame);
-                                }
-                                if (query.fetchLastGame)
-                                {
-                                    headerQueries.emplace_back(lastGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, noContinuationId, &RemoteQueryResultForPosition::lastGame);
-                                }
-                            }
+                            fetchFirst = query.fetchFirstGame;
+                            fetchLast = query.fetchLastGame;
                         }
                         else
                         {
                             // Continuation
-                            const auto id = subResult.continuations.size();
+                            auto& bucket = subResult.continuations[move];
 
-                            // We have to assign a move to
-                            subResult.continuations.emplace_back(
-                                std::piecewise_construct,
-                                std::forward_as_tuple(move),
-                                std::forward_as_tuple(level, result, count)
-                            );
+                            id = bucket.size();
+                            bucket.emplace_back(level, result, count);
 
-                            // We schedule header queries if the client wants them
-                            if (count > 0)
+                            fetchFirst = query.fetchFirstGameForEachContinuation;
+                            fetchLast = query.fetchLastGameForEachContinuation;
+                        }
+
+                        if (count > 0)
+                        {
+                            if (fetchFirst)
                             {
-                                if (query.fetchFirstGameForEachContinuation)
-                                {
-                                    headerQueries.emplace_back(firstGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, id, &RemoteQueryResultForPosition::firstGame);
-                                }
-                                if (query.fetchLastGameForEachContinuation)
-                                {
-                                    headerQueries.emplace_back(lastGameIdx);
-                                    headerQueriesMappings.emplace_back(fenId, id, &RemoteQueryResultForPosition::lastGame);
-                                }
+                                headerQueries.emplace_back(firstGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame);
+                            }
+                            if (fetchLast)
+                            {
+                                headerQueries.emplace_back(lastGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame);
                             }
                         }
                     }
@@ -601,13 +680,11 @@ namespace app
         for (std::size_t i = 0; i < packedHeaders.size(); ++i)
         {
             auto& packedHeader = packedHeaders[i];
-            auto [fenId, continuationId, headerPtr] = headerQueriesMappings[i];
+            auto [fenId, move, bucketId, headerPtr] = headerQueriesMappings[i];
 
-            // Again, a special value for the main position. Refactoring it
-            // would probably add too much complexity for nothing.
-            auto& pos = continuationId == noContinuationId
-                ? queryResult.subResults[fenId].main
-                : queryResult.subResults[fenId].continuations[continuationId].second;
+            auto& pos = move == Move::null()
+                ? queryResult.subResults[fenId].main[bucketId]
+                : queryResult.subResults[fenId].continuations[move][bucketId];
 
             (pos.*headerPtr).emplace(packedHeader);
         }
@@ -925,7 +1002,7 @@ namespace app
     };
 }
 
-int main()
+void jsonExample()
 {
     app::RemoteQuery q;
     q.token = "toktok";
@@ -941,15 +1018,56 @@ int main()
     auto j = nlohmann::json(q);
     std::cout << j.dump() << '\n';
     q = j;
-    std::cout << nlohmann::json(q).dump() << '\n';
+    std::cout << nlohmann::json(q).dump(4) << '\n';
 
     std::cout << "\n\n\n";
     cfg::g_config.print(std::cout);
 
-    /*
+    app::RemoteQueryResultForPosition data(GameLevel::Human, GameResult::Draw, 123, 321);
+    data.lastGame = persistence::GameHeader(
+        GameResult::Draw,
+        Date(2000, 2, 3),
+        Eco("A12"sv),
+        123,
+        "eventasd",
+        "whiteaasc",
+        "blackasd"
+    );
+    std::cout << nlohmann::json(data).dump(4) << '\n';
+
+    app::RemoteQueryResultForFen forFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    forFen.main.emplace_back(data);
+    forFen.continuations[Move{ E2, E4 }].emplace_back(data);
+
+    app::RemoteQueryResult result;
+    result.query = q;
+    result.subResults.emplace_back(forFen);
+    result.subResults.emplace_back(forFen);
+    std::cout << nlohmann::json(result).dump(4) << '\n';
+}
+
+void testQuery()
+{
+    app::RemoteQuery query;
+    query.token = "toktok";
+    query.fens = { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" };
+    query.fetchFirstGame = true;
+    query.fetchLastGame = true;
+    query.fetchFirstGameForEachContinuation = true;
+    query.fetchLastGameForEachContinuation = true;
+    query.excludeTranspositions = false;
+    query.continuations = true;
+    query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
+    query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
+    persistence::local::Database db("w:/catobase/.big");
+    auto result = app::executeQuery(db, query);
+    std::cout << nlohmann::json(result).dump(4) << '\n';
+}
+
+int main()
+{
     app::App app;
     app.run();
-    */
 
     return 0;
 }
