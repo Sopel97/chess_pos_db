@@ -803,6 +803,62 @@ namespace app
         db.mergeAll();
     }
 
+    [[nodiscard]] bool verifyPgnTags(const pgn::UnparsedGame& game, std::size_t idx)
+    {
+        const auto result = game.result();
+        if (!result.has_value())
+        {
+            std::cerr << "Game " << idx << " has invalid result tag with value \"" << game.tag("Result"sv) << "\"\n";
+            return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool verifyPgnMoves(const pgn::UnparsedGame& game, std::size_t idx)
+    {
+        Position pos = Position::startPosition();
+        std::size_t moveCount = 0;
+        for (auto&& san : game.moves())
+        {
+            const std::optional<Move> move = san::sanToMoveSafe(pos, san);
+            if (!move.has_value() || *move == Move::null())
+            {
+                std::cerr << "Game " << idx << " has an invalid move \"" << san << "\"\n";
+                return false;
+            }
+
+            pos.doMove(*move);
+
+            ++moveCount;
+        }
+        if (moveCount == 0)
+        {
+            std::cerr << "Game " << idx << " has no moves\n";
+        }
+        return true;
+    }
+
+    void verifyPgn(const std::filesystem::path& path)
+    {
+        constexpr std::size_t progressEvery = 100000;
+
+        pgn::LazyPgnFileReader reader(path);
+        std::size_t idx = 0; // 1-based index, increment at the start of the loop
+        for (auto&& game : reader)
+        {
+            if (idx % progressEvery == 0)
+            {
+                std::cout << "So far verified " << idx << " games...\n";
+            }
+
+            ++idx;
+
+            if (!verifyPgnTags(game, idx)) continue;
+            if (!verifyPgnMoves(game, idx)) continue;
+        }
+        std::cerr << "Verified " << idx << " games.\n";
+    }
+
     void info(const persistence::local::Database& db, std::ostream& out)
     {
         db.printInfo(out);
@@ -912,6 +968,7 @@ namespace app
             std::cout << "exit - gracefully exits the program, ensures everything is cleaned up\n\n";
             std::cout << "merge <path_to> - replicates the currently open database into `path_to`, and merges the files along the way.\n\n";
             std::cout << "merge - merges the files in the currently open database\n\n";
+            std::cout << "verify <path> - verifies the pgn at the given path\n\n";
             std::cout <<
                 "create <path> <pgn_list_file_path> [<path_temp>] - creates a database from files given in file at `pgn_list_file_path` (more about it below). "
                 "If `path_temp` IS NOT specified then the files are not merged after the import is done. "
@@ -977,6 +1034,16 @@ namespace app
             }
         }
 
+        void verify(const Args& args)
+        {
+            if (args.size() != 1)
+            {
+                invalidArguments();
+            }
+
+            verifyPgn(args[0]);
+        }
+
         void close(const Args& args)
         {
             m_database.reset();
@@ -1017,6 +1084,7 @@ namespace app
             { "info"sv, &App::info },
             { "close"sv, &App::close },
             { "merge"sv, &App::merge },
+            { "verify"sv, &App::verify },
             { "create"sv, &App::create },
             { "destroy"sv, &App::destroy }
         };
@@ -1086,61 +1154,8 @@ void testQuery()
     std::cout << nlohmann::json(result).dump(4) << '\n';
 }
 
-[[nodiscard]] bool verifyPgnTags(const pgn::UnparsedGame& game, std::size_t idx)
-{
-    const auto result = game.result();
-    if (!result.has_value())
-    {
-        std::cerr << "Game " << idx << " has invalid result tag with value \"" << game.tag("Result"sv) << "\"\n";
-        return false;
-    }
-    return true;
-}
-
-[[nodiscard]] bool verifyPgnMoves(const pgn::UnparsedGame& game, std::size_t idx)
-{
-    Position pos = Position::startPosition();
-    std::size_t moveCount = 0;
-    for (auto&& san : game.moves())
-    {
-        const std::optional<Move> move = san::sanToMoveSafe(pos, san);
-        if (!move.has_value() || *move == Move::null())
-        {
-            std::cerr << "Game " << idx << " has an invalid move \"" << san << "\"\n";
-            return false;
-        }
-
-        pos.doMove(*move);
-
-        ++moveCount;
-    }
-    if (moveCount == 0)
-    {
-        std::cerr << "Game " << idx << " has no moves\n";
-    }
-    return true;
-}
-
-void verifyPgn(std::filesystem::path path)
-{
-    pgn::LazyPgnFileReader reader(path);
-    std::size_t idx = 0; // 1-based index, increment at the start of the loop
-    for (auto&& game : reader)
-    {
-        ++idx;
-
-        if (!verifyPgnTags(game, idx)) continue;
-        if (!verifyPgnMoves(game, idx)) continue;
-    }
-    std::cerr << "Verified " << idx << " games.\n";
-}
-
 int main()
 {
-    //testQuery();
-    verifyPgn("w:/catobase/data/lichess_db_standard_rated_2014-12.pgn");
-    return 0;
-
     app::App app;
     app.run();
 
