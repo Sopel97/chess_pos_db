@@ -981,7 +981,6 @@ namespace persistence
                         files.emplace_back(file.entries());
                     }
 
-                    // TODO: make the temporary directory configurable
                     ext::merge(progressCallback, { mergeMemory }, files, outFile, detail::Entry::CompareLessWithReverseMove{});
                 }
 
@@ -1145,7 +1144,6 @@ namespace persistence
                 cardinality<GameLevel>()
                 * cardinality<GameResult>();
 
-            // TODO: maybe make it configurable, though it doesn't need to be big.
             static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["local"]["pgn_parser_memory"].get<MemoryAmount>();
 
         public:
@@ -1501,16 +1499,30 @@ namespace persistence
                         const std::uint32_t gameIdx = m_header.nextGameId();
 
                         std::size_t numPositionsInGame = 0;
-                        for (auto& pos : game.positions())
-                        {
+                        auto processPosition = [&](const Position& position, const ReverseMove& reverseMove) {
                             auto& bucket = buckets[*result];
-                            bucket.emplace_back(pos, gameIdx);
+                            bucket.emplace_back(position, reverseMove, gameIdx);
                             numPositionsInGame += 1;
 
                             if (bucket.size() == bucket.capacity())
                             {
                                 store(pipeline, bucket, level, *result);
                             }
+                        };
+
+                        Position position = Position::startPosition();
+                        ReverseMove reverseMove{};
+                        processPosition(position, reverseMove);
+                        for (auto& san : game.moves())
+                        {
+                            const Move move = san::sanToMove(position, san);
+                            if (move == Move::null())
+                            {
+                                break;
+                            }
+
+                            reverseMove = position.doMove(move);
+                            processPosition(position, reverseMove);
                         }
 
                         ASSERT(numPositionsInGame > 0);
@@ -1670,10 +1682,9 @@ namespace persistence
                             const std::uint32_t gameIdx = m_header.addGame(game);
 
                             std::size_t numPositionsInGame = 0;
-                            for (auto& pos : game.positions())
-                            {
+                            auto processPosition = [&, &nextIds = nextIds](const Position& position, const ReverseMove& reverseMove) {
                                 auto& bucket = entries[*result];
-                                bucket.emplace_back(pos, gameIdx);
+                                bucket.emplace_back(position, gameIdx);
                                 numPositionsInGame += 1;
 
                                 if (bucket.size() == bufferSize)
@@ -1685,6 +1696,21 @@ namespace persistence
                                     auto& nextId = nextIds[*result];
                                     store(pipeline, bucket, level, *result, nextId++);
                                 }
+                            };
+
+                            Position position = Position::startPosition();
+                            ReverseMove reverseMove{};
+                            processPosition(position, reverseMove);
+                            for (auto& san : game.moves())
+                            {
+                                const Move move = san::sanToMove(position, san);
+                                if (move == Move::null())
+                                {
+                                    break;
+                                }
+
+                                reverseMove = position.doMove(move);
+                                processPosition(position, reverseMove);
                             }
 
                             ASSERT(numPositionsInGame > 0);

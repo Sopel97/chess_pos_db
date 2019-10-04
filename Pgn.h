@@ -820,6 +820,11 @@ namespace pgn
             return UnparsedGamePositions(m_moveSection);
         }
 
+        [[nodiscard]] UnparsedGameMoves moves() const
+        {
+            return UnparsedGameMoves(m_moveSection);
+        }
+
         [[nodiscard]] UnparsedGameTags tags() const
         {
             return UnparsedGameTags(m_tagSection);
