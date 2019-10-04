@@ -481,6 +481,96 @@ namespace pgn
         std::string_view m_moveSection;
     };
 
+    struct UnparsedGameMoves
+    {
+    private:
+
+        struct UnparsedMovesIterator
+        {
+            struct Sentinel {};
+
+            using value_type = Position;
+            using difference_type = std::ptrdiff_t;
+            using reference = const Position &;
+            using iterator_category = std::input_iterator_tag;
+            using pointer = const Position*;
+
+            UnparsedMovesIterator(std::string_view moveSection) noexcept :
+                m_san{},
+                m_moveSection(moveSection)
+            {
+                ASSERT(m_moveSection.front() == '1');
+                ++(*this);
+            }
+
+            const UnparsedMovesIterator& operator++()
+            {
+                // TODO: Indicate somehow that there was an error and the position
+                //       stream is ending abruptly.
+                //       For example when a move is missing "22.Ba3 -- 23.a6 b4"
+                //       we want to propagate that to the importer so the game can be skipped.
+
+                detail::seekNextMove(m_moveSection);
+                if (m_moveSection.empty())
+                {
+                    return *this;
+                }
+
+                m_san = detail::extractMoveAdvance(m_moveSection);
+
+                return *this;
+            }
+
+            [[nodiscard]] bool friend operator==(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept
+            {
+                return lhs.m_moveSection.empty();
+            }
+
+            [[nodiscard]] bool friend operator!=(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept
+            {
+                return !(lhs == rhs);
+            }
+
+            [[nodiscard]] const std::string_view& operator*() const
+            {
+                return m_san;
+            }
+
+            [[nodiscard]] const std::string_view* operator->() const
+            {
+                return &m_san;
+            }
+
+        private:
+            std::string_view m_san;
+            std::string_view m_moveSection;
+        };
+
+    public:
+
+        using iterator = UnparsedMovesIterator;
+        using const_iterator = UnparsedMovesIterator;
+
+        UnparsedGameMoves(std::string_view moveSection) noexcept :
+            m_moveSection(moveSection)
+        {
+            ASSERT(!m_moveSection.empty());
+        }
+
+        [[nodiscard]] UnparsedMovesIterator begin()
+        {
+            return { m_moveSection };
+        }
+
+        [[nodiscard]] UnparsedMovesIterator::Sentinel end() const
+        {
+            return {};
+        }
+
+    private:
+        std::string_view m_moveSection;
+    };
+
     struct UnparsedGameTags
     {
     private:
