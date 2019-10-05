@@ -15,6 +15,7 @@
 #include "EnumMap.h"
 #include "External.h"
 #include "LocalStorageFormat.h"
+#include "HddStorageFormat.h"
 #include "MoveGenerator.h"
 #include "Pgn.h"
 #include "Position.h"

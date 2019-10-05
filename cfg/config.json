@@ -129,6 +129,12 @@
                 disk io.
             */
             "pgn_parser_memory" : "4MiB"
+        },
+
+        "hdd" : {
+            "index_granularity" : 1024,
+            "max_merge_buffer_size" : "1GiB",
+            "pgn_parser_memory" : "4MiB"
         }
     },
 
