@@ -128,20 +128,20 @@ namespace detail
         return Square(file, rank);
     }
 
-    [[nodiscard]] constexpr std::optional<Square> parseSquareSafe(std::string_view s)
+    [[nodiscard]] constexpr std::optional<Square> tryParseSquare(std::string_view s)
     {
         if (s.size() != 2) return {};
         if (!isSquare(s.data())) return {};
         return parseSquare(s.data());
     }
 
-    [[nodiscard]] constexpr std::optional<Square> parseEpSquareSafe(std::string_view s)
+    [[nodiscard]] constexpr std::optional<Square> tryParseEpSquare(std::string_view s)
     {
         if (s == "-"sv) return Square::none();
-        return parseSquareSafe(s);
+        return tryParseSquare(s);
     }
 
-    [[nodiscard]] constexpr std::optional<CastlingRights> parseCastlingRightsSafe(std::string_view s)
+    [[nodiscard]] constexpr std::optional<CastlingRights> tryParseCastlingRights(std::string_view s)
     {
         if (s == "-"sv) return CastlingRights::None;
 
@@ -226,9 +226,10 @@ public:
         if (piecesBB(whiteKing).count() != 1) return false;
         if (piecesBB(blackKing).count() != 1) return false;
         if (((piecesBB(whitePawn) | piecesBB(blackPawn)) & (bb::rank(rank1) | bb::rank(rank2))).any()) return false;
+        return true;
     }
 
-    [[nodiscard]] constexpr bool setSafe(std::string_view boardState)
+    [[nodiscard]] constexpr bool trySet(std::string_view boardState)
     {
         File f = fileA;
         Rank r = rank8;
@@ -955,7 +956,7 @@ struct Position : public Board
     // Returns false if the fen was not valid
     // If the returned value was false the position
     // is in unspecified state.
-    constexpr bool setSafe(std::string_view fen)
+    constexpr bool trySet(std::string_view fen)
     {
         // Lazily splits by ' '. Returns empty string views if at the end.
         auto nextPart = [fen, start = std::size_t{ 0 }]() mutable {
@@ -974,7 +975,7 @@ struct Position : public Board
             }
         };
 
-        if(!BaseType::setSafe(nextPart())) return false;
+        if(!BaseType::trySet(nextPart())) return false;
 
         {
             const auto side = nextPart();
@@ -987,7 +988,7 @@ struct Position : public Board
 
         {
             const auto castlingRights = nextPart();
-            auto castlingRightsOpt = detail::parseCastlingRightsSafe(castlingRights);
+            auto castlingRightsOpt = detail::tryParseCastlingRights(castlingRights);
             if (!castlingRightsOpt.has_value())
             {
                 return false;
@@ -1000,7 +1001,7 @@ struct Position : public Board
 
         {
             const auto epSquare = nextPart();
-            auto epSquareOpt = detail::parseEpSquareSafe(epSquare);
+            auto epSquareOpt = detail::tryParseEpSquare(epSquare);
             if (!epSquareOpt.has_value())
             {
                 return false;
@@ -1021,10 +1022,10 @@ struct Position : public Board
         return pos;
     }
 
-    [[nodiscard]] static constexpr std::optional<Position> fromFenSafe(std::string_view fen)
+    [[nodiscard]] static constexpr std::optional<Position> tryFromFen(std::string_view fen)
     {
         Position pos{};
-        if (pos.setSafe(fen)) return pos;
+        if (pos.trySet(fen)) return pos;
         else return {};
     }
 

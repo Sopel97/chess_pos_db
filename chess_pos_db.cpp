@@ -471,7 +471,7 @@ namespace app
 
         friend void to_json(nlohmann::json& j, const RemoteQueryResultForFen& data)
         {
-            const std::optional<Position> positionOpt = Position::fromFenSafe(data.fen.c_str());
+            const std::optional<Position> positionOpt = Position::tryFromFen(data.fen.c_str());
             if (!positionOpt.has_value())
             {
                 j = nlohmann::json{
@@ -535,7 +535,7 @@ namespace app
 
             // If the fen is invalid we use the start position as a placeholder
             // Then when reading the results we will disregard them if they come from an invalid fen.
-            const std::optional<Position> posOpt = Position::fromFenSafe(fen.c_str());
+            const std::optional<Position> posOpt = Position::tryFromFen(fen.c_str());
             const Position pos = posOpt.value_or(Position::startPosition());
             positions.emplace_back(pos);
             fenIds.emplace_back(i);
@@ -836,7 +836,7 @@ namespace app
         std::size_t moveCount = 0;
         for (auto&& san : game.moves())
         {
-            const std::optional<Move> move = san::sanToMoveSafe(pos, san);
+            const std::optional<Move> move = san::trySanToMove(pos, san);
             if (!move.has_value() || *move == Move::null())
             {
                 std::cerr << "Game " << idx << " has an invalid move \"" << san << "\"\n";
@@ -1021,7 +1021,7 @@ namespace app
                 invalidArguments();
             }
 
-            std::optional<Position> position = Position::fromFenSafe(args[0]);
+            std::optional<Position> position = Position::tryFromFen(args[0]);
             if (!position.has_value())
             {
                 throw InvalidCommand("Invalid fen.");

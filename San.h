@@ -460,7 +460,7 @@ namespace san
         }
 
 
-        [[nodiscard]] constexpr std::optional<Move> sanToMove_PawnSafe(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] constexpr std::optional<Move> trySanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
         {
             // since we remove capture information it's either
             // 012345 idx
@@ -578,7 +578,7 @@ namespace san
         }
 
         template <PieceType PieceTypeV>
-        [[nodiscard]] constexpr std::optional<Move> sanToMoveSafe(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, const char* san, std::size_t sanLen)
         {
             static_assert(
                 PieceTypeV == PieceType::Knight
@@ -690,7 +690,7 @@ namespace san
             return {};
         }
 
-        [[nodiscard]] INTRIN_CONSTEXPR std::optional<Move> sanToMove_KingSafe(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] INTRIN_CONSTEXPR std::optional<Move> trySanToMove_King(const Position& pos, const char* san, std::size_t length)
         {
             // since we remove captures the only possible case is 
             // a1
@@ -707,7 +707,7 @@ namespace san
             return move;
         }
 
-        [[nodiscard]] __declspec(noinline) constexpr std::optional<Move> sanToMove_CastleSafe(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] __declspec(noinline) constexpr std::optional<Move> trySanToMove_Castle(const Position& pos, const char* san, std::size_t length)
         {
             // either:
             // 012345 - idx
@@ -774,7 +774,7 @@ namespace san
         }
     }
 
-    [[nodiscard]] constexpr std::optional<Move> sanToMoveSafe(const Position& pos, char* san, std::size_t length)
+    [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, char* san, std::size_t length)
     {
         // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
         // *above regex contains all valid SAN strings
@@ -789,21 +789,21 @@ namespace san
         switch (san[0])
         {
         case 'N':
-            return detail::sanToMoveSafe<PieceType::Knight>(pos, san + 1, length - 1);
+            return detail::trySanToMove<PieceType::Knight>(pos, san + 1, length - 1);
         case 'B':
-            return detail::sanToMoveSafe<PieceType::Bishop>(pos, san + 1, length - 1);
+            return detail::trySanToMove<PieceType::Bishop>(pos, san + 1, length - 1);
         case 'R':
-            return detail::sanToMoveSafe<PieceType::Rook>(pos, san + 1, length - 1);
+            return detail::trySanToMove<PieceType::Rook>(pos, san + 1, length - 1);
         case 'Q':
-            return detail::sanToMoveSafe<PieceType::Queen>(pos, san + 1, length - 1);
+            return detail::trySanToMove<PieceType::Queen>(pos, san + 1, length - 1);
         case 'K':
-            return detail::sanToMove_KingSafe(pos, san + 1, length - 1);
+            return detail::trySanToMove_King(pos, san + 1, length - 1);
         case 'O':
-            return detail::sanToMove_CastleSafe(pos, san, length);
+            return detail::trySanToMove_Castle(pos, san, length);
         case '-':
             return Move::null();
         default:
-            return detail::sanToMove_PawnSafe(pos, san, length);
+            return detail::trySanToMove_Pawn(pos, san, length);
         }
     }
 
@@ -1024,7 +1024,7 @@ namespace san
         return sanToMove(pos, buffer, san.size());
     }
 
-    [[nodiscard]] constexpr std::optional<Move> sanToMoveSafe(const Position& pos, std::string_view san)
+    [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, std::string_view san)
     {
         constexpr int maxSanLength = 15; // a very generous upper bound
 
@@ -1036,7 +1036,7 @@ namespace san
         char buffer[maxSanLength + 1] = { '\0' };
         detail::strcpy(buffer, san.data(), san.size());
 
-        return sanToMoveSafe(pos, buffer, san.size());
+        return trySanToMove(pos, buffer, san.size());
     }
 }
 
@@ -1045,9 +1045,9 @@ static_assert(san::sanToMove(Position::startPosition(), "a4") == Move{ A2, A4 })
 static_assert(san::sanToMove(Position::startPosition(), "e3") == Move{ E2, E3 });
 static_assert(san::sanToMove(Position::startPosition(), "Nf3") == Move{ G1, F3 });
 
-static_assert(san::sanToMoveSafe(Position::startPosition(), "a4") == Move{ A2, A4 });
-static_assert(san::sanToMoveSafe(Position::startPosition(), "e3") == Move{ E2, E3 });
-static_assert(san::sanToMoveSafe(Position::startPosition(), "Nf3") == Move{ G1, F3 });
+static_assert(san::trySanToMove(Position::startPosition(), "a4") == Move{ A2, A4 });
+static_assert(san::trySanToMove(Position::startPosition(), "e3") == Move{ E2, E3 });
+static_assert(san::trySanToMove(Position::startPosition(), "Nf3") == Move{ G1, F3 });
 
 static_assert(san::sanToMove(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -"), "a5") == Move{ A7, A5 });
 static_assert(san::sanToMove(Position::fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq -"), "e6") == Move{ E7, E6 });
