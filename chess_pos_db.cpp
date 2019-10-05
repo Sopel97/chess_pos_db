@@ -471,7 +471,19 @@ namespace app
 
         friend void to_json(nlohmann::json& j, const RemoteQueryResultForFen& data)
         {
-            const Position position = Position::fromFen(data.fen.c_str());
+            const std::optional<Position> positionOpt = Position::fromFenSafe(data.fen.c_str());
+            if (!positionOpt.has_value())
+            {
+                j = nlohmann::json{
+                    { "fen", data.fen },
+
+                    // We don't have to put this, we don't define it anywhere, but we may
+                    { "error", "Invalid FEN"}
+                };
+
+                return;
+            }
+            const auto& position = positionOpt.value();
 
             j = nlohmann::json{
                 { "fen", data.fen },
@@ -520,7 +532,11 @@ namespace app
         for (std::size_t i = 0; i < fens.size(); ++i)
         {
             auto&& fen = fens[i];
-            const Position pos = Position::fromFen(fen.c_str());
+
+            // If the fen is invalid we use the start position as a placeholder
+            // Then when reading the results we will disregard them if they come from an invalid fen.
+            const std::optional<Position> posOpt = Position::fromFenSafe(fen.c_str());
+            const Position pos = posOpt.value_or(Position::startPosition());
             positions.emplace_back(pos);
             fenIds.emplace_back(i);
             reverseMoves.emplace_back();
@@ -1005,7 +1021,13 @@ namespace app
                 invalidArguments();
             }
 
-            app::query(*m_database, Position::fromFen(args[0].c_str()));
+            std::optional<Position> position = Position::fromFenSafe(args[0]);
+            if (!position.has_value())
+            {
+                throw InvalidCommand("Invalid fen.");
+            }
+
+            app::query(*m_database, *position);
         }
 
         void info(const Args& args)

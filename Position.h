@@ -116,11 +116,64 @@ namespace detail
         return fromOrdinal<File>(c - 'a');
     }
 
+    [[nodiscard]] constexpr bool isSquare(const char* s)
+    {
+        return isRank(s[0]) && isFile(s[1]);
+    }
+
     [[nodiscard]] constexpr Square parseSquare(const char* s)
     {
         const File file = parseFile(s[0]);
         const Rank rank = parseRank(s[1]);
         return Square(file, rank);
+    }
+
+    [[nodiscard]] constexpr std::optional<Square> parseSquareSafe(std::string_view s)
+    {
+        if (s.size() != 2) return {};
+        if (!isSquare(s.data())) return {};
+        return parseSquare(s.data());
+    }
+
+    [[nodiscard]] constexpr std::optional<Square> parseEpSquareSafe(std::string_view s)
+    {
+        if (s == "-"sv) return Square::none();
+        return parseSquareSafe(s);
+    }
+
+    [[nodiscard]] constexpr std::optional<CastlingRights> parseCastlingRightsSafe(std::string_view s)
+    {
+        if (s == "-"sv) return CastlingRights::None;
+
+        CastlingRights rights = CastlingRights::None;
+
+        for (auto& c : s)
+        {
+            CastlingRights toAdd = CastlingRights::None;
+            switch (c)
+            {
+            case 'K':
+                toAdd = CastlingRights::WhiteKingSide;
+                break;
+            case 'Q':
+                toAdd = CastlingRights::WhiteQueenSide;
+                break;
+            case 'k':
+                toAdd = CastlingRights::BlackKingSide;
+                break;
+            case 'q':
+                toAdd = CastlingRights::BlackQueenSide;
+                break;
+            }
+
+            // If there are duplicated castling rights specification we bail.
+            // If there is an invalid character we bail.
+            // (It always contains None)
+            if (contains(rights, toAdd)) return {};
+            else rights |= toAdd;
+        }
+
+        return rights;
     }
 
     [[nodiscard]] constexpr CastlingRights readCastlingRights(const char*& s)
@@ -166,6 +219,108 @@ public:
         m_pieceBB.fill(Bitboard::none());
         m_pieceBB[Piece::none()] = Bitboard::all();
         m_piecesByColorBB.fill(Bitboard::none());
+    }
+
+    [[nodiscard]] constexpr bool isValid() const
+    {
+        if (piecesBB(whiteKing).count() != 1) return false;
+        if (piecesBB(blackKing).count() != 1) return false;
+        if (((piecesBB(whitePawn) | piecesBB(blackPawn)) & (bb::rank(rank1) | bb::rank(rank2))).any()) return false;
+    }
+
+    [[nodiscard]] constexpr bool setSafe(std::string_view boardState)
+    {
+        File f = fileA;
+        Rank r = rank8;
+        bool lastWasSkip = false;
+        for (auto c : boardState)
+        {
+            Piece piece = Piece::none();
+            switch (c)
+            {
+            case 'r':
+                piece = Piece(PieceType::Rook, Color::Black);
+                break;
+            case 'n':
+                piece = Piece(PieceType::Knight, Color::Black);
+                break;
+            case 'b':
+                piece = Piece(PieceType::Bishop, Color::Black);
+                break;
+            case 'q':
+                piece = Piece(PieceType::Queen, Color::Black);
+                break;
+            case 'k':
+                piece = Piece(PieceType::King, Color::Black);
+                break;
+            case 'p':
+                piece = Piece(PieceType::Pawn, Color::Black);
+                break;
+
+            case 'R':
+                piece = Piece(PieceType::Rook, Color::White);
+                break;
+            case 'N':
+                piece = Piece(PieceType::Knight, Color::White);
+                break;
+            case 'B':
+                piece = Piece(PieceType::Bishop, Color::White);
+                break;
+            case 'Q':
+                piece = Piece(PieceType::Queen, Color::White);
+                break;
+            case 'K':
+                piece = Piece(PieceType::King, Color::White);
+                break;
+            case 'P':
+                piece = Piece(PieceType::Pawn, Color::White);
+                break;
+
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+            case '8':
+            {
+                if (lastWasSkip) return false;
+                lastWasSkip = true;
+
+                const int skip = c - '0';
+                f += skip;
+                if (f > fileH + 1) return false;
+                break;
+            }
+
+            case '/':
+                lastWasSkip = false;
+                if (f != fileH + 1) return false;
+                f = fileA;
+                --r;
+                break;
+
+            default:
+                return false;
+            }
+
+            if (piece != Piece::none())
+            {
+                lastWasSkip = false;
+
+                const Square sq(f, r);
+                if (!sq.isOk()) return false;
+
+                place(piece, sq);
+                ++f;
+            }
+        }
+
+        if (f != fileH + 1) return false;
+        if (r != rank1) return false;
+
+        return isValid();
     }
 
     // returns side to move
@@ -797,11 +952,80 @@ struct Position : public Board
         m_epSquare = (*s == '-') ? Square::none() : detail::parseSquare(s);
     }
 
+    // Returns false if the fen was not valid
+    // If the returned value was false the position
+    // is in unspecified state.
+    constexpr bool setSafe(std::string_view fen)
+    {
+        // Lazily splits by ' '. Returns empty string views if at the end.
+        auto nextPart = [fen, start = std::size_t{ 0 }]() mutable {
+            std::size_t end = fen.find(' ', start);
+            if (end == std::string::npos)
+            {
+                std::string_view substr = fen.substr(start);
+                start = fen.size();
+                return substr;
+            }
+            else
+            {
+                std::string_view substr = fen.substr(start, end - start);
+                start = end + 1; // to skip whitespace
+                return substr;
+            }
+        };
+
+        if(!BaseType::setSafe(nextPart())) return false;
+
+        {
+            const auto side = nextPart();
+            if (side == "w"sv) m_sideToMove = Color::White;
+            else if (side == "b"sv) m_sideToMove = Color::Black;
+            else return false;
+
+            if (isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove)) return false;
+        }
+
+        {
+            const auto castlingRights = nextPart();
+            auto castlingRightsOpt = detail::parseCastlingRightsSafe(castlingRights);
+            if (!castlingRightsOpt.has_value())
+            {
+                return false;
+            }
+            else
+            {
+                m_castlingRights = *castlingRightsOpt;
+            }
+        }
+
+        {
+            const auto epSquare = nextPart();
+            auto epSquareOpt = detail::parseEpSquareSafe(epSquare);
+            if (!epSquareOpt.has_value())
+            {
+                return false;
+            }
+            else
+            {
+                m_epSquare = *epSquareOpt;
+            }
+        }
+
+        return true;
+    }
+
     [[nodiscard]] static constexpr Position fromFen(const char* fen)
     {
         Position pos{};
         pos.set(fen);
         return pos;
+    }
+
+    [[nodiscard]] static constexpr std::optional<Position> fromFenSafe(std::string_view fen)
+    {
+        Position pos{};
+        if (pos.setSafe(fen)) return pos;
+        else return {};
     }
 
     [[nodiscard]] static constexpr Position startPosition()
