@@ -887,6 +887,7 @@ struct PackedReverseMove
     static constexpr std::uint32_t pieceTypeMask = 0b111u;
     static constexpr std::uint32_t castlingRightsMask = 0b1111;
     static constexpr std::uint32_t fileMask = 0b111;
+    static constexpr std::size_t numBits = 27;
 
     constexpr PackedReverseMove(const ReverseMove& reverseMove) :
         m_packed(

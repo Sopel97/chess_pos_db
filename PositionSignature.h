@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GameClassification.h"
 #include "Position.h"
 
 #include "lib/xxhash/xxhash_cpp.h"
@@ -10,6 +11,8 @@
 // currently only uses hash
 // currently doesn't differentiate positions by available legal moves
 // TODO: loseless compression later
+
+// TODO: How to create good generalization for the multi keys?
 
 struct PositionSignature
 {
@@ -174,6 +177,158 @@ namespace std
     template<> struct hash<PositionSignatureWithReverseMove>
     {
         using argument_type = PositionSignatureWithReverseMove;
+        using result_type = std::size_t;
+        [[nodiscard]] result_type operator()(const argument_type& s) const noexcept
+        {
+            // We modify the lowest and highest uint32s so they should be the best
+            // candidate for the hash.
+            return (static_cast<std::size_t>(s.hash()[0]) << 32) | s.hash()[3];
+        }
+    };
+}
+
+struct PositionSignatureWithReverseMoveAndGameClassification
+{
+    // Hash:96, PackedReverseMove:27, GameLevel:2, GameResult:2, padding:1
+
+    static constexpr std::size_t levelBits = 2;
+    static constexpr std::size_t resultBits = 2;
+
+    static constexpr std::uint32_t reverseMoveShift = 32 - PackedReverseMove::numBits;
+    static constexpr std::uint32_t levelShift = reverseMoveShift - levelBits;
+    static constexpr std::uint32_t resultShift = levelShift - resultBits;
+
+    static constexpr std::uint32_t levelMask = 0b11;
+    static constexpr std::uint32_t resultMask = 0b11;
+
+    static_assert(PackedReverseMove::numBits + levelBits + resultBits <= 32);
+
+    using StorageType = std::array<std::uint32_t, 4>;
+
+    PositionSignatureWithReverseMoveAndGameClassification() = default;
+
+    PositionSignatureWithReverseMoveAndGameClassification(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result)
+    {
+        auto h = xxhash::XXH3_128bits(pos.piecesRaw(), 64);
+        std::memcpy(m_hash.data(), &h, sizeof(StorageType));
+        m_hash[0] ^= ordinal(pos.sideToMove());
+
+        auto packedReverseMove = PackedReverseMove(reverseMove);
+        // m_hash[0] is the most significant quad, m_hash[3] is the least significant
+        // We want entries ordered with reverse move to also be ordered by just hash
+        // so we have to modify the lowest bits.
+        m_hash[3] = 
+            (packedReverseMove.packed() << reverseMoveShift)
+            | ((ordinal(level) & levelMask) << levelShift)
+            | ((ordinal(result) & resultMask) << resultShift);
+    }
+
+    PositionSignatureWithReverseMoveAndGameClassification(const PositionSignatureWithReverseMoveAndGameClassification&) = default;
+    PositionSignatureWithReverseMoveAndGameClassification(PositionSignatureWithReverseMoveAndGameClassification&&) = default;
+    PositionSignatureWithReverseMoveAndGameClassification& operator=(const PositionSignatureWithReverseMoveAndGameClassification&) = default;
+    PositionSignatureWithReverseMoveAndGameClassification& operator=(PositionSignatureWithReverseMoveAndGameClassification&&) = default;
+
+    [[nodiscard]] const StorageType& hash() const
+    {
+        return m_hash;
+    }
+
+    struct CompareLessWithReverseMove
+    {
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) noexcept
+        {
+            if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
+            else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
+
+            if (lhs.m_hash[1] < rhs.m_hash[1]) return true;
+            else if (lhs.m_hash[1] > rhs.m_hash[1]) return false;
+
+            if (lhs.m_hash[2] < rhs.m_hash[2]) return true;
+            else if (lhs.m_hash[2] > rhs.m_hash[2]) return false;
+
+            return ((lhs.m_hash[3] & (PackedReverseMove::mask << reverseMoveShift)) < (rhs.m_hash[3] & (PackedReverseMove::mask << reverseMoveShift)));
+        }
+    };
+
+    struct CompareLessWithoutReverseMove
+    {
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) noexcept
+        {
+            if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
+            else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
+
+            if (lhs.m_hash[1] < rhs.m_hash[1]) return true;
+            else if (lhs.m_hash[1] > rhs.m_hash[1]) return false;
+
+            if (lhs.m_hash[2] < rhs.m_hash[2]) return true;
+            return false;
+        }
+    };
+
+    struct CompareLessFull
+    {
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) noexcept
+        {
+            if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
+            else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
+
+            if (lhs.m_hash[1] < rhs.m_hash[1]) return true;
+            else if (lhs.m_hash[1] > rhs.m_hash[1]) return false;
+
+            if (lhs.m_hash[2] < rhs.m_hash[2]) return true;
+            else if (lhs.m_hash[2] > rhs.m_hash[2]) return false;
+
+            return (lhs.m_hash[3] < rhs.m_hash[3]);
+        }
+    };
+
+    struct CompareEqualWithReverseMove
+    {
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) const noexcept
+        {
+            return
+                lhs.m_hash[0] == rhs.m_hash[0]
+                && lhs.m_hash[1] == rhs.m_hash[1]
+                && lhs.m_hash[2] == rhs.m_hash[2]
+                && (lhs.m_hash[3] & (PackedReverseMove::mask << reverseMoveShift)) == (rhs.m_hash[3] & (PackedReverseMove::mask << reverseMoveShift));
+        }
+    };
+
+    struct CompareEqualWithoutReverseMove
+    {
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) const noexcept
+        {
+            return
+                lhs.m_hash[0] == rhs.m_hash[0]
+                && lhs.m_hash[1] == rhs.m_hash[1]
+                && lhs.m_hash[2] == rhs.m_hash[2];
+        }
+    };
+
+    struct CompareEqualFull
+    {
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) const noexcept
+        {
+            return
+                lhs.m_hash[0] == rhs.m_hash[0]
+                && lhs.m_hash[1] == rhs.m_hash[1]
+                && lhs.m_hash[2] == rhs.m_hash[2]
+                && lhs.m_hash[3] == rhs.m_hash[3];
+        }
+    };
+
+private:
+    // All bits of the hash are created equal, so we can specify some ordering.
+    // Elements ordered from least significant to most significant are [3][2][1][0]
+    StorageType m_hash;
+};
+static_assert(sizeof(PositionSignatureWithReverseMoveAndGameClassification) == 16);
+
+namespace std
+{
+    template<> struct hash<PositionSignatureWithReverseMoveAndGameClassification>
+    {
+        using argument_type = PositionSignatureWithReverseMoveAndGameClassification;
         using result_type = std::size_t;
         [[nodiscard]] result_type operator()(const argument_type& s) const noexcept
         {
