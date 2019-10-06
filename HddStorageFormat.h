@@ -317,6 +317,29 @@ namespace persistence
                     }
                 };
 
+                struct CompareEqualWithReverseMove
+                {
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Entry& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithReverseMove{}(lhs.m_positionSignature, rhs.m_positionSignature);
+                    }
+
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Signature& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithReverseMove{}(lhs.m_positionSignature, rhs);
+                    }
+
+                    [[nodiscard]] bool operator()(const Signature& lhs, const Entry& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithReverseMove{}(lhs, rhs.m_positionSignature);
+                    }
+
+                    [[nodiscard]] bool operator()(const Signature& lhs, const Signature& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithReverseMove{}(lhs, rhs);
+                    }
+                };
+
                 // This behaves like the old operator<
                 struct CompareLessFull
                 {
@@ -354,6 +377,11 @@ namespace persistence
                 [[nodiscard]] std::uint64_t gameOffset() const
                 {
                     return m_countAndGameOffset.gameOffset();
+                }
+
+                void combine(const Entry& rhs)
+                {
+                    m_countAndGameOffset.combine(rhs.m_countAndGameOffset);
                 }
 
             private:
@@ -675,14 +703,7 @@ namespace persistence
 
                     lock.unlock();
 
-                    // NOTE: we don't need stable_sort here as game indices are
-                    //       already ordered within one buffer.
-                    auto cmp = detail::Entry::CompareLessFull{};
-                    std::sort(job.buffer.begin(), job.buffer.end(), [cmp](auto&& lhs, auto&& rhs) {
-                        if (cmp(lhs, rhs)) return true;
-                        else if (cmp(rhs, lhs)) return false;
-                        return lhs.gameOffset() < rhs.gameOffset();
-                        });
+                    prepareData(job.buffer);
 
                     lock.lock();
                     m_writeQueue.emplace(std::move(job));
@@ -734,6 +755,49 @@ namespace persistence
 
                     m_bufferQueueNotEmpty.notify_one();
                 }
+            }
+
+            void sort(std::vector<detail::Entry>& buffer)
+            {
+                // NOTE: we don't need stable_sort here as game indices are
+                //       already ordered within one buffer.
+                auto cmp = detail::Entry::CompareLessFull{};
+                std::sort(buffer.begin(), buffer.end(), [cmp](auto&& lhs, auto&& rhs) {
+                    if (cmp(lhs, rhs)) return true;
+                    else if (cmp(rhs, lhs)) return false;
+                    return lhs.gameOffset() < rhs.gameOffset();
+                    });
+            }
+
+            // works analogously to std::unique but also combines equal values
+            void combine(std::vector<detail::Entry>& buffer)
+            {
+                if (buffer.empty()) return;
+
+                auto read = buffer.begin();
+                auto write = buffer.begin();
+                const auto end = buffer.end();
+                auto cmp = detail::Entry::CompareEqualWithReverseMove{};
+
+                while (++read != end)
+                {
+                    if (cmp(*write, *read))
+                    {
+                        write->combine(*read);
+                    }
+                    else if (++write != read) // we don't want to copy onto itself
+                    {
+                        *write = *read;
+                    }
+                }
+
+                buffer.erase(std::next(write), buffer.end());
+            }
+
+            void prepareData(std::vector<detail::Entry>& buffer)
+            {
+                sort(buffer);
+                combine(buffer);
             }
         };
 
@@ -1067,7 +1131,7 @@ namespace persistence
 
                 const std::size_t numBuffers = numWorkerThreads;
 
-                const std::size_t numAdditionalBuffers = numBuffers * 2;
+                const std::size_t numAdditionalBuffers = numBuffers * 4;
 
                 const std::size_t bucketSize =
                     ext::numObjectsPerBufferUnit<detail::Entry>(
@@ -1114,7 +1178,7 @@ namespace persistence
 
                 const std::size_t numBuffers = 1;
 
-                const std::size_t numAdditionalBuffers = numBuffers * 2;
+                const std::size_t numAdditionalBuffers = numBuffers * 4;
 
                 const std::size_t bucketSize =
                     ext::numObjectsPerBufferUnit<detail::Entry>(
