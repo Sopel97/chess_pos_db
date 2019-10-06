@@ -46,9 +46,206 @@ namespace persistence
             }
 
             static constexpr bool useIndex = true;
+            static constexpr bool usePacked = true;
 
             // Have ranges of mixed values be at most this long
             static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["hdd"]["index_granularity"].get<std::size_t>();
+
+            struct PackedCountAndGameOffset;
+
+            struct SingleGame {};
+
+            struct CountAndGameOffset
+            {
+                CountAndGameOffset() = default;
+
+                CountAndGameOffset(std::uint64_t count, std::uint64_t gameOffset) :
+                    m_count(count),
+                    m_gameOffset(gameOffset)
+                {
+                }
+
+                CountAndGameOffset(SingleGame, std::uint64_t gameOffset) :
+                    m_count(1),
+                    m_gameOffset(gameOffset)
+                {
+                }
+
+                CountAndGameOffset& operator+=(std::uint64_t rhs)
+                {
+                    m_count += rhs;
+                    return *this;
+                }
+
+                CountAndGameOffset operator+(std::uint64_t rhs)
+                {
+                    return { m_count + rhs, m_gameOffset };
+                }
+
+                void combine(const CountAndGameOffset& rhs)
+                {
+                    m_count += rhs.m_count;
+                    m_gameOffset = std::min(m_gameOffset, rhs.m_gameOffset);
+                }
+
+                void combine(const PackedCountAndGameOffset& rhs);
+
+                [[nodiscard]] std::uint64_t count() const
+                {
+                    return m_count;
+                }
+
+                [[nodiscard]] std::uint64_t gameOffset() const
+                {
+                    return m_gameOffset;
+                }
+
+            private:
+                std::uint64_t m_count;
+                std::uint64_t m_gameOffset;
+            };
+
+            static_assert(sizeof(CountAndGameOffset) == 16);
+
+            struct PackedCountAndGameOffset
+            {
+                // game offset is invalid if we don't have enough bits to store it
+                // ie. count takes all the bits
+                static constexpr std::uint64_t invalidGameOffset = std::numeric_limits<std::uint64_t>::max();
+                static constexpr std::uint64_t numSizeBits = 6;
+
+                // numCountBits should always be at least 1 to avoid shifting by 64
+                static constexpr std::uint64_t numDataBits = 64 - numSizeBits;
+
+                static constexpr std::uint64_t mask = std::numeric_limits<std::uint64_t>::max();
+                static constexpr std::uint64_t sizeMask = 0b111111;
+
+                PackedCountAndGameOffset() = default;
+
+                PackedCountAndGameOffset(const CountAndGameOffset& unpacked)
+                {
+                    pack(unpacked);
+                }
+
+                PackedCountAndGameOffset(std::uint64_t count, std::uint64_t gameOffset)
+                {
+                    pack(count, gameOffset);
+                }
+
+                PackedCountAndGameOffset(SingleGame, std::uint64_t gameOffset)
+                {
+                    pack(SingleGame{}, gameOffset);
+                }
+
+                [[nodiscard]] CountAndGameOffset unpack() const
+                {
+                    const std::uint64_t s = countLength();
+                    const std::uint64_t countMask = mask >> (64 - s);
+
+                    const std::uint64_t data = m_packed >> numSizeBits;
+
+                    const std::uint64_t count = data & countMask;
+                    const std::uint64_t gameOffset =
+                        (s == numDataBits)
+                        ? invalidGameOffset 
+                        : (data >> s);
+
+                    return { count, gameOffset };
+                }
+
+                PackedCountAndGameOffset& operator+=(std::uint64_t rhs)
+                {
+                    pack(unpack() + rhs);
+                    return *this;
+                }
+
+                void combine(const PackedCountAndGameOffset& rhs)
+                {
+                    auto unpacked = unpack();
+
+                    unpacked.combine(rhs.unpack());
+
+                    pack(unpacked);
+                }
+
+                void combine(const CountAndGameOffset& rhs)
+                {
+                    auto unpacked = unpack();
+
+                    unpacked.combine(rhs);
+
+                    pack(unpacked);
+                }
+
+                [[nodiscard]] std::uint64_t count() const
+                {
+                    const std::uint64_t countMask = mask >> (64 - countLength());
+                    return (m_packed >> numSizeBits) & countMask;
+                }
+
+                [[nodiscard]] std::uint64_t gameOffset() const
+                {
+                    const std::uint64_t s = countLength();
+                    if (s == numDataBits) return invalidGameOffset;
+                    return (m_packed >> (numSizeBits + s));
+                }
+
+            private:
+                // from least significant:
+                // 6 bits for number N of count bits, at most 58
+                // N bits for count
+                // 58-N bits for game offset
+
+                std::uint64_t m_packed;
+
+                void pack(std::uint64_t count, std::uint64_t gameOffset)
+                {
+                    const std::uint64_t countSize = count ? intrin::msb(count) + 1 : 1;
+                    const std::uint64_t gameOffsetSize = gameOffset ? intrin::msb(gameOffset) + 1 : 1;
+                    if (countSize + gameOffsetSize > numDataBits)
+                    {
+                        // We cannot fit both so we just store count
+                        m_packed = (count << numSizeBits) | numDataBits;
+                    }
+                    else
+                    {
+                        // We can fit both
+                        m_packed = gameOffset;
+                        m_packed <<= countSize;
+                        m_packed |= count;
+                        m_packed <<= numSizeBits;
+                        m_packed |= countSize;
+                    }
+                }
+
+                void pack(SingleGame, std::uint64_t gameOffset)
+                {
+                    // We assume that we can fit both.
+                    // For otherwise to happen gameOffset would be too big anyway.
+                    m_packed = gameOffset;
+                    m_packed <<= (numSizeBits + 1);
+                    m_packed |= ((1 << numSizeBits) | 1);
+                }
+
+                void pack(const CountAndGameOffset& rhs)
+                {
+                    pack(rhs.count(), rhs.gameOffset());
+                }
+
+                [[nodiscard]] std::uint64_t countLength() const
+                {
+                    return m_packed & sizeMask;
+                }
+            };
+
+            static_assert(sizeof(PackedCountAndGameOffset) == 8);
+
+            inline void CountAndGameOffset::combine(const PackedCountAndGameOffset& rhs)
+            {
+                combine(rhs.unpack());
+            }
+
+            using CountAndGameOffsetType = std::conditional_t<usePacked, PackedCountAndGameOffset, CountAndGameOffset>;
 
             struct Entry
             {
@@ -56,16 +253,16 @@ namespace persistence
 
                 Entry() = default;
 
-                Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint32_t gameIdx) :
+                Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint64_t gameOffset) :
                     m_positionSignature(pos, reverseMove, level, result),
-                    m_gameIdx(gameIdx)
+                    m_countAndGameOffset(SingleGame{}, gameOffset)
                 {
                 }
 
                 // TODO: eventually remove this overload?
-                Entry(const Position& pos, GameLevel level, GameResult result, std::uint32_t gameIdx) :
+                Entry(const Position& pos, GameLevel level, GameResult result, std::uint64_t gameOffset) :
                     m_positionSignature(pos, {}, level, result),
-                    m_gameIdx(gameIdx)
+                    m_countAndGameOffset(SingleGame{}, gameOffset)
                 {
                 }
 
@@ -149,17 +346,22 @@ namespace persistence
                     return m_positionSignature;
                 }
 
-                [[nodiscard]] std::uint32_t gameIdx() const
+                [[nodiscard]] std::uint64_t count() const
                 {
-                    return m_gameIdx;
+                    return m_countAndGameOffset.count();
+                }
+
+                [[nodiscard]] std::uint64_t gameOffset() const
+                {
+                    return m_countAndGameOffset.gameOffset();
                 }
 
             private:
                 Signature m_positionSignature;
-                std::uint32_t m_gameIdx;
+                CountAndGameOffsetType m_countAndGameOffset;
             };
 
-            static_assert(sizeof(Entry) == 20);
+            static_assert(sizeof(Entry) == 16 + sizeof(CountAndGameOffsetType));
             static_assert(std::is_trivially_copyable_v<Entry>);
 
             using IndexWithoutReverseMove = ext::RangeIndex<typename Entry::Signature, detail::Entry::CompareLessWithoutReverseMove>;
@@ -479,7 +681,7 @@ namespace persistence
                     std::sort(job.buffer.begin(), job.buffer.end(), [cmp](auto&& lhs, auto&& rhs) {
                         if (cmp(lhs, rhs)) return true;
                         else if (cmp(rhs, lhs)) return false;
-                        return lhs.gameIdx() < rhs.gameIdx();
+                        return lhs.gameOffset() < rhs.gameOffset();
                         });
 
                     lock.lock();
@@ -991,11 +1193,11 @@ namespace persistence
                             continue;
                         }
 
-                        const std::uint32_t gameIdx = m_header.nextGameId();
+                        const std::uint64_t gameOffset = m_header.nextGameOffset();
 
                         std::size_t numPositionsInGame = 0;
                         auto processPosition = [&](const Position& position, const ReverseMove& reverseMove) {
-                            bucket.emplace_back(position, reverseMove, level, *result, gameIdx);
+                            bucket.emplace_back(position, reverseMove, level, *result, gameOffset);
                             numPositionsInGame += 1;
 
                             if (bucket.size() == bucket.capacity())
@@ -1021,9 +1223,9 @@ namespace persistence
 
                         ASSERT(numPositionsInGame > 0);
 
-                        const std::uint32_t actualGameIdx = m_header.addGameNoLock(game, static_cast<std::uint16_t>(numPositionsInGame - 1u));
-                        ASSERT(actualGameIdx == gameIdx);
-                        (void)actualGameIdx;
+                        const std::uint64_t actualGameOffset = m_header.addGameNoLock(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).offset;
+                        ASSERT(gameOffset == actualGameOffset);
+                        (void)actualGameOffset;
 
                         stats.numGames += 1;
                         stats.numPositions += numPositionsInGame;
@@ -1159,11 +1361,11 @@ namespace persistence
                                 continue;
                             }
 
-                            const std::uint32_t gameIdx = m_header.addGame(game);
+                            const std::uint64_t gameOffset = m_header.addGame(game).offset;
 
                             std::size_t numPositionsInGame = 0;
                             auto processPosition = [&, &nextId = nextId](const Position& position, const ReverseMove& reverseMove) {
-                                entries.emplace_back(position, level, *result, gameIdx);
+                                entries.emplace_back(position, level, *result, gameOffset);
                                 numPositionsInGame += 1;
 
                                 if (entries.size() == bufferSize)

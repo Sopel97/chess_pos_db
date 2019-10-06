@@ -1563,7 +1563,7 @@ namespace persistence
 
                         ASSERT(numPositionsInGame > 0);
 
-                        const std::uint32_t actualGameIdx = m_header.addGameNoLock(game, static_cast<std::uint16_t>(numPositionsInGame - 1u));
+                        const std::uint32_t actualGameIdx = m_header.addGameNoLock(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).index;
                         ASSERT(actualGameIdx == gameIdx);
                         (void)actualGameIdx;
 
@@ -1715,7 +1715,7 @@ namespace persistence
                                 continue;
                             }
 
-                            const std::uint32_t gameIdx = m_header.addGame(game);
+                            const std::uint32_t gameIdx = m_header.addGame(game).index;
 
                             std::size_t numPositionsInGame = 0;
                             auto processPosition = [&, &nextIds = nextIds](const Position& position, const ReverseMove& reverseMove) {

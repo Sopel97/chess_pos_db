@@ -254,6 +254,12 @@ namespace persistence
         std::string m_black;
     };
 
+    struct HeaderEntryLocation
+    {
+        std::uint64_t offset;
+        std::uint32_t index;
+    };
+
     struct Header
     {
         static inline const std::filesystem::path headerPath = "header";
@@ -271,22 +277,22 @@ namespace persistence
         {
         }
 
-        [[nodiscard]] std::uint32_t addGame(const pgn::UnparsedGame& game)
+        [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game)
         {
             return addHeader(PackedGameHeader(game));
         }
 
-        [[nodiscard]] std::uint32_t addGameNoLock(const pgn::UnparsedGame& game)
+        [[nodiscard]] HeaderEntryLocation addGameNoLock(const pgn::UnparsedGame& game)
         {
             return addHeaderNoLock(PackedGameHeader(game));
         }
 
-        [[nodiscard]] std::uint32_t addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+        [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
             return addHeader(PackedGameHeader(game, plyCount));
         }
 
-        [[nodiscard]] std::uint32_t addGameNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+        [[nodiscard]] HeaderEntryLocation addGameNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
             return addHeaderNoLock(PackedGameHeader(game, plyCount));
         }
@@ -294,6 +300,11 @@ namespace persistence
         [[nodiscard]] std::uint32_t nextGameId() const
         {
             return static_cast<std::uint32_t>(m_index.size());
+        }
+
+        [[nodiscard]] std::uint32_t nextGameOffset() const
+        {
+            return static_cast<std::uint32_t>(m_header.size());
         }
 
         void flush()
@@ -363,16 +374,16 @@ namespace persistence
         std::mutex m_mutex;
 
         // returns the index of the header (not the address)
-        [[nodiscard]] std::uint32_t addHeaderNoLock(const PackedGameHeader& entry)
+        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const PackedGameHeader& entry)
         {
-            const std::size_t headerSizeBytes = m_header.size();
+            const std::uint64_t headerSizeBytes = m_header.size();
             m_header.append(entry.data(), entry.size());
             m_index.emplace_back(headerSizeBytes);
-            return static_cast<std::uint32_t>(m_index.size() - 1u);
+            return { headerSizeBytes, static_cast<std::uint32_t>(m_index.size() - 1u) };
         }
 
         // returns the index of the header (not the address)
-        [[nodiscard]] std::uint32_t addHeader(const PackedGameHeader& entry)
+        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeader& entry)
         {
             std::unique_lock<std::mutex> lock(m_mutex);
             return addHeaderNoLock(entry);
