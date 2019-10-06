@@ -2925,6 +2925,13 @@ namespace ext
         return detail::sort::sort_assess_work(aux.memory, in);
     }
 
+    template <typename RandomIterT, typename T = typename RandomIterT::value_type>
+    struct IterValuePair
+    {
+        RandomIterT it;
+        T value;
+    };
+
     template <typename KeyType, typename CompareT>
     struct RangeIndexEntry
     {
@@ -2978,6 +2985,7 @@ namespace ext
         static_assert(std::is_empty_v<CompareT>);
 
         using EntryType = RangeIndexEntry<KeyType, CompareT>;
+        using IterValueType = IterValuePair<std::size_t, KeyType>;
 
         RangeIndex() = default;
 
@@ -3014,6 +3022,51 @@ namespace ext
         [[nodiscard]] std::size_t size() const
         {
             return m_entries.size();
+        }
+
+        // end is returned when there is no range with the given key
+        template <typename IterT>
+        [[nodiscard]] std::pair<IterValueType, IterValueType> equal_range(const KeyType& key, IterT end) const
+        {
+            auto cmp = CompareT{};
+
+            // Find a range entry that contains keys[i] or, if there is none, get
+            // the next range.
+            auto [a, b] = std::equal_range(m_entries.begin(), m_entries.end(), key);
+
+            KeyType lowValue{}, highValue{};
+            std::size_t low = end;
+            std::size_t high = end;
+
+            if (b == m_entries.begin() || a == m_entries.end())
+            {
+                // All values are greater (or lower).
+                // We keep the low and high pointing to end - this skips the search.
+            }
+            else
+            {
+                // a can equal b. It's perfectly fine.
+                const auto& e0 = *a;
+                const auto& e1 = *(b - 1);
+                lowValue = e0.lowValue;
+                highValue = e1.highValue;
+
+                // If no range entry in the index contains the key then
+                // the key doesn't exist in the data.
+                // This check let's us remove unneeded reads later in the search algorithm.
+                if (cmp(key, lowValue) || cmp(highValue, key))
+                {
+                    low = end;
+                    high = end;
+                }
+                else
+                {
+                    low = e0.low;
+                    high = e1.high + 1;
+                }
+            }
+
+            return { { low, lowValue }, { high, highValue } };
         }
 
     private:
@@ -3131,13 +3184,6 @@ namespace ext
                 const auto mid = low + d;
                 return mid;
             }
-        };
-
-        template <typename RandomIterT, typename T = typename RandomIterT::value_type>
-        struct IterValuePair
-        {
-            RandomIterT it;
-            T value;
         };
 
         struct DoCrossUpdates {};
@@ -3547,48 +3593,7 @@ namespace ext
             ranges.reserve(keys.size());
             for (int i = 0; i < keys.size(); ++i)
             {
-                // TODO: extract as a function of index
-                // Find a range entry that contains keys[i] or, if there is none, get
-                // the next range.
-                // NOTE: we don't use cmp here because we're comparing index entries,
-                // not data values.
-                auto [a, b] = std::equal_range(index.begin(), index.end(), keys[i]);
-
-                KeyType lowValue{}, highValue{};
-                std::size_t low = end;
-                std::size_t high = end;
-
-                if (b == index.begin() || a == index.end())
-                {
-                    // All values are greater (or lower).
-                    // We keep the low and high pointing to end - this skips the search.
-                }
-                else
-                {
-                    // a can equal b. It's perfectly fine.
-                    const auto& e0 = *a;
-                    const auto& e1 = *(b - 1);
-                    lowValue = e0.lowValue;
-                    highValue = e1.highValue;
-
-                    // If no range entry in the index contains the key then
-                    // the key doesn't exist in the data.
-                    // This check let's us remove unneeded reads later in the search algorithm.
-                    if (cmp(keys[i], lowValue) || cmp(highValue, keys[i]))
-                    {
-                        low = end;
-                        high = end;
-                    }
-                    else
-                    {
-                        low = e0.low;
-                        high = e1.high + 1;
-                    }
-                }
-
-                IterValuePair<std::size_t, KeyType> aa{ low, lowValue };
-                IterValuePair<std::size_t, KeyType> bb{ high, highValue };
-                ranges.emplace_back(aa, bb);
+                ranges.emplace_back(index.equal_range(keys[i], end));
             }
 
             return equal_range_multiple_impl(
