@@ -332,7 +332,7 @@ namespace persistence
             std::filesystem::copy_file(m_indexPath, newIndexPath, std::filesystem::copy_options::overwrite_existing);
         }
 
-        [[nodiscard]] std::vector<PackedGameHeader> query(const std::vector<std::uint32_t>& keys)
+        [[nodiscard]] std::vector<PackedGameHeader> queryByIndices(const std::vector<std::uint32_t>& keys)
         {
             // TODO: think about a good abstraction for iterating in a sorted order
             //       with ability to retrieve original indices
@@ -368,6 +368,40 @@ namespace persistence
             for (std::size_t i = 0; i < numKeys; ++i)
             {
                 headers[originalIds[i]] = PackedGameHeader(m_header, offsets[i]);
+            }
+
+            return headers;
+        }
+
+        [[nodiscard]] std::vector<PackedGameHeader> queryByOffsets(const std::vector<std::uint64_t>& keys)
+        {
+            // TODO: think about a good abstraction for iterating in a sorted order
+            //       with ability to retrieve original indices
+
+            const std::size_t numKeys = keys.size();
+
+            std::vector<std::uint64_t> orderedKeys;
+            std::vector<std::size_t> originalIds;
+            std::vector<std::pair<std::uint64_t, std::size_t>> compound;
+            orderedKeys.reserve(numKeys);
+            originalIds.reserve(numKeys);
+            compound.reserve(numKeys);
+            for (std::size_t i = 0; i < numKeys; ++i)
+            {
+                compound.emplace_back(keys[i], i);
+            }
+            std::sort(compound.begin(), compound.end(), [](auto&& lhs, auto&& rhs) { return lhs.first < rhs.first; });
+            for (auto&& [key, id] : compound)
+            {
+                orderedKeys.emplace_back(key);
+                originalIds.emplace_back(id);
+            }
+
+            std::vector<PackedGameHeader> headers;
+            headers.resize(numKeys);
+            for (std::size_t i = 0; i < numKeys; ++i)
+            {
+                headers[originalIds[i]] = PackedGameHeader(m_header, orderedKeys[i]);
             }
 
             return headers;

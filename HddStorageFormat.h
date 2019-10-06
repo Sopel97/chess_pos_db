@@ -1343,9 +1343,9 @@ namespace persistence
                 return m_path;
             }
 
-            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, GameLevel level)
+            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, GameLevel level)
             {
-                return m_headers[level].query(indices);
+                return m_headers[level].queryByOffsets(offsets);
             }
 
             // TODO: refactor

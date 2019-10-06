@@ -1225,7 +1225,7 @@ namespace persistence
 
             [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices)
             {
-                return m_header.query(indices);
+                return m_header.queryByIndices(indices);
             }
 
             // TODO: refactor
