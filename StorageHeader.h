@@ -21,6 +21,7 @@ namespace persistence
         PackedGameHeader() = default;
 
         PackedGameHeader(ext::Vector<char>& headers, std::size_t offset) :
+            m_gameIdx{},
             m_size{},
             m_result{},
             m_date{},
@@ -35,7 +36,8 @@ namespace persistence
             (void)read;
         }
 
-        PackedGameHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount) :
+        PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx, std::uint16_t plyCount) :
+            m_gameIdx(gameIdx),
             m_plyCount(plyCount)
         {
             std::string_view event;
@@ -47,7 +49,8 @@ namespace persistence
             fillPackedStrings(event, white, black);
         }
 
-        PackedGameHeader(const pgn::UnparsedGame& game)
+        PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx) :
+            m_gameIdx(gameIdx)
         {
             std::string_view event;
             std::string_view white;
@@ -66,6 +69,11 @@ namespace persistence
         [[nodiscard]] std::size_t size() const
         {
             return m_size;
+        }
+
+        [[nodiscard]] std::uint32_t gameIdx() const
+        {
+            return m_gameIdx;
         }
 
         [[nodiscard]] GameResult result() const
@@ -115,6 +123,8 @@ namespace persistence
 
         static_assert(maxStringLength < 256); // it's nice to require only one byte for length
 
+        std::uint32_t m_gameIdx;
+
         // We just read sizeof(PackedGameHeader), we don't touch anything
         // in packed strings that would be considered 'garbage'
         std::uint16_t m_size;
@@ -152,13 +162,14 @@ namespace persistence
             m_size = sizeof(PackedGameHeader) - sizeof(m_packedStrings) + i;
         }
     };
-    static_assert(sizeof(PackedGameHeader) == 2 + 2 + 4 + 2 + 2 + 768);
+    static_assert(sizeof(PackedGameHeader) == 4 + 2 + 2 + 4 + 2 + 2 + 768);
 
     struct GameHeader
     {
         GameHeader() = default;
 
         GameHeader(
+            std::uint32_t gameIdx,
             GameResult result,
             Date date,
             Eco eco,
@@ -167,6 +178,7 @@ namespace persistence
             std::string white,
             std::string black
         ) :
+            m_gameIdx(gameIdx),
             m_result(result),
             m_date(date),
             m_eco(eco),
@@ -178,6 +190,7 @@ namespace persistence
         }
 
         explicit GameHeader(const PackedGameHeader& header) :
+            m_gameIdx(header.gameIdx()),
             m_result(header.result()),
             m_date(header.date()),
             m_eco(header.eco()),
@@ -190,6 +203,11 @@ namespace persistence
             {
                 m_plyCount = header.plyCount();
             }
+        }
+
+        [[nodisacard]] std::uint32_t gameIdx() const
+        {
+            return m_gameIdx;
         }
 
         [[nodiscard]] GameResult result() const
@@ -230,6 +248,7 @@ namespace persistence
         friend void to_json(nlohmann::json& j, const GameHeader& data)
         {
             j = nlohmann::json{
+                { "game_idx", data.m_gameIdx },
                 { "result", toString(GameResultPgnFormat{}, data.m_result) },
                 { "date", data.m_date.toString() },
                 { "eco", data.m_eco.toString() },
@@ -245,6 +264,7 @@ namespace persistence
         }
 
     private:
+        std::uint32_t m_gameIdx;
         GameResult m_result;
         Date m_date;
         Eco m_eco;
@@ -282,22 +302,22 @@ namespace persistence
 
         [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game)
         {
-            return addHeader(PackedGameHeader(game));
+            return addHeader(game);
         }
 
         [[nodiscard]] HeaderEntryLocation addGameNoLock(const pgn::UnparsedGame& game)
         {
-            return addHeaderNoLock(PackedGameHeader(game));
+            return addHeaderNoLock(game);
         }
 
         [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
-            return addHeader(PackedGameHeader(game, plyCount));
+            return addHeader(game, plyCount);
         }
 
         [[nodiscard]] HeaderEntryLocation addGameNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
-            return addHeaderNoLock(PackedGameHeader(game, plyCount));
+            return addHeaderNoLock(game, plyCount);
         }
 
         [[nodiscard]] std::uint32_t nextGameId() const
@@ -418,19 +438,41 @@ namespace persistence
         std::mutex m_mutex;
 
         // returns the index of the header (not the address)
-        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const PackedGameHeader& entry)
+        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
+            const std::uint32_t gameIdx = static_cast<std::uint32_t>(m_index.size());
+            const auto entry = PackedGameHeader(game, gameIdx, plyCount);
+
             const std::uint64_t headerSizeBytes = m_header.size();
             m_header.append(entry.data(), entry.size());
             m_index.emplace_back(headerSizeBytes);
-            return { headerSizeBytes, static_cast<std::uint32_t>(m_index.size() - 1u) };
+            return { headerSizeBytes, gameIdx };
         }
 
         // returns the index of the header (not the address)
-        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeader& entry)
+        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const pgn::UnparsedGame& game)
+        {
+            const std::uint32_t gameIdx = static_cast<std::uint32_t>(m_index.size());
+            const auto entry = PackedGameHeader(game, gameIdx);
+
+            const std::uint64_t headerSizeBytes = m_header.size();
+            m_header.append(entry.data(), entry.size());
+            m_index.emplace_back(headerSizeBytes);
+            return { headerSizeBytes, gameIdx };
+        }
+
+        // returns the index of the header (not the address)
+        [[nodiscard]] HeaderEntryLocation addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
         {
             std::unique_lock<std::mutex> lock(m_mutex);
-            return addHeaderNoLock(entry);
+            return addHeaderNoLock(game, plyCount);
+        }
+
+        // returns the index of the header (not the address)
+        [[nodiscard]] HeaderEntryLocation addHeader(const pgn::UnparsedGame& game)
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            return addHeaderNoLock(game);
         }
     };
 }

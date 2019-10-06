@@ -247,7 +247,7 @@ namespace app
                     continue;
                 }
 
-                if (firstGame == nullptr || g->date() < firstGame->date())
+                if (firstGame == nullptr || g->gameIdx() < firstGame->gameIdx())
                 {
                     firstGame = &*g;
                 }
@@ -1137,6 +1137,7 @@ void jsonExample()
 
     app::RemoteQueryResultForPosition data(GameLevel::Human, GameResult::Draw, 123, 321);
     data.lastGame = persistence::GameHeader(
+        0,
         GameResult::Draw,
         Date(2000, 2, 3),
         Eco("A12"sv),
