@@ -207,6 +207,19 @@ struct PositionSignatureWithReverseMoveAndGameClassification
 
     PositionSignatureWithReverseMoveAndGameClassification() = default;
 
+    PositionSignatureWithReverseMoveAndGameClassification(const Position& pos, const ReverseMove& reverseMove = ReverseMove{})
+    {
+        auto h = xxhash::XXH3_128bits(pos.piecesRaw(), 64);
+        std::memcpy(m_hash.data(), &h, sizeof(StorageType));
+        m_hash[0] ^= ordinal(pos.sideToMove());
+
+        auto packedReverseMove = PackedReverseMove(reverseMove);
+        // m_hash[0] is the most significant quad, m_hash[3] is the least significant
+        // We want entries ordered with reverse move to also be ordered by just hash
+        // so we have to modify the lowest bits.
+        m_hash[3] = (packedReverseMove.packed() << reverseMoveShift);
+    }
+
     PositionSignatureWithReverseMoveAndGameClassification(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result)
     {
         auto h = xxhash::XXH3_128bits(pos.piecesRaw(), 64);
@@ -231,6 +244,16 @@ struct PositionSignatureWithReverseMoveAndGameClassification
     [[nodiscard]] const StorageType& hash() const
     {
         return m_hash;
+    }
+
+    [[nodiscard]] GameLevel level() const
+    {
+        return fromOrdinal<GameLevel>((m_hash[3] >> levelShift) & levelMask);
+    }
+
+    [[nodiscard]] GameResult result() const
+    {
+        return fromOrdinal<GameResult>((m_hash[3] >> resultShift) & resultMask);
     }
 
     struct CompareLessWithReverseMove

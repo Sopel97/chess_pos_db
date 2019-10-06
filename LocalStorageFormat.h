@@ -317,9 +317,9 @@ namespace persistence
             GameResult result;
         };
 
-        struct QueryResultRange
+        struct FileQueryResult
         {
-            QueryResultRange(const File& file, std::size_t begin, std::size_t end) :
+            FileQueryResult(const File& file, std::size_t begin, std::size_t end) :
                 m_file(&file),
                 m_begin(begin),
                 m_end(end)
@@ -444,10 +444,10 @@ namespace persistence
 
         private:
             // Where the position hash matches
-            std::vector<QueryResultRange> m_ranges;
+            std::vector<FileQueryResult> m_ranges;
 
             // Where both position hash and reverse move match
-            std::vector<QueryResultRange> m_directRanges;
+            std::vector<FileQueryResult> m_directRanges;
         };
 
         void File::queryDirectRanges(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMove>& keys) const

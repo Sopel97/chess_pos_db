@@ -1179,8 +1179,8 @@ void testQuery()
 
 void newFormatTests()
 {
-    //persistence::hdd::Database db("w:/catobase/.v2");
-    persistence::hdd::Database db("c:/dev/chess_pos_db/.v2");
+    persistence::hdd::Database db("w:/catobase/.v2");
+    //persistence::hdd::Database db("c:/dev/chess_pos_db/.v2");
     std::vector<persistence::hdd::PgnFile> files{
         { "w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human },
         { "w:/catobase/data/lichess_db_standard_rated_2013-02.pgn", GameLevel::Engine },
@@ -1200,12 +1200,12 @@ void newFormatTests()
 
 int main()
 {
-    newFormatTests();
+    //newFormatTests();
 
-    /*
+    
     app::App app;
     app.run();
-    */
+    
 
     return 0;
 }

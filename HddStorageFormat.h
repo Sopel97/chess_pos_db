@@ -253,6 +253,12 @@ namespace persistence
 
                 Entry() = default;
 
+                Entry(const Signature& sig, std::size_t count, std::size_t gameOffset) :
+                    m_positionSignature(sig),
+                    m_countAndGameOffset(count, gameOffset)
+                {
+                }
+
                 Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint64_t gameOffset) :
                     m_positionSignature(pos, reverseMove, level, result),
                     m_countAndGameOffset(SingleGame{}, gameOffset)
@@ -291,6 +297,29 @@ namespace persistence
                     [[nodiscard]] bool operator()(const Signature& lhs, const Signature& rhs) const noexcept
                     {
                         return Signature::CompareLessWithoutReverseMove{}(lhs, rhs);
+                    }
+                };
+
+                struct CompareEqualWithoutReverseMove
+                {
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Entry& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithoutReverseMove{}(lhs.m_positionSignature, rhs.m_positionSignature);
+                    }
+
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Signature& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithoutReverseMove{}(lhs.m_positionSignature, rhs);
+                    }
+
+                    [[nodiscard]] bool operator()(const Signature& lhs, const Entry& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithoutReverseMove{}(lhs, rhs.m_positionSignature);
+                    }
+
+                    [[nodiscard]] bool operator()(const Signature& lhs, const Signature& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualWithoutReverseMove{}(lhs, rhs);
                     }
                 };
 
@@ -379,6 +408,16 @@ namespace persistence
                     return m_countAndGameOffset.gameOffset();
                 }
 
+                [[nodiscard]] GameLevel level() const
+                {
+                    return m_positionSignature.level();
+                }
+
+                [[nodiscard]] GameResult result() const
+                {
+                    return m_positionSignature.result();
+                }
+
                 void combine(const Entry& rhs)
                 {
                     m_countAndGameOffset.combine(rhs.m_countAndGameOffset);
@@ -449,6 +488,9 @@ namespace persistence
                 return entry.positionSignature();
             };
         }
+
+        struct QueryResult;
+        struct FileQueryResult;
 
         struct File
         {
@@ -522,12 +564,193 @@ namespace persistence
                 std::cout << "Direct Index size: " << m_indexWithReverseMove.size() << "\n";
             }
 
+            [[nodiscard]] FileQueryResult decodeQueryResultDirect(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const;
+            [[nodiscard]] FileQueryResult decodeQueryResult(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const;
+
+            void queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const;
+            void query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const;
+
         private:
             ext::ImmutableSpan<detail::Entry> m_entries;
             detail::IndexWithoutReverseMove m_indexWithoutReverseMove;
             detail::IndexWithReverseMove m_indexWithReverseMove;
             std::uint32_t m_id;
         };
+
+        struct FileQueryResult
+        {
+            FileQueryResult(const File& file, const EnumMap2<GameLevel, GameResult, detail::Entry>& entries) :
+                m_file(&file),
+                m_entries(entries)
+            {
+            }
+
+            [[nodiscard]] const File& file() const
+            {
+                return *m_file;
+            }
+
+            [[nodiscard]] std::size_t count(GameLevel level, GameResult result) const
+            {
+                return m_entries[level][result].count();
+            }
+
+            [[nodiscard]] std::uint64_t firstGameOffset(GameLevel level, GameResult result) const
+            {
+                return m_entries[level][result].gameOffset();
+            }
+
+        private:
+            const File* m_file;
+            EnumMap2<GameLevel, GameResult, detail::Entry> m_entries;
+        };
+
+        struct QueryResult
+        {
+            template <typename... ArgsTs>
+            void emplace(ArgsTs&& ... args)
+            {
+                m_subResults.emplace_back(std::forward<ArgsTs>(args)...);
+            }
+
+            template <typename... ArgsTs>
+            void emplaceDirect(ArgsTs&& ... args)
+            {
+                m_directSubResults.emplace_back(std::forward<ArgsTs>(args)...);
+            }
+
+            [[nodiscard]] std::size_t count(GameLevel level, GameResult result) const
+            {
+                std::size_t c = 0;
+                for (auto&& range : m_subResults)
+                {
+                    c += range.count(level, result);
+                }
+                return c;
+            }
+
+            [[nodiscard]] std::size_t directCount(GameLevel level, GameResult result) const
+            {
+                std::size_t c = 0;
+                for (auto&& range : m_directSubResults)
+                {
+                    c += range.count(level, result);
+                }
+                return c;
+            }
+
+            [[nodiscard]] std::uint64_t firstGameOffset(GameLevel level, GameResult result) const
+            {
+                ASSERT(!m_ranges.empty());
+
+                return m_subResults.front().firstGameOffset(level, result);
+            }
+
+            [[nodiscard]] std::uint64_t firstDirectGameOffset(GameLevel level, GameResult result) const
+            {
+                ASSERT(!m_directRanges.empty());
+
+                return m_directSubResults.front().firstGameOffset(level, result);
+            }
+
+        private:
+            // Where the position hash matches
+            std::vector<FileQueryResult> m_subResults;
+
+            // Where both position hash and reverse move match
+            std::vector<FileQueryResult> m_directSubResults;
+        };
+
+        // game classification in query keys is ignored
+        [[nodiscard]] FileQueryResult File::decodeQueryResultDirect(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const
+        {
+            EnumMap2<GameLevel, GameResult, detail::Entry> matchingEntries;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    matchingEntries[level][result] = detail::Entry(key, 0, std::numeric_limits<std::uint64_t>::max());
+                }
+            }
+
+            auto cmp = detail::Entry::CompareEqualWithReverseMove{};
+
+            // we look for an entry that matches key
+            for (auto& entry : entries)
+            {
+                if (cmp(entry, key))
+                {
+                    const GameLevel level = entry.level();
+                    const GameResult result = entry.result();
+                    auto& matchingEntry = matchingEntries[level][result];
+                    matchingEntry.combine(entry);
+                }
+            }
+        }
+
+        [[nodiscard]] FileQueryResult File::decodeQueryResult(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const
+        {
+            EnumMap2<GameLevel, GameResult, detail::Entry> matchingEntries;
+            for (GameLevel level : values<GameLevel>())
+            {
+                for (GameResult result : values<GameResult>())
+                {
+                    matchingEntries[level][result] = detail::Entry(key, 0, std::numeric_limits<std::uint64_t>::max());
+                }
+            }
+
+            auto cmp = detail::Entry::CompareEqualWithoutReverseMove{};
+
+            // we look for an entry that matches key
+            for (auto& entry : entries)
+            {
+                if (cmp(entry, key))
+                {
+                    const GameLevel level = entry.level();
+                    const GameResult result = entry.result();
+                    auto& matchingEntry = matchingEntries[level][result];
+                    matchingEntry.combine(entry);
+                }
+            }
+        }
+
+        void File::queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
+        {
+            static constexpr std::size_t end = -1;
+
+            std::vector<detail::Entry> buffer;
+            for (std::size_t i = 0; i < keys.size(); ++i)
+            {
+                auto& key = keys[i];
+                auto [a, b] = m_indexWithReverseMove.equal_range(key, end);
+
+                const std::size_t count = b.it - a.it;
+                if (count == 0) continue; // the range is empty, the value certainly does not exist
+
+                buffer.resize(count);
+                (void)m_entries.read(buffer.data(), a.it, count);
+                results[i].emplaceDirect(decodeQueryResultDirect(buffer, key));
+            }
+        }
+
+        void File::query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
+        {
+            static constexpr std::size_t end = -1;
+
+            std::vector<detail::Entry> buffer;
+            for (std::size_t i = 0; i < keys.size(); ++i)
+            {
+                auto& key = keys[i];
+                auto [a, b] = m_indexWithoutReverseMove.equal_range(key, end);
+
+                const std::size_t count = b.it - a.it;
+                if (count == 0) continue; // the range is empty, the value certainly does not exist
+
+                buffer.resize(count);
+                (void)m_entries.read(buffer.data(), a.it, count);
+                results[i].emplaceDirect(decodeQueryResult(buffer, key));
+            }
+        }
 
         struct FutureFile
         {
@@ -824,6 +1047,22 @@ namespace persistence
                 discoverFiles();
             }
 
+            void query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
+            {
+                for (auto&& file : m_files)
+                {
+                    file.query(results, keys);
+                }
+            }
+
+            void queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
+            {
+                for (auto&& file : m_files)
+                {
+                    file.queryDirect(results, keys);
+                }
+            }
+
             // data has to be sorted in ascending order
             void storeOrdered(const detail::Entry* data, std::size_t count)
             {
@@ -1107,6 +1346,60 @@ namespace persistence
             [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, GameLevel level)
             {
                 return m_headers[level].query(indices);
+            }
+
+            // TODO: refactor
+            // We don't have QueryTarget here because we query all at once anyway.
+            [[nodiscard]] std::vector<QueryResult> queryRanges(
+                const std::vector<Position>& positions,
+                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
+            ) const
+            {
+                const std::size_t numPositions = positions.size();
+
+                std::vector<PositionSignatureWithReverseMoveAndGameClassification> orderedKeys;
+                std::vector<std::size_t> originalIds;
+                std::vector<std::pair<PositionSignatureWithReverseMoveAndGameClassification, std::size_t>> compound;
+                orderedKeys.reserve(numPositions);
+                originalIds.reserve(numPositions);
+                compound.reserve(numPositions);
+                for (std::size_t i = 0; i < numPositions; ++i)
+                {
+                    if (reverseMoves.size() > i)
+                    {
+                        compound.emplace_back(PositionSignatureWithReverseMoveAndGameClassification(positions[i], reverseMoves[i]), i);
+                    }
+                    else
+                    {
+                        compound.emplace_back(PositionSignatureWithReverseMoveAndGameClassification(positions[i]), i);
+                    }
+                }
+
+                auto cmp = detail::Entry::CompareLessWithReverseMove{};
+                std::sort(compound.begin(), compound.end(), [cmp](auto&& lhs, auto&& rhs) { return cmp(lhs.first, rhs.first); });
+                for (auto&& [key, id] : compound)
+                {
+                    orderedKeys.emplace_back(key);
+                    originalIds.emplace_back(id);
+                }
+
+                std::vector<QueryResult> results;
+                {
+                    std::vector<QueryResult> orderedResults;
+                    orderedResults.resize(numPositions);
+                    m_partition.query(orderedResults, orderedKeys);
+                    if (!reverseMoves.empty())
+                    {
+                        m_partition.queryDirect(orderedResults, orderedKeys);
+                    }
+
+                    results.resize(numPositions);
+                    for (std::size_t i = 0; i < numPositions; ++i)
+                    {
+                        results[originalIds[i]] = orderedResults[i];
+                    }
+                }
+                return results;
             }
 
             ImportStats importPgns(
