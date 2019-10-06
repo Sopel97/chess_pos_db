@@ -991,19 +991,25 @@ namespace persistence
 
             static constexpr std::size_t m_totalNumDirectories = 1;
 
+            static inline const EnumMap<GameLevel, std::string> m_headerNames = {
+                "_human",
+                "_engine",
+                "_server"
+            };
+
             static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["hdd"]["pgn_parser_memory"].get<MemoryAmount>();
 
         public:
             Database(std::filesystem::path path) :
                 m_path(path),
-                m_header(path),
+                m_headers(makeHeaders(path)),
                 m_partition(path / partitionDirectory)
             {
             }
 
             Database(std::filesystem::path path, std::size_t headerBufferMemory) :
                 m_path(path),
-                m_header(path, headerBufferMemory),
+                m_headers(makeHeaders(path, headerBufferMemory)),
                 m_partition(path / partitionDirectory)
             {
             }
@@ -1022,7 +1028,10 @@ namespace persistence
 
             void clear()
             {
-                m_header.clear();
+                for (auto& header : m_headers)
+                {
+                    header.clear();
+                }
                 m_partition.clear();
             }
 
@@ -1031,9 +1040,9 @@ namespace persistence
                 return m_path;
             }
 
-            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices)
+            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, GameLevel level)
             {
-                return m_header.query(indices);
+                return m_headers[level].query(indices);
             }
 
             ImportStats importPgns(
@@ -1144,16 +1153,37 @@ namespace persistence
 
             void flush()
             {
-                m_header.flush();
+                for (auto& header : m_headers)
+                {
+                    header.flush();
+                }
             }
 
         private:
             std::filesystem::path m_path;
 
-            Header m_header;
+            EnumMap<GameLevel, Header> m_headers;
 
             // We only have one partition for this format
             Partition m_partition;
+
+            EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path)
+            {
+                return { 
+                    Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[0]]),
+                    Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[1]]),
+                    Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[2]])
+                };
+            }
+
+            EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
+            {
+                return {
+                    Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
+                    Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
+                    Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
+                };
+            }
 
             void collectFutureFiles()
             {
@@ -1193,7 +1223,9 @@ namespace persistence
                             continue;
                         }
 
-                        const std::uint64_t gameOffset = m_header.nextGameOffset();
+                        auto& header = m_headers[level];
+
+                        const std::uint64_t gameOffset = header.nextGameOffset();
 
                         std::size_t numPositionsInGame = 0;
                         auto processPosition = [&](const Position& position, const ReverseMove& reverseMove) {
@@ -1223,7 +1255,7 @@ namespace persistence
 
                         ASSERT(numPositionsInGame > 0);
 
-                        const std::uint64_t actualGameOffset = m_header.addGameNoLock(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).offset;
+                        const std::uint64_t actualGameOffset = header.addGameNoLock(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).offset;
                         ASSERT(gameOffset == actualGameOffset);
                         (void)actualGameOffset;
 
@@ -1361,7 +1393,9 @@ namespace persistence
                                 continue;
                             }
 
-                            const std::uint64_t gameOffset = m_header.addGame(game).offset;
+                            auto& header = m_headers[level];
+
+                            const std::uint64_t gameOffset = header.addGame(game).offset;
 
                             std::size_t numPositionsInGame = 0;
                             auto processPosition = [&, &nextId = nextId](const Position& position, const ReverseMove& reverseMove) {

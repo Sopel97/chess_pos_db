@@ -268,12 +268,15 @@ namespace persistence
         static constexpr std::size_t defaultMemory = 4 * 1024 * 1024;
         static constexpr std::size_t minMemory = 1024;
 
-        Header(std::filesystem::path path, std::size_t memory = defaultMemory) :
+        Header(std::filesystem::path path, std::size_t memory = defaultMemory, std::string name = "") :
             // here we use operator, to create directories before we try to
             // create files there
+            m_name(std::move(name)),
             m_path((std::filesystem::create_directories(path), std::move(path))),
-            m_header({ m_path / headerPath, ext::OutputMode::Append }, ext::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(std::max(memory, minMemory), 4))),
-            m_index({ m_path / indexPath, ext::OutputMode::Append }, ext::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(std::max(memory, minMemory), 4)))
+            m_headerPath(std::move((m_path / headerPath) += m_name)),
+            m_indexPath(std::move((m_path / indexPath) += m_name)),
+            m_header({ m_headerPath, ext::OutputMode::Append }, ext::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(std::max(memory, minMemory), 4))),
+            m_index({ m_indexPath, ext::OutputMode::Append }, ext::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(std::max(memory, minMemory), 4)))
         {
         }
 
@@ -321,8 +324,12 @@ namespace persistence
 
         void replicateTo(const std::filesystem::path& path) const
         {
-            std::filesystem::copy_file(m_path / headerPath, path / headerPath, std::filesystem::copy_options::overwrite_existing);
-            std::filesystem::copy_file(m_path / indexPath, path / indexPath, std::filesystem::copy_options::overwrite_existing);
+            std::filesystem::path newHeaderPath = path / headerPath;
+            newHeaderPath += m_name;
+            std::filesystem::path newIndexPath = path / indexPath;
+            newIndexPath += m_name;
+            std::filesystem::copy_file(m_headerPath, newHeaderPath, std::filesystem::copy_options::overwrite_existing);
+            std::filesystem::copy_file(m_indexPath, newIndexPath, std::filesystem::copy_options::overwrite_existing);
         }
 
         [[nodiscard]] std::vector<PackedGameHeader> query(const std::vector<std::uint32_t>& keys)
@@ -367,7 +374,10 @@ namespace persistence
         }
 
     private:
+        std::string m_name;
         std::filesystem::path m_path;
+        std::filesystem::path m_headerPath;
+        std::filesystem::path m_indexPath;
         ext::Vector<char> m_header;
         ext::Vector<std::size_t> m_index;
 
