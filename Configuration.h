@@ -158,6 +158,12 @@ namespace cfg
             "index_granularity" : 1024,
             "max_merge_buffer_size" : "1GiB",
             "pgn_parser_memory" : "4MiB"
+        },
+
+        "hdd" : {
+            "index_granularity" : 1024,
+            "max_merge_buffer_size" : "1GiB",
+            "pgn_parser_memory" : "4MiB"
         }
     },
 
@@ -177,10 +183,13 @@ namespace cfg
                 std::istreambuf_iterator<char>()
             );
 
-            str = detail::stripComments(str);
-
             m_json = defaultJson();
-            m_json.merge_patch(nlohmann::json::parse(str));
+
+            if (!str.empty())
+            {
+                str = detail::stripComments(str);
+                m_json.merge_patch(nlohmann::json::parse(str));
+            }
         }
     };
 
