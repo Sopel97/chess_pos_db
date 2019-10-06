@@ -225,7 +225,7 @@ public:
     {
         if (piecesBB(whiteKing).count() != 1) return false;
         if (piecesBB(blackKing).count() != 1) return false;
-        if (((piecesBB(whitePawn) | piecesBB(blackPawn)) & (bb::rank(rank1) | bb::rank(rank2))).any()) return false;
+        if (((piecesBB(whitePawn) | piecesBB(blackPawn)) & (bb::rank(rank1) | bb::rank(rank8))).any()) return false;
         return true;
     }
 
