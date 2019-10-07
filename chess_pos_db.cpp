@@ -725,91 +725,35 @@ namespace app
                     const auto& reverseMove = reverseMoves[i];
                     const auto& move = reverseMove.move;
                     auto& subResult = queryResult.subResults[fenId];
+                    auto& bucket = isMain[i] ? subResult.main : subResult.continuations[move];
+                    const bool fetchFirstGame = isMain[i] ? query.fetchFirstGame : query.fetchFirstGameForEachContinuation;
+                    const bool fetchLastGame = isMain[i] ? query.fetchLastGame : query.fetchLastGameForEachContinuation;
 
-                    // First entry is for the main position
-                    if (isMain[i])
+                    const std::size_t id = bucket.size();
+
+                    if (query.excludeTranspositions)
                     {
-                        // Main position
-                        const std::size_t id = subResult.main.size();
-
-                        if (query.excludeTranspositions)
-                        {
-                            subResult.main.emplace_back(level, result, directCount, count - directCount);
-                        }
-                        else
-                        {
-                            subResult.main.emplace_back(level, result, count);
-                        }
-
-                        if (query.excludeTranspositions && directCount > 0)
-                        {
-                            if (query.fetchFirstGame)
-                            {
-                                headerQueries.emplace_back(firstDirectGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
-                            }
-                            if (query.fetchLastGame)
-                            {
-                                headerQueries.emplace_back(lastDirectGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
-                            }
-                        }
-                        else if (!query.excludeTranspositions && count > 0)
-                        {
-                            if (query.fetchFirstGame)
-                            {
-                                headerQueries.emplace_back(firstGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
-                            }
-                            if (query.fetchLastGame)
-                            {
-                                headerQueries.emplace_back(lastGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
-                            }
-                        }
+                        bucket.emplace_back(level, result, directCount, count - directCount);
                     }
                     else
                     {
-                        // Continuation
-                        auto& bucket = subResult.continuations[move];
+                        bucket.emplace_back(level, result, count);
+                    }
 
-                        const std::size_t id = bucket.size();
-                        // If we queried transposition info then we have to
-                        // change some values as the expected query response is different.
-                        if (query.excludeTranspositions)
+                    if (
+                        (query.excludeTranspositions && directCount > 0)
+                        || (!query.excludeTranspositions && count > 0)
+                        )
+                    {
+                        if (fetchFirstGame)
                         {
-                            bucket.emplace_back(level, result, directCount, count - directCount);
+                            headerQueries.emplace_back(firstDirectGameIdx);
+                            headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
                         }
-                        else
+                        if (fetchLastGame)
                         {
-                            bucket.emplace_back(level, result, count);
-                        }
-
-                        if (query.excludeTranspositions && directCount > 0)
-                        {
-                            if (query.fetchFirstGameForEachContinuation)
-                            {
-                                headerQueries.emplace_back(firstDirectGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
-                            }
-                            if (query.fetchLastGameForEachContinuation)
-                            {
-                                headerQueries.emplace_back(lastDirectGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
-                            }
-                        }
-                        else if (!query.excludeTranspositions && count > 0)
-                        {
-                            if (query.fetchFirstGameForEachContinuation)
-                            {
-                                headerQueries.emplace_back(firstGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
-                            }
-                            if (query.fetchLastGameForEachContinuation)
-                            {
-                                headerQueries.emplace_back(lastGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
-                            }
+                            headerQueries.emplace_back(lastDirectGameIdx);
+                            headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
                         }
                     }
                 }
