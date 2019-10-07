@@ -686,6 +686,8 @@ namespace persistence
                     matchingEntry.combine(entry);
                 }
             }
+
+            return FileQueryResult(*this, matchingEntries);
         }
 
         [[nodiscard]] FileQueryResult File::decodeQueryResult(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const
@@ -712,6 +714,8 @@ namespace persistence
                     matchingEntry.combine(entry);
                 }
             }
+
+            return FileQueryResult(*this, matchingEntries);
         }
 
         void File::queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
