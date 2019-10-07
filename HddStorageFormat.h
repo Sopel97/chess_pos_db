@@ -253,12 +253,6 @@ namespace persistence
 
                 Entry() = default;
 
-                Entry(const Signature& sig, std::size_t count, std::size_t gameOffset) :
-                    m_positionSignature(sig),
-                    m_countAndGameOffset(count, gameOffset)
-                {
-                }
-
                 Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint64_t gameOffset) :
                     m_positionSignature(pos, reverseMove, level, result),
                     m_countAndGameOffset(SingleGame{}, gameOffset)
@@ -441,6 +435,11 @@ namespace persistence
                     return m_positionSignature.result();
                 }
 
+                [[nodiscard]] const CountAndGameOffsetType& countAndGameOffset() const
+                {
+                    return m_countAndGameOffset;
+                }
+
                 void combine(const Entry& rhs)
                 {
                     m_countAndGameOffset.combine(rhs.m_countAndGameOffset);
@@ -602,7 +601,7 @@ namespace persistence
 
         struct FileQueryResult
         {
-            FileQueryResult(const File& file, const EnumMap2<GameLevel, GameResult, detail::Entry>& entries) :
+            FileQueryResult(const File& file, const EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset>& entries) :
                 m_file(&file),
                 m_entries(entries)
             {
@@ -625,7 +624,7 @@ namespace persistence
 
         private:
             const File* m_file;
-            EnumMap2<GameLevel, GameResult, detail::Entry> m_entries;
+            EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset> m_entries;
         };
 
         struct QueryResult
@@ -687,12 +686,12 @@ namespace persistence
         // game classification in query keys is ignored
         [[nodiscard]] FileQueryResult File::decodeQueryResultDirect(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const
         {
-            EnumMap2<GameLevel, GameResult, detail::Entry> matchingEntries;
+            EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset> matchingEntries;
             for (GameLevel level : values<GameLevel>())
             {
                 for (GameResult result : values<GameResult>())
                 {
-                    matchingEntries[level][result] = detail::Entry(key, 0, std::numeric_limits<std::uint64_t>::max());
+                    matchingEntries[level][result] = detail::CountAndGameOffset(0, std::numeric_limits<std::uint64_t>::max());
                 }
             }
 
@@ -706,7 +705,7 @@ namespace persistence
                     const GameLevel level = entry.level();
                     const GameResult result = entry.result();
                     auto& matchingEntry = matchingEntries[level][result];
-                    matchingEntry.combine(entry);
+                    matchingEntry.combine(entry.countAndGameOffset());
                 }
             }
 
@@ -715,12 +714,12 @@ namespace persistence
 
         [[nodiscard]] FileQueryResult File::decodeQueryResult(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const
         {
-            EnumMap2<GameLevel, GameResult, detail::Entry> matchingEntries;
+            EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset> matchingEntries;
             for (GameLevel level : values<GameLevel>())
             {
                 for (GameResult result : values<GameResult>())
                 {
-                    matchingEntries[level][result] = detail::Entry(key, 0, std::numeric_limits<std::uint64_t>::max());
+                    matchingEntries[level][result] = detail::CountAndGameOffset(0, std::numeric_limits<std::uint64_t>::max());
                 }
             }
 
@@ -734,7 +733,7 @@ namespace persistence
                     const GameLevel level = entry.level();
                     const GameResult result = entry.result();
                     auto& matchingEntry = matchingEntries[level][result];
-                    matchingEntry.combine(entry);
+                    matchingEntry.combine(entry.countAndGameOffset());
                 }
             }
 
