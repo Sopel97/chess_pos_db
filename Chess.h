@@ -715,6 +715,11 @@ struct Move
             && lhs.promotedPiece == rhs.promotedPiece;
     }
 
+    [[nodiscard]] constexpr friend bool operator!=(const Move& lhs, const Move& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     [[nodiscard]] constexpr static Move null()
     {
         return Move{ Square::none(), Square::none() };

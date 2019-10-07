@@ -301,10 +301,38 @@ namespace app
         return parts;
     }
 
+    struct RemoteQueryPositionSpec
+    {
+        std::string fen;
+        std::optional<std::string> move; // if move is specified then the query is made on a position that arises from fen after the move is made
+
+        friend void to_json(nlohmann::json& j, const RemoteQueryPositionSpec& query)
+        {
+            j["fen"] = query.fen;
+            if (query.move.has_value())
+            {
+                j["move"] = *query.move;
+            }
+        }
+
+        friend void from_json(const nlohmann::json& j, RemoteQueryPositionSpec& query)
+        {
+            j["fen"].get_to(query.fen);
+            if (j["move"].is_null())
+            {
+                query.move.reset();
+            }
+            else
+            {
+                query.move = j["move"].get<std::string>();
+            }
+        }
+    };
+
     struct RemoteQuery
     {
         std::string token; // token can be used to match queries to results by the client
-        std::vector<std::string> fens;
+        std::vector<RemoteQueryPositionSpec> positions;
         std::vector<GameLevel> levels;
         std::vector<GameResult> results;
         bool fetchFirstGame;
@@ -332,7 +360,7 @@ namespace app
 
             j = nlohmann::json{ 
                 { "token", query.token },
-                { "fens", query.fens },
+                { "positions", query.positions },
                 { "levels", levelsStr },
                 { "results", resultsStr },
                 { "fetch_first_game", query.fetchFirstGame },
@@ -346,7 +374,7 @@ namespace app
 
         friend void from_json(const nlohmann::json& j, RemoteQuery& query)
         {
-            query.fens.clear();
+            query.positions.clear();
             query.levels.clear();
             query.results.clear();
 
@@ -369,7 +397,7 @@ namespace app
             }
 
             j["token"].get_to(query.token);
-            j["fens"].get_to(query.fens);
+            j["positions"].get_to(query.positions);
             j["fetch_first_game"].get_to(query.fetchFirstGame);
             j["fetch_last_game"].get_to(query.fetchLastGame);
             j["continuations"].get_to(query.continuations);
@@ -462,21 +490,31 @@ namespace app
         };
 
         RemoteQueryResultForFen(std::string fen) :
-            fen(std::move(fen))
+            position{ std::move(fen) }
         {
         }
 
-        std::string fen;
+        RemoteQueryResultForFen(std::string fen, std::string move) :
+            position{ std::move(fen), std::move(move) }
+        {
+        }
+
+        RemoteQueryResultForFen(std::string fen, std::optional<std::string> move) :
+            position{ std::move(fen), std::move(move) }
+        {
+        }
+
+        RemoteQueryPositionSpec position;
         std::vector<RemoteQueryResultForPosition> main;
         std::map<Move, std::vector<RemoteQueryResultForPosition>, MoveCompareLess> continuations;
 
         friend void to_json(nlohmann::json& j, const RemoteQueryResultForFen& data)
         {
-            const std::optional<Position> positionOpt = Position::tryFromFen(data.fen.c_str());
+            const std::optional<Position> positionOpt = Position::tryFromFen(data.position.fen.c_str());
             if (!positionOpt.has_value())
             {
                 j = nlohmann::json{
-                    { "fen", data.fen },
+                    { "position", data.position },
 
                     // We don't have to put this, we don't define it anywhere, but we may
                     { "error", "Invalid FEN"}
@@ -484,10 +522,30 @@ namespace app
 
                 return;
             }
-            const auto& position = positionOpt.value();
+            auto position = positionOpt.value();
+
+            if (data.position.move.has_value())
+            {
+                const std::optional<Move> moveOpt = san::trySanToMove(position, *data.position.move);
+                if (!moveOpt.has_value() || *moveOpt == Move::null())
+                {
+                    j = nlohmann::json{
+                        { "position", data.position },
+
+                        // We don't have to put this, we don't define it anywhere, but we may
+                        { "error", "Invalid SAN"}
+                    };
+
+                    return;
+                }
+                else
+                {
+                    position.doMove(*moveOpt);
+                }
+            }
 
             j = nlohmann::json{
-                { "fen", data.fen },
+                { "position", data.position },
                 { "main", data.main }
             };
 
@@ -522,7 +580,7 @@ namespace app
         }
     };
 
-    [[nodiscard]] auto gatherPositionsForQuery(const std::vector<std::string>& fens, bool continuations)
+    [[nodiscard]] auto gatherPositionsForQuery(const RemoteQuery& query)
     {
         // NOTE: we don't remove duplicates because there should be no
         //       duplicates when we consider reverse move
@@ -530,35 +588,58 @@ namespace app
         std::vector<Position> positions;
         std::vector<std::size_t> fenIds;
         std::vector<ReverseMove> reverseMoves;
-        for (std::size_t i = 0; i < fens.size(); ++i)
+        std::vector<std::uint8_t> isMain;
+        for (std::size_t i = 0; i < query.positions.size(); ++i)
         {
-            auto&& fen = fens[i];
+            auto&& [fen, moveStrOpt] = query.positions[i];
 
             // If the fen is invalid we use the start position as a placeholder
             // Then when reading the results we will disregard them if they come from an invalid fen.
             const std::optional<Position> posOpt = Position::tryFromFen(fen.c_str());
-            const Position pos = posOpt.value_or(Position::startPosition());
+            bool isValid = posOpt.has_value();
+
+            Position pos = posOpt.value_or(Position::startPosition());
+            if (isValid && moveStrOpt.has_value())
+            {
+                const std::optional<Move> move = san::trySanToMove(pos, std::string_view(*moveStrOpt));
+                if (move.has_value() && *move != Move::null())
+                {
+                    reverseMoves.emplace_back(pos.doMove(*move));
+                }
+                else
+                {
+                    reverseMoves.emplace_back();
+                    isValid = false;
+                }
+            }
+            else
+            {
+                reverseMoves.emplace_back();
+            }
+
             positions.emplace_back(pos);
             fenIds.emplace_back(i);
-            reverseMoves.emplace_back();
+            isMain.emplace_back(true);
 
-            if (continuations)
+            // If the query is not valid we only need one placeholder, no need to query everything
+            if (isValid && query.continuations)
             {
                 movegen::forEachLegalMove(pos, [&](Move move) {
                     auto posCpy = pos;
                     reverseMoves.emplace_back(posCpy.doMove(move));
                     positions.emplace_back(posCpy);
                     fenIds.emplace_back(i);
+                    isMain.emplace_back(false);
                 });
             }
         }
 
-        return std::make_tuple(std::move(positions), std::move(fenIds), std::move(reverseMoves));
+        return std::make_tuple(std::move(positions), std::move(fenIds), std::move(reverseMoves), std::move(isMain));
     }
 
     [[nodiscard]] RemoteQueryResult executeQuery(persistence::local::Database& db, const RemoteQuery& query)
     {
-        auto [positions, fenIds, reverseMoves] = gatherPositionsForQuery(query.fens, query.continuations);
+        auto [positions, fenIds, reverseMoves, isMain] = gatherPositionsForQuery(query);
 
         std::vector<persistence::local::QueryTarget> targets;
         for (auto&& level : query.levels)
@@ -584,9 +665,9 @@ namespace app
 
         // Each initial fen has a result, NOT each distinct position.
         // Each fen 'owns' N positions.
-        for (std::size_t i = 0; i < query.fens.size(); ++i)
+        for (auto&& [fen, moveStrOpt] : query.positions)
         {
-            queryResult.subResults.emplace_back(query.fens[i]);
+            queryResult.subResults.emplace_back(fen, moveStrOpt);
         }
 
         // We want to batch the header queries so we have to do some bookkeeping
@@ -596,11 +677,12 @@ namespace app
         {
             using HeaderMemberPtr = std::optional<persistence::GameHeader> RemoteQueryResultForPosition::*;
 
-            HeaderFor(std::size_t fenId, Move move, std::size_t bucketId, HeaderMemberPtr headerPtr) :
+            HeaderFor(std::size_t fenId, Move move, std::size_t bucketId, HeaderMemberPtr headerPtr, bool isMain) :
                 fenId(fenId),
                 move(move),
                 bucketId(bucketId),
-                headerPtr(headerPtr)
+                headerPtr(headerPtr),
+                isMain(isMain)
             {
             }
 
@@ -608,6 +690,7 @@ namespace app
             Move move;
             std::size_t bucketId;
             HeaderMemberPtr headerPtr;
+            bool isMain;
         };
 
         // We have to know where to assign the header later
@@ -638,29 +721,50 @@ namespace app
                     // One position maps to at least one fen.
                     // The mapping is only on our side to reduce queries, the client
                     // wants to see multiple instances of the same position.
-                    // If move != Move::null() it is a continuation of a fen.
                     const auto& fenId = fenIds[i];
                     const auto& reverseMove = reverseMoves[i];
                     const auto& move = reverseMove.move;
                     auto& subResult = queryResult.subResults[fenId];
 
-                    if (move == Move::null())
+                    // First entry is for the main position
+                    if (isMain[i])
                     {
                         // Main position
                         const std::size_t id = subResult.main.size();
-                        subResult.main.emplace_back(level, result, count);
 
-                        if (count > 0)
+                        if (query.excludeTranspositions)
+                        {
+                            subResult.main.emplace_back(level, result, directCount, count - directCount);
+                        }
+                        else
+                        {
+                            subResult.main.emplace_back(level, result, count);
+                        }
+
+                        if (query.excludeTranspositions && directCount > 0)
+                        {
+                            if (query.fetchFirstGame)
+                            {
+                                headerQueries.emplace_back(firstDirectGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
+                            }
+                            if (query.fetchLastGame)
+                            {
+                                headerQueries.emplace_back(lastDirectGameIdx);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
+                            }
+                        }
+                        else if (!query.excludeTranspositions && count > 0)
                         {
                             if (query.fetchFirstGame)
                             {
                                 headerQueries.emplace_back(firstGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
                             }
                             if (query.fetchLastGame)
                             {
                                 headerQueries.emplace_back(lastGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
                             }
                         }
                     }
@@ -686,12 +790,12 @@ namespace app
                             if (query.fetchFirstGameForEachContinuation)
                             {
                                 headerQueries.emplace_back(firstDirectGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
                             }
                             if (query.fetchLastGameForEachContinuation)
                             {
                                 headerQueries.emplace_back(lastDirectGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
                             }
                         }
                         else if (!query.excludeTranspositions && count > 0)
@@ -699,12 +803,12 @@ namespace app
                             if (query.fetchFirstGameForEachContinuation)
                             {
                                 headerQueries.emplace_back(firstGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::firstGame, isMain[i]);
                             }
                             if (query.fetchLastGameForEachContinuation)
                             {
                                 headerQueries.emplace_back(lastGameIdx);
-                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame);
+                                headerQueriesMappings.emplace_back(fenId, move, id, &RemoteQueryResultForPosition::lastGame, isMain[i]);
                             }
                         }
                     }
@@ -718,9 +822,9 @@ namespace app
         for (std::size_t i = 0; i < packedHeaders.size(); ++i)
         {
             auto& packedHeader = packedHeaders[i];
-            auto [fenId, move, bucketId, headerPtr] = headerQueriesMappings[i];
+            auto [fenId, move, bucketId, headerPtr, isMain] = headerQueriesMappings[i];
 
-            auto& pos = move == Move::null()
+            auto& pos = isMain
                 ? queryResult.subResults[fenId].main[bucketId]
                 : queryResult.subResults[fenId].continuations[move][bucketId];
 
@@ -1118,7 +1222,7 @@ void jsonExample()
 {
     app::RemoteQuery q;
     q.token = "toktok";
-    q.fens = { "asd", "dsa" };
+    q.positions = { {"asd"}, {"dsa"} };
     q.fetchFirstGame = false;
     q.fetchLastGame = true;
     q.fetchFirstGameForEachContinuation = false;
@@ -1164,7 +1268,7 @@ void testQuery()
     app::RemoteQuery query;
     query.token = "toktok";
     //query.fens = { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" };
-    query.fens = { "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2" };
+    query.positions = { { "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" , "e5"} };
     query.fetchFirstGame = true;
     query.fetchLastGame = true;
     query.fetchFirstGameForEachContinuation = true;
@@ -1173,7 +1277,7 @@ void testQuery()
     query.continuations = true;
     query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
     query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
-    persistence::local::Database db("w:/catobase/.tmp");
+    persistence::local::Database db("w:/catobase/.ccc");
     auto result = app::executeQuery(db, query);
     std::cout << nlohmann::json(result).dump(4) << '\n';
 }
@@ -1201,6 +1305,7 @@ void newFormatTests()
 
 int main()
 {
+    testQuery();
     //newFormatTests();
 
     

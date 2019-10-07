@@ -205,7 +205,7 @@ namespace persistence
             }
         }
 
-        [[nodisacard]] std::uint32_t gameIdx() const
+        [[nodiscard]] std::uint32_t gameIdx() const
         {
             return m_gameIdx;
         }
