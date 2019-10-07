@@ -427,6 +427,28 @@ namespace persistence
             return headers;
         }
 
+        // returns the index of the header (not the address)
+        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const PackedGameHeader& header)
+        {
+            const std::uint32_t gameIdx = static_cast<std::uint32_t>(m_index.size());
+            const std::uint64_t headerSizeBytes = m_header.size();
+            m_header.append(header.data(), header.size());
+            m_index.emplace_back(headerSizeBytes);
+            return { headerSizeBytes, gameIdx };
+        }
+
+        // returns the index of the header (not the address)
+        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeader& header)
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            return addHeaderNoLock(header);
+        }
+
+        [[nodiscard]] std::uint32_t numGames() const
+        {
+            return static_cast<std::uint32_t>(m_index.size());
+        }
+
     private:
         std::string m_name;
         std::filesystem::path m_path;

@@ -393,6 +393,29 @@ namespace persistence
                     }
                 };
 
+                struct CompareEqualFull
+                {
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Entry& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualFull{}(lhs.m_positionSignature, rhs.m_positionSignature);
+                    }
+
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Signature& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualFull{}(lhs.m_positionSignature, rhs);
+                    }
+
+                    [[nodiscard]] bool operator()(const Signature& lhs, const Entry& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualFull{}(lhs, rhs.m_positionSignature);
+                    }
+
+                    [[nodiscard]] bool operator()(const Signature& lhs, const Signature& rhs) const noexcept
+                    {
+                        return Signature::CompareEqualFull{}(lhs, rhs);
+                    }
+                };
+
                 [[nodiscard]] const Signature& positionSignature() const
                 {
                     return m_positionSignature;
@@ -752,7 +775,7 @@ namespace persistence
 
                 buffer.resize(count);
                 (void)m_entries.read(buffer.data(), a.it, count);
-                results[i].emplaceDirect(decodeQueryResult(buffer, key));
+                results[i].emplace(decodeQueryResult(buffer, key));
             }
         }
 
@@ -986,14 +1009,8 @@ namespace persistence
 
             void sort(std::vector<detail::Entry>& buffer)
             {
-                // NOTE: we don't need stable_sort here as game indices are
-                //       already ordered within one buffer.
                 auto cmp = detail::Entry::CompareLessFull{};
-                std::sort(buffer.begin(), buffer.end(), [cmp](auto&& lhs, auto&& rhs) {
-                    if (cmp(lhs, rhs)) return true;
-                    else if (cmp(rhs, lhs)) return false;
-                    return lhs.gameOffset() < rhs.gameOffset();
-                    });
+                std::sort(buffer.begin(), buffer.end(), cmp);
             }
 
             // works analogously to std::unique but also combines equal values
@@ -1004,7 +1021,7 @@ namespace persistence
                 auto read = buffer.begin();
                 auto write = buffer.begin();
                 const auto end = buffer.end();
-                auto cmp = detail::Entry::CompareEqualWithReverseMove{};
+                auto cmp = detail::Entry::CompareEqualFull{};
 
                 while (++read != end)
                 {
@@ -1310,6 +1327,7 @@ namespace persistence
             Database(std::filesystem::path path) :
                 m_path(path),
                 m_headers(makeHeaders(path)),
+                m_nextGameIdx(numGamesInHeaders()),
                 m_partition(path / partitionDirectory)
             {
             }
@@ -1317,6 +1335,7 @@ namespace persistence
             Database(std::filesystem::path path, std::size_t headerBufferMemory) :
                 m_path(path),
                 m_headers(makeHeaders(path, headerBufferMemory)),
+                m_nextGameIdx(numGamesInHeaders()),
                 m_partition(path / partitionDirectory)
             {
             }
@@ -1524,11 +1543,12 @@ namespace persistence
             std::filesystem::path m_path;
 
             EnumMap<GameLevel, Header> m_headers;
+            std::atomic<std::uint32_t> m_nextGameIdx;
 
             // We only have one partition for this format
             Partition m_partition;
 
-            EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path)
+            [[nodiscard]] EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path)
             {
                 return { 
                     Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[0]]),
@@ -1537,13 +1557,25 @@ namespace persistence
                 };
             }
 
-            EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
+            [[nodiscard]] EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
             {
                 return {
                     Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
                     Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
                     Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
                 };
+            }
+
+            [[nodiscard]] std::uint32_t numGamesInHeaders() const
+            {
+                std::uint32_t total = 0;
+
+                for (auto& header : m_headers)
+                {
+                    total += header.numGames();
+                }
+
+                return total;
             }
 
             void collectFutureFiles()
@@ -1616,7 +1648,8 @@ namespace persistence
 
                         ASSERT(numPositionsInGame > 0);
 
-                        const std::uint64_t actualGameOffset = header.addGameNoLock(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).offset;
+                        auto gameHeader = PackedGameHeader(game, m_nextGameIdx.fetch_add(1, std::memory_order_relaxed), static_cast<std::uint16_t>(numPositionsInGame - 1u));
+                        const std::uint64_t actualGameOffset = header.addHeaderNoLock(gameHeader).offset;
                         ASSERT(gameOffset == actualGameOffset);
                         (void)actualGameOffset;
 
@@ -1756,7 +1789,8 @@ namespace persistence
 
                             auto& header = m_headers[level];
 
-                            const std::uint64_t gameOffset = header.addGame(game).offset;
+                            auto gameHeader = PackedGameHeader(game, m_nextGameIdx.fetch_add(1));
+                            const std::uint64_t gameOffset = header.addHeader(gameHeader).offset;
 
                             std::size_t numPositionsInGame = 0;
                             auto processPosition = [&, &nextId = nextId](const Position& position, const ReverseMove& reverseMove) {

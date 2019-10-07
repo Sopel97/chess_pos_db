@@ -1226,9 +1226,9 @@ void testQuery()
     std::cout << nlohmann::json(result).dump(4) << '\n';
 }
 
-void newFormatTests()
+void newFormatTests(std::string name)
 {
-    persistence::hdd::Database db("w:/catobase/.v2");
+    persistence::hdd::Database db("w:/catobase/" + name);
     //persistence::hdd::Database db("c:/dev/chess_pos_db/.v2");
     std::vector<persistence::hdd::PgnFile> files{
         { "w:/catobase/data/lichess_db_standard_rated_2013-01.pgn", GameLevel::Human },
@@ -1290,7 +1290,11 @@ app::AggregatedQueryResults queryAggregate(
 
                 if (fetchFirstGameForContinuations && directCount > 0)
                 {
-                    gameQueries[level].emplace_back(results[i].firstDirectGameOffset(level, result));
+                    auto offset = results[i].firstDirectGameOffset(level, result);
+                    if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                    {
+                        gameQueries[level].emplace_back(offset);
+                    }
                 }
             }
         }
@@ -1316,7 +1320,11 @@ app::AggregatedQueryResults queryAggregate(
                 // Main position doesn't have a history
                 if (fetchFirstGame && count > 0)
                 {
-                    gameQueries[level].emplace_back(results.back().firstGameOffset(level, result));
+                    auto offset = results.back().firstDirectGameOffset(level, result);
+                    if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                    {
+                        gameQueries[level].emplace_back(offset);
+                    }
                 }
             }
         }
@@ -1343,7 +1351,11 @@ app::AggregatedQueryResults queryAggregate(
 
                     if (fetchFirstGameForContinuations && directCount > 0)
                     {
-                        aggResult.games[level][result] = persistence::GameHeader(*iters[level]++);
+                        auto offset = results[i].firstDirectGameOffset(level, result);
+                        if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                        {
+                            aggResult.games[level][result] = persistence::GameHeader(*iters[level]++);
+                        }
                     }
                 }
             }
@@ -1358,7 +1370,11 @@ app::AggregatedQueryResults queryAggregate(
 
                 if (fetchFirstGame && count > 0)
                 {
-                    aggResult.games[level][result] = persistence::GameHeader(*iters[level]++);
+                    auto offset = results.back().firstDirectGameOffset(level, result);
+                    if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                    {
+                        aggResult.games[level][result] = persistence::GameHeader(*iters[level]++);
+                    }
                 }
             }
         }
@@ -1367,9 +1383,9 @@ app::AggregatedQueryResults queryAggregate(
     return aggResults;
 }
 
-void testHddQuery()
+void testHddQuery(std::string name)
 {
-    persistence::hdd::Database db("w:/catobase/.v2");
+    persistence::hdd::Database db("w:/catobase/" + name);
 
     auto pos = Position::startPosition();
     auto agg = queryAggregate(db, pos, true, true, true, false);
@@ -1386,8 +1402,8 @@ void testHddQuery()
 int main()
 {
     //testQuery();
-    //newFormatTests();
-    testHddQuery();
+    //newFormatTests(".v2");
+    testHddQuery(".v2");
 
     
     app::App app;
