@@ -2453,7 +2453,6 @@ namespace ext
             std::vector<InputRange> iters;
             iters.reserve(numInputs);
             std::size_t maxInputBufferSize = 0;
-            std::size_t numTotal = 0;
             for (auto& i : in)
             {
                 const std::size_t size = i.size();
@@ -2464,7 +2463,6 @@ namespace ext
 
                 const std::size_t bufferSize = std::min(bufferUnitSize, size);
                 maxInputBufferSize = std::max(maxInputBufferSize, bufferSize);
-                numTotal += size;
 
                 iters.emplace_back(i.begin(DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
             }
@@ -2594,6 +2592,170 @@ namespace ext
             progress.reportWork(numProcessed);
         }
 
+        // the merge is stable - ie. it takes as many values from the first input as possible, then next, and so on
+        template <typename T, typename ContainerT, typename CompT, typename ProgressCallbackT, typename FuncT>
+        void merge_for_each_no_recurse(
+            std::size_t maxMemoryBytes,
+            ContainerIterRange<ContainerT> in,
+            FuncT&& func,
+            CompT cmp,
+            detail::Progress<ProgressCallbackT>& progress
+        )
+        {
+            // TODO: sfinae if other types can be merged
+            static_assert(std::is_same_v<typename ContainerT::value_type, ImmutableSpan<T>>);
+
+            using InputRange = ContainerIterRange<ImmutableSpan<T>>;
+
+            const std::size_t numInputs = in.distance();
+
+            ASSERT(numInputs <= maxNumMergedInputs);
+
+            const std::size_t bufferUnitSize = numObjectsPerBufferUnit<T>(
+                maxMemoryBytes, numInputs
+                );
+
+            const std::size_t progressCallbackThreshold = bufferUnitSize * maxOutputBufferSizeMultiplier;
+
+            // gather non empty ranges
+            std::vector<InputRange> iters;
+            iters.reserve(numInputs);
+            for (auto& i : in)
+            {
+                const std::size_t size = i.size();
+                if (size == 0)
+                {
+                    continue;
+                }
+
+                const std::size_t bufferSize = std::min(bufferUnitSize, size);
+
+                iters.emplace_back(i.begin(DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
+            }
+
+            ASSERT(iters.size() > 1);
+
+            std::size_t numProcessed = 0;
+
+            {
+                {
+                    // Priority queue requires a comparator with a reversed comparison.
+                    // Also we ensure that the merge is stable by forcing order of iter indices.
+                    struct Comp : CompT
+                    {
+                        Comp(CompT t) : CompT(t) {}
+
+                        bool operator()(const std::pair<T, std::size_t>& lhs, const std::pair<T, std::size_t>& rhs) const noexcept
+                        {
+                            if (CompT::operator()(rhs.first, lhs.first)) return true;
+                            else if (CompT::operator()(lhs.first, rhs.first)) return false;
+                            return lhs.second > rhs.second;
+                        }
+                    };
+
+                    // We use a priority queue unless the number of files is small
+                    if (iters.size() > priorityQueueMergeThreshold)
+                    {
+                        std::priority_queue<std::pair<T, std::size_t>, std::vector<std::pair<T, std::size_t>>, Comp> queue{ Comp(cmp) };
+                        for (std::size_t i = 0; i < iters.size(); ++i)
+                        {
+                            ASSERT(iters[i].begin() != iters[i].end());
+                            queue.emplace(*(iters[i].begin()), i);
+                        }
+
+                        while (queue.size() > priorityQueueMergeThreshold)
+                        {
+                            auto [value, minIdx] = queue.top();
+                            queue.pop();
+
+                            // write the minimum value
+                            func(value);
+
+                            // update iterator
+                            auto& it = ++iters[minIdx].begin();
+
+                            // if it's at the end remove it
+                            if (it != iters[minIdx].end())
+                            {
+                                queue.emplace(*it, minIdx);
+                            }
+
+                            ++numProcessed;
+                            if (numProcessed >= progressCallbackThreshold)
+                            {
+                                progress.reportWork(numProcessed);
+                                numProcessed = 0;
+                            }
+                        }
+
+                        // When merging with a priority_queue we don't erase immediately.
+                        iters.erase(std::remove_if(iters.begin(), iters.end(), [](const auto& iter) { return iter.begin() == iter.end(); }), iters.end());
+                    }
+                }
+
+                ASSERT(iters.size() <= priorityQueueMergeThreshold);
+                // Finish with the linear scan procedure for low number of files.
+                {
+                    // this will hold the current values for each iterator
+                    std::vector<T> nextValues(iters.size());
+
+                    // we ensure that removal leaves the elements in the same order
+                    auto removeIter = [&iters, &nextValues](std::size_t i) {
+                        iters.erase(std::begin(iters) + i);
+                        nextValues.erase(std::begin(nextValues) + i);
+                    };
+
+                    // assign current values
+                    for (std::size_t i = 0; i < iters.size(); ++i)
+                    {
+                        ASSERT(iters[i].begin() != iters[i].end());
+                        nextValues[i] = *(iters[i].begin());
+                    }
+
+                    while (!iters.empty())
+                    {
+                        std::size_t minIdx = 0;
+
+                        // do a search for minimum on contiguous memory
+                        const std::size_t numIters = iters.size();
+                        for (std::size_t i = 1; i < numIters; ++i)
+                        {
+                            if (cmp(nextValues[i], nextValues[minIdx]))
+                            {
+                                minIdx = i;
+                            }
+                        }
+
+                        // write the minimum value
+                        func(nextValues[minIdx]);
+
+                        // update iterator
+                        auto& it = ++iters[minIdx].begin();
+
+                        // if it's at the end remove it
+                        if (it == iters[minIdx].end())
+                        {
+                            removeIter(minIdx);
+                        }
+                        else
+                        {
+                            // else we update the next value for this iterator
+                            nextValues[minIdx] = *it;
+                        }
+
+                        ++numProcessed;
+                        if (numProcessed >= progressCallbackThreshold)
+                        {
+                            progress.reportWork(numProcessed);
+                            numProcessed = 0;
+                        }
+                    }
+                }
+            }
+
+            progress.reportWork(numProcessed);
+        }
+
         template <typename T, typename ContainerT, typename CompT, typename ProgressCallbackT>
         void merge_impl(
             std::size_t maxMemoryBytes,
@@ -2675,6 +2837,88 @@ namespace ext
 
             merge_no_recurse<T, ContainerT>(maxMemoryBytes, parts, outFile, cmp, progress);
         }
+
+        template <typename T, typename ContainerT, typename CompT, typename ProgressCallbackT, typename FuncT>
+        void merge_for_each_impl(
+            std::size_t maxMemoryBytes,
+            const std::filesystem::path& tempdir,
+            ContainerIterRange<ContainerT> in,
+            FuncT&& func,
+            CompT cmp,
+            detail::Progress<ProgressCallbackT>& progress
+        )
+        {
+            // TODO: sfinae if other types can be merged
+            static_assert(std::is_same_v<typename ContainerT::value_type, ImmutableSpan<T>>);
+
+            const std::size_t numInputs = in.distance();
+
+            if (numInputs <= maxNumMergedInputs)
+            {
+                merge_for_each_no_recurse<T, ContainerT>(maxMemoryBytes, in, std::forward<FuncT>(func), cmp, progress);
+                return;
+            }
+
+            // IMPORTANT: temporary files need to be deleted after parts!
+            TemporaryPaths temporaryFiles(tempdir);
+
+            std::vector<ImmutableSpan<T>> parts;
+            parts.reserve(maxNumMergedInputs);
+
+            // prepare at most maxNumMergedInputs parts
+            // each part is made from 128 files at most
+            const std::size_t numInputsPerPart = maxNumMergedInputs;
+            std::size_t offset = 0;
+            for (; offset + numInputsPerPart < numInputs; offset += numInputsPerPart)
+            {
+                BinaryOutputFile partOut(temporaryFiles.next());
+                merge_impl<T, ContainerT>(
+                    maxMemoryBytes,
+                    tempdir,
+                    {
+                        std::next(std::begin(in), offset),
+                        std::next(std::begin(in), offset + numInputsPerPart)
+                    },
+                    partOut,
+                    cmp,
+                    progress
+                    );
+                parts.emplace_back(partOut.seal());
+            }
+
+            // we may have some inputs left
+            if (offset < numInputs)
+            {
+                if (parts.size() + (numInputs - offset) <= maxNumMergedInputs)
+                {
+                    // use the rest of the files as is if in total it would fit for one batch
+                    while (offset != numInputs)
+                    {
+                        parts.emplace_back(*std::next(std::begin(in), offset));
+                        ++offset;
+                    }
+                }
+                else
+                {
+                    BinaryOutputFile partOut(temporaryFiles.next());
+                    merge_impl<T, ContainerT>(
+                        maxMemoryBytes,
+                        tempdir,
+                        {
+                            std::next(std::begin(in), offset),
+                            std::end(in)
+                        },
+                        partOut,
+                        cmp,
+                        progress
+                        );
+
+                    parts.emplace_back(partOut.seal());
+                }
+            }
+
+            merge_for_each_no_recurse<T, ContainerT>(maxMemoryBytes, parts, std::forward<FuncT>(func), cmp, progress);
+        }
     }
 
     template <typename T, typename CompT = std::less<>>
@@ -2704,6 +2948,36 @@ namespace ext
         progress.setTotalWork(detail::merge::merge_assess_work<T, std::vector<ImmutableSpan<T>>>(in));
         return detail::merge::merge_impl<T, const std::vector<ImmutableSpan<T>>>(
             aux.memory, aux.tempdir, in, outFile, cmp, progress
+            );
+    }
+
+    template <typename T, typename FuncT, typename CompT = std::less<>>
+    void merge_for_each(
+        const AuxilaryStorage & aux,
+        const std::vector<ImmutableSpan<T>> & in,
+        FuncT && func,
+        CompT cmp = CompT{}
+    )
+    {
+        auto progress = detail::noProgressCallback();
+        return detail::merge::merge_for_each_impl<T, const std::vector<ImmutableSpan<T>>>(
+            aux.memory, aux.tempdir, in, std::forward<FuncT>(func), cmp, progress
+            );
+    }
+
+    template <typename T, typename ProgressCallbackT, typename FuncT, typename CompT = std::less<>>
+    void merge_for_each(
+        ProgressCallbackT && callback,
+        const AuxilaryStorage & aux,
+        const std::vector<ImmutableSpan<T>> & in,
+        FuncT&& func,
+        CompT cmp = CompT{}
+    )
+    {
+        auto progress = detail::Progress(callback);
+        progress.setTotalWork(detail::merge::merge_assess_work<T, std::vector<ImmutableSpan<T>>>(in));
+        return detail::merge::merge_for_each_impl<T, const std::vector<ImmutableSpan<T>>>(
+            aux.memory, aux.tempdir, in, std::forward<FuncT>(func), cmp, progress
             );
     }
 

@@ -1402,8 +1402,8 @@ void testHddQuery(std::string name)
 int main()
 {
     //testQuery();
-    //newFormatTests(".v2");
-    testHddQuery(".v2");
+    newFormatTests(".v3");
+    testHddQuery(".v3");
 
     
     app::App app;

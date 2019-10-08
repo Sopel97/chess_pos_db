@@ -46,7 +46,7 @@ namespace persistence
             }
 
             static constexpr bool useIndex = true;
-            static constexpr bool usePacked = true;
+            static constexpr bool usePacked = false;
 
             // Have ranges of mixed values be at most this long
             static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["hdd"]["index_granularity"].get<std::size_t>();
