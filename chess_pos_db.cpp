@@ -1410,7 +1410,7 @@ void testMerge(std::string name)
 int main()
 {
     //testQuery();
-    //newFormatBuild(".v2");
+    newFormatBuild(".v2");
     testMerge(".v2");
     testHddQuery(".v2");
 

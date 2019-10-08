@@ -45,7 +45,6 @@ namespace persistence
                 std::cerr << '\n';
             }
 
-            static constexpr bool useIndex = true;
             static constexpr bool usePacked = true;
 
             // Have ranges of mixed values be at most this long
@@ -453,57 +452,25 @@ namespace persistence
             static_assert(sizeof(Entry) == 16 + sizeof(CountAndGameOffsetType));
             static_assert(std::is_trivially_copyable_v<Entry>);
 
-            using IndexWithoutReverseMove = ext::RangeIndex<typename Entry::Signature, detail::Entry::CompareLessWithoutReverseMove>;
-            using IndexWithReverseMove = ext::RangeIndex<typename Entry::Signature, detail::Entry::CompareLessWithReverseMove>;
+            using Index = ext::RangeIndex<typename Entry::Signature, detail::Entry::CompareLessWithoutReverseMove>;
 
-            using Indexes = std::pair<IndexWithoutReverseMove, IndexWithReverseMove>;
-
-            struct IndexWithoutReverseMoveTag
-            {
-                using IndexType = IndexWithoutReverseMove;
-
-                constexpr static const char* suffix = "_index0";
-            };
-
-            struct IndexWithReverseMoveTag
-            {
-                using IndexType = IndexWithReverseMove;
-
-                constexpr static const char* suffix = "_index1";
-            };
-
-            template <typename IndexTagT>
             [[nodiscard]] std::filesystem::path pathForIndex(const std::filesystem::path& path)
             {
                 auto cpy = path;
-                cpy += IndexTagT::suffix;
+                cpy += "_index";
                 return cpy;
             }
 
-            template <typename IndexTagT>
             [[nodiscard]] auto readIndexFor(const std::filesystem::path& path)
             {
-                using IndexType = typename IndexTagT::IndexType;
-
-                if constexpr (useIndex)
-                {
-                    auto indexPath = pathForIndex<IndexTagT>(path);
-                    return IndexType(ext::readFile<typename IndexType::EntryType>(indexPath));
-                }
-                else
-                {
-                    return IndexType{};
-                }
+                auto indexPath = pathForIndex(path);
+                return Index(ext::readFile<typename Index::EntryType>(indexPath));
             }
 
-            template <typename IndexTagT>
-            void writeIndexFor(const std::filesystem::path& path, const typename IndexTagT::IndexType& index)
+            void writeIndexFor(const std::filesystem::path& path, const Index& index)
             {
-                if constexpr (useIndex)
-                {
-                    auto indexPath = pathForIndex<IndexTagT>(path);
-                    (void)ext::writeFile<typename IndexTagT::IndexType::EntryType>(indexPath, index.data(), index.size());
-                }
+                auto indexPath = pathForIndex(path);
+                (void)ext::writeFile<typename Index::EntryType>(indexPath, index.data(), index.size());
             }
 
             auto extractEntryKey = [](const Entry& entry) {
@@ -523,32 +490,28 @@ namespace persistence
 
             File(std::filesystem::path path) :
                 m_entries({ ext::Pooled{}, std::move(path) }),
-                m_indexWithoutReverseMove(detail::readIndexFor<detail::IndexWithoutReverseMoveTag>(m_entries.path())),
-                m_indexWithReverseMove(detail::readIndexFor<detail::IndexWithReverseMoveTag>(m_entries.path())),
+                m_index(detail::readIndexFor(m_entries.path())),
                 m_id(std::stoi(m_entries.path().filename().string()))
             {
             }
 
             File(ext::ImmutableSpan<detail::Entry>&& entries) :
                 m_entries(std::move(entries)),
-                m_indexWithoutReverseMove(detail::readIndexFor<detail::IndexWithoutReverseMoveTag>(m_entries.path())),
-                m_indexWithReverseMove(detail::readIndexFor<detail::IndexWithReverseMoveTag>(m_entries.path())),
+                m_index(detail::readIndexFor(m_entries.path())),
                 m_id(std::stoi(m_entries.path().filename().string()))
             {
             }
 
-            File(std::filesystem::path path, detail::Indexes&& index) :
+            File(std::filesystem::path path, detail::Index&& index) :
                 m_entries({ ext::Pooled{}, std::move(path) }),
-                m_indexWithoutReverseMove(std::move(index.first)),
-                m_indexWithReverseMove(std::move(index.second)),
+                m_index(std::move(index)),
                 m_id(std::stoi(m_entries.path().filename().string()))
             {
             }
 
-            File(ext::ImmutableSpan<detail::Entry>&& entries, detail::Indexes&& index) :
+            File(ext::ImmutableSpan<detail::Entry>&& entries, detail::Index&& index) :
                 m_entries(std::move(entries)),
-                m_indexWithoutReverseMove(std::move(index.first)),
-                m_indexWithReverseMove(std::move(index.second)),
+                m_index(std::move(index)),
                 m_id(std::stoi(m_entries.path().filename().string()))
             {
             }
@@ -582,8 +545,7 @@ namespace persistence
             {
                 std::cout << "Location: " << m_entries.path() << "\n";
                 std::cout << "Entry count: " << m_entries.size() << "\n";
-                std::cout << "Index size: " << m_indexWithoutReverseMove.size() << "\n";
-                std::cout << "Direct Index size: " << m_indexWithReverseMove.size() << "\n";
+                std::cout << "Index size: " << m_index.size() << "\n";
             }
 
             [[nodiscard]] FileQueryResult decodeQueryResultDirect(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const;
@@ -594,8 +556,7 @@ namespace persistence
 
         private:
             ext::ImmutableSpan<detail::Entry> m_entries;
-            detail::IndexWithoutReverseMove m_indexWithoutReverseMove;
-            detail::IndexWithReverseMove m_indexWithReverseMove;
+            detail::Index m_index;
             std::uint32_t m_id;
         };
 
@@ -748,7 +709,7 @@ namespace persistence
             for (std::size_t i = 0; i < keys.size(); ++i)
             {
                 auto& key = keys[i];
-                auto [a, b] = m_indexWithReverseMove.equal_range(key, end);
+                auto [a, b] = m_index.equal_range(key, end);
 
                 const std::size_t count = b.it - a.it;
                 if (count == 0) continue; // the range is empty, the value certainly does not exist
@@ -767,7 +728,7 @@ namespace persistence
             for (std::size_t i = 0; i < keys.size(); ++i)
             {
                 auto& key = keys[i];
-                auto [a, b] = m_indexWithoutReverseMove.equal_range(key, end);
+                auto [a, b] = m_index.equal_range(key, end);
 
                 const std::size_t count = b.it - a.it;
                 if (count == 0) continue; // the range is empty, the value certainly does not exist
@@ -780,7 +741,7 @@ namespace persistence
 
         struct FutureFile
         {
-            FutureFile(std::future<detail::Indexes>&& future, std::filesystem::path path) :
+            FutureFile(std::future<detail::Index>&& future, std::filesystem::path path) :
                 m_future(std::move(future)),
                 m_path(std::move(path)),
                 m_id(std::stoi(m_path.filename().string()))
@@ -799,12 +760,12 @@ namespace persistence
 
             [[nodiscard]] File get()
             {
-                detail::Indexes indexes = m_future.get();
-                return { m_path, std::move(indexes) };
+                detail::Index index = m_future.get();
+                return { m_path, std::move(index) };
             }
 
         private:
-            std::future<detail::Indexes> m_future;
+            std::future<detail::Index> m_future;
             std::filesystem::path m_path;
             std::uint32_t m_id;
         };
@@ -815,18 +776,16 @@ namespace persistence
         private:
             struct Job
             {
-                Job(std::filesystem::path path, std::vector<detail::Entry>&& buffer, std::promise<detail::Indexes>&& promise, bool createIndex = detail::useIndex) :
+                Job(std::filesystem::path path, std::vector<detail::Entry>&& buffer, std::promise<detail::Index>&& promise) :
                     path(std::move(path)),
                     buffer(std::move(buffer)),
-                    promise(std::move(promise)),
-                    createIndex(createIndex)
+                    promise(std::move(promise))
                 {
                 }
 
                 std::filesystem::path path;
                 std::vector<detail::Entry> buffer;
-                std::promise<detail::Indexes> promise;
-                bool createIndex;
+                std::promise<detail::Index> promise;
             };
 
         public:
@@ -857,13 +816,13 @@ namespace persistence
                 waitForCompletion();
             }
 
-            [[nodiscard]] std::future<detail::Indexes> scheduleUnordered(const std::filesystem::path& path, std::vector<detail::Entry>&& elements, bool createIndex = detail::useIndex)
+            [[nodiscard]] std::future<detail::Index> scheduleUnordered(const std::filesystem::path& path, std::vector<detail::Entry>&& elements)
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
-                std::promise<detail::Indexes> promise;
-                std::future<detail::Indexes> future = promise.get_future();
-                m_sortQueue.emplace(path, std::move(elements), std::move(promise), createIndex);
+                std::promise<detail::Index> promise;
+                std::future<detail::Index> future = promise.get_future();
+                m_sortQueue.emplace(path, std::move(elements), std::move(promise));
 
                 lock.unlock();
                 m_sortQueueNotEmpty.notify_one();
@@ -871,13 +830,13 @@ namespace persistence
                 return future;
             }
 
-            [[nodiscard]] std::future<detail::Indexes> scheduleOrdered(const std::filesystem::path& path, std::vector<detail::Entry>&& elements, bool createIndex = detail::useIndex)
+            [[nodiscard]] std::future<detail::Index> scheduleOrdered(const std::filesystem::path& path, std::vector<detail::Entry>&& elements)
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
-                std::promise<detail::Indexes> promise;
-                std::future<detail::Indexes> future = promise.get_future();
-                m_sortQueue.emplace(path, std::move(elements), std::move(promise), createIndex);
+                std::promise<detail::Index> promise;
+                std::future<detail::Index> future = promise.get_future();
+                m_sortQueue.emplace(path, std::move(elements), std::move(promise));
 
                 lock.unlock();
                 m_writeQueueNotEmpty.notify_one();
@@ -981,18 +940,9 @@ namespace persistence
 
                     lock.unlock();
 
-                    if (job.createIndex)
-                    {
-                        detail::IndexWithoutReverseMove index0 = ext::makeIndex(job.buffer, detail::indexGranularity, detail::Entry::CompareLessWithoutReverseMove{}, detail::extractEntryKey);
-                        detail::IndexWithReverseMove index1 = ext::makeIndex(job.buffer, detail::indexGranularity, detail::Entry::CompareLessWithReverseMove{}, detail::extractEntryKey);
-                        detail::writeIndexFor<detail::IndexWithoutReverseMoveTag>(job.path, index0);
-                        detail::writeIndexFor<detail::IndexWithReverseMoveTag>(job.path, index1);
-                        job.promise.set_value(std::make_pair(std::move(index0), std::move(index1)));
-                    }
-                    else
-                    {
-                        job.promise.set_value(detail::Indexes{});
-                    }
+                    detail::Index index = ext::makeIndex(job.buffer, detail::indexGranularity, detail::Entry::CompareLessWithoutReverseMove{}, detail::extractEntryKey);
+                    detail::writeIndexFor(job.path, index);
+                    job.promise.set_value(std::move(index));
 
                     (void)ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
 
@@ -1102,8 +1052,7 @@ namespace persistence
                 auto newFilePath = outFilePath;
                 newFilePath.replace_filename(std::to_string(id));
                 std::filesystem::rename(outFilePath, newFilePath);
-                std::filesystem::rename(detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(outFilePath), detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(newFilePath));
-                std::filesystem::rename(detail::pathForIndex<detail::IndexWithReverseMoveTag>(outFilePath), detail::pathForIndex<detail::IndexWithReverseMoveTag>(newFilePath));
+                std::filesystem::rename(detail::pathForIndex(outFilePath), detail::pathForIndex(newFilePath));
 
                 m_files.emplace_back(newFilePath, std::move(index));
             }
@@ -1124,18 +1073,7 @@ namespace persistence
                 {
                     auto path = m_files.front().path();
                     std::filesystem::copy_file(path, outFilePath, std::filesystem::copy_options::overwrite_existing);
-
-                    {
-                        auto fromIndexPath0 = detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(path);
-                        auto toIndexPath0 = detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(outFilePath);
-                        std::filesystem::copy_file(fromIndexPath0, toIndexPath0, std::filesystem::copy_options::overwrite_existing);
-                    }
-
-                    {
-                        auto fromIndexPath1 = detail::pathForIndex<detail::IndexWithReverseMoveTag>(path);
-                        auto toIndexPath1 = detail::pathForIndex<detail::IndexWithReverseMoveTag>(outFilePath);
-                        std::filesystem::copy_file(fromIndexPath1, toIndexPath1, std::filesystem::copy_options::overwrite_existing);
-                    }
+                    std::filesystem::copy_file(detail::pathForIndex(path), detail::pathForIndex(outFilePath), std::filesystem::copy_options::overwrite_existing);
                 }
                 else
                 {
@@ -1229,14 +1167,9 @@ namespace persistence
                     m_files.pop_back();
 
                     std::filesystem::remove(path);
-                    if constexpr (detail::useIndex)
-                    {
-                        auto indexPath0 = detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(path);
-                        auto indexPath1 = detail::pathForIndex<detail::IndexWithReverseMoveTag>(path);
 
-                        std::filesystem::remove(indexPath0);
-                        std::filesystem::remove(indexPath1);
-                    }
+                    auto indexPath = detail::pathForIndex(path);
+                    std::filesystem::remove(indexPath);
                 }
             }
 
@@ -1267,19 +1200,14 @@ namespace persistence
                 return pathForId(nextId());
             }
 
-            [[nodiscard]] detail::Indexes mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::ProgressReport&)> progressCallback) const
+            [[nodiscard]] detail::Index mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::ProgressReport&)> progressCallback) const
             {
                 ASSERT(!m_files.empty());
 
-                ext::IndexBuilder<detail::Entry, detail::Entry::CompareLessWithoutReverseMove, decltype(detail::extractEntryKey)> ib0(detail::indexGranularity, {}, detail::extractEntryKey);
-                ext::IndexBuilder<detail::Entry, detail::Entry::CompareLessWithReverseMove, decltype(detail::extractEntryKey)> ib1(detail::indexGranularity, {}, detail::extractEntryKey);
+                ext::IndexBuilder<detail::Entry, detail::Entry::CompareLessWithoutReverseMove, decltype(detail::extractEntryKey)> ib(detail::indexGranularity, {}, detail::extractEntryKey);
                 {
-                    auto onWrite = [&ib0, &ib1](const std::byte* data, std::size_t elementSize, std::size_t count) {
-                        if constexpr (detail::useIndex)
-                        {
-                            ib0.append(reinterpret_cast<const detail::Entry*>(data), count);
-                            ib1.append(reinterpret_cast<const detail::Entry*>(data), count);
-                        }
+                    auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
+                        ib.append(reinterpret_cast<const detail::Entry*>(data), count);
                     };
 
                     ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
@@ -1323,15 +1251,10 @@ namespace persistence
                     }
                 }
 
-                detail::IndexWithoutReverseMove index0 = ib0.end();
-                detail::IndexWithReverseMove index1 = ib1.end();
-                if constexpr (detail::useIndex)
-                {
-                    detail::writeIndexFor<detail::IndexWithoutReverseMoveTag>(outFilePath, index0);
-                    detail::writeIndexFor<detail::IndexWithReverseMoveTag>(outFilePath, index1);
-                }
+                detail::Index index = ib.end();
+                detail::writeIndexFor(outFilePath, index);
 
-                return std::make_pair(std::move(index0), std::move(index1));
+                return std::move(index);
             }
 
             void discoverFiles()
