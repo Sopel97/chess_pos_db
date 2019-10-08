@@ -1226,7 +1226,7 @@ void testQuery()
     std::cout << nlohmann::json(result).dump(4) << '\n';
 }
 
-void newFormatTests(std::string name)
+void newFormatBuild(std::string name)
 {
     persistence::hdd::Database db("w:/catobase/" + name);
     //persistence::hdd::Database db("c:/dev/chess_pos_db/.v2");
@@ -1399,11 +1399,20 @@ void testHddQuery(std::string name)
     }
 }
 
+void testMerge(std::string name)
+{
+    persistence::hdd::Database db("w:/catobase/" + name);
+    
+    //db.mergeAll();
+    db.replicateMergeAll("c:/dev/chess_pos_db/.v2");
+}
+
 int main()
 {
     //testQuery();
-    newFormatTests(".v3");
-    testHddQuery(".v3");
+    //newFormatBuild(".v2");
+    testMerge(".v2");
+    testHddQuery(".v2");
 
     
     app::App app;

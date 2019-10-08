@@ -916,6 +916,8 @@ namespace persistence
                 auto newFilePath = outFilePath;
                 newFilePath.replace_filename(std::to_string(id));
                 std::filesystem::rename(outFilePath, newFilePath);
+                std::filesystem::rename(detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(outFilePath), detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(newFilePath));
+                std::filesystem::rename(detail::pathForIndex<detail::IndexWithReverseMoveTag>(outFilePath), detail::pathForIndex<detail::IndexWithReverseMoveTag>(newFilePath));
 
                 m_files.emplace_back(newFilePath, std::move(index));
             }

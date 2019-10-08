@@ -46,7 +46,7 @@ namespace persistence
             }
 
             static constexpr bool useIndex = true;
-            static constexpr bool usePacked = false;
+            static constexpr bool usePacked = true;
 
             // Have ranges of mixed values be at most this long
             static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["hdd"]["index_granularity"].get<std::size_t>();
@@ -1083,6 +1083,66 @@ namespace persistence
                 }
             }
 
+            void mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback)
+            {
+                if (m_files.size() < 2)
+                {
+                    return;
+                }
+
+                const auto outFilePath = m_path / "merge_tmp";
+                const std::uint32_t id = m_files.front().id();
+                auto index = mergeAllIntoFile(outFilePath, progressCallback);
+
+                // We haven't added the new files yet so they won't be removed.
+                clear();
+
+                // We had to use a temporary name because we're working in the same directory.
+                // Now we can safely rename after old ones are removed.
+                auto newFilePath = outFilePath;
+                newFilePath.replace_filename(std::to_string(id));
+                std::filesystem::rename(outFilePath, newFilePath);
+                std::filesystem::rename(detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(outFilePath), detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(newFilePath));
+                std::filesystem::rename(detail::pathForIndex<detail::IndexWithReverseMoveTag>(outFilePath), detail::pathForIndex<detail::IndexWithReverseMoveTag>(newFilePath));
+
+                m_files.emplace_back(newFilePath, std::move(index));
+            }
+
+            // outPath is a path of the file to output to
+            void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback)
+            {
+                if (m_files.empty())
+                {
+                    return;
+                }
+
+                ASSERT(outPath != path());
+
+                const auto outFilePath = outPath / "0";
+
+                if (m_files.size() == 1)
+                {
+                    auto path = m_files.front().path();
+                    std::filesystem::copy_file(path, outFilePath, std::filesystem::copy_options::overwrite_existing);
+
+                    {
+                        auto fromIndexPath0 = detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(path);
+                        auto toIndexPath0 = detail::pathForIndex<detail::IndexWithoutReverseMoveTag>(outFilePath);
+                        std::filesystem::copy_file(fromIndexPath0, toIndexPath0, std::filesystem::copy_options::overwrite_existing);
+                    }
+
+                    {
+                        auto fromIndexPath1 = detail::pathForIndex<detail::IndexWithReverseMoveTag>(path);
+                        auto toIndexPath1 = detail::pathForIndex<detail::IndexWithReverseMoveTag>(outFilePath);
+                        std::filesystem::copy_file(fromIndexPath1, toIndexPath1, std::filesystem::copy_options::overwrite_existing);
+                    }
+                }
+                else
+                {
+                    (void)mergeAllIntoFile(outFilePath, progressCallback);
+                }
+            }
+
             // data has to be sorted in ascending order
             void storeOrdered(const detail::Entry* data, std::size_t count)
             {
@@ -1205,6 +1265,73 @@ namespace persistence
             [[nodiscard]] std::filesystem::path nextPath() const
             {
                 return pathForId(nextId());
+            }
+
+            [[nodiscard]] detail::Indexes mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::ProgressReport&)> progressCallback) const
+            {
+                ASSERT(!m_files.empty());
+
+                ext::IndexBuilder<detail::Entry, detail::Entry::CompareLessWithoutReverseMove, decltype(detail::extractEntryKey)> ib0(detail::indexGranularity, {}, detail::extractEntryKey);
+                ext::IndexBuilder<detail::Entry, detail::Entry::CompareLessWithReverseMove, decltype(detail::extractEntryKey)> ib1(detail::indexGranularity, {}, detail::extractEntryKey);
+                {
+                    auto onWrite = [&ib0, &ib1](const std::byte* data, std::size_t elementSize, std::size_t count) {
+                        if constexpr (detail::useIndex)
+                        {
+                            ib0.append(reinterpret_cast<const detail::Entry*>(data), count);
+                            ib1.append(reinterpret_cast<const detail::Entry*>(data), count);
+                        }
+                    };
+
+                    ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
+                    std::vector<ext::ImmutableSpan<detail::Entry>> files;
+                    files.reserve(m_files.size());
+                    for (auto&& file : m_files)
+                    {
+                        files.emplace_back(file.entries());
+                    }
+
+                    {
+                        const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<detail::Entry>(mergeMemory / 32, 2);
+                        ext::BackInserter<detail::Entry> out(outFile, ext::DoubleBuffer<detail::Entry>(outBufferSize));
+
+                        auto cmp = detail::Entry::CompareEqualFull{};
+                        bool first = true;
+                        detail::Entry accumulator;
+                        auto append = [&](const detail::Entry& entry) {
+                            if (first)
+                            {
+                                first = false;
+                                accumulator = entry;
+                            }
+                            else if (cmp(accumulator, entry))
+                            {
+                                accumulator.combine(entry);
+                            }
+                            else
+                            {
+                                out.emplace(accumulator);
+                                accumulator = entry;
+                            }
+                        };
+
+                        ext::merge_for_each(progressCallback, { mergeMemory }, files, append, detail::Entry::CompareLessFull{});
+
+                        if (!first) // if we did anything, ie. accumulator holds something from merge
+                        {
+                            out.emplace(accumulator);
+                        }
+                    }
+                }
+
+                detail::IndexWithoutReverseMove index0 = ib0.end();
+                detail::IndexWithReverseMove index1 = ib1.end();
+                if constexpr (detail::useIndex)
+                {
+                    detail::writeIndexFor<detail::IndexWithoutReverseMoveTag>(outFilePath, index0);
+                    detail::writeIndexFor<detail::IndexWithReverseMoveTag>(outFilePath, index1);
+                }
+
+                return std::make_pair(std::move(index0), std::move(index1));
             }
 
             void discoverFiles()
@@ -1422,6 +1549,49 @@ namespace persistence
                     }
                 }
                 return results;
+            }
+
+            void mergeAll()
+            {
+                const std::size_t numPartitions = 9;
+                std::size_t i = 0;
+                detail::log(": Merging files...");
+
+                auto progressReport = [](const ext::ProgressReport& report) {
+                    detail::log(":     ", static_cast<int>(report.ratio() * 100), "%.");
+                };
+
+                m_partition.mergeAll(progressReport);
+
+                detail::log(": Finalizing...");
+                detail::log(": Completed.");
+            }
+
+            void replicateMergeAll(const std::filesystem::path& path)
+            {
+                if (std::filesystem::exists(path) && !std::filesystem::is_empty(path))
+                {
+                    throw std::runtime_error("Destination for replicating merge must be empty.");
+                }
+                std::filesystem::create_directories(path / partitionDirectory);
+
+                for (auto& header : m_headers)
+                {
+                    header.replicateTo(path);
+                }
+
+                const std::size_t numPartitions = 9;
+                std::size_t i = 0;
+                detail::log(": Merging files...");
+
+                auto progressReport = [](const ext::ProgressReport& report) {
+                    detail::log(":     ", static_cast<int>(report.ratio() * 100), "%.");
+                };
+
+                m_partition.replicateMergeAll(path / partitionDirectory, progressReport);
+
+                detail::log(": Finalizing...");
+                detail::log(": Completed.");
             }
 
             ImportStats importPgns(
