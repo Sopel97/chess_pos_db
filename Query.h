@@ -241,6 +241,25 @@ namespace query
                 }
             }
         }
+
+        [[nodiscard]] bool isValid() const
+        {
+            if (fetchingOptions.empty()) return false;
+            if (fetchingOptions.size() > 2) return false;
+            if (fetchingOptions.size() == 2 && fetchingOptions.count(Category::All) != 0) return false;
+            if (levels.empty()) return false;
+            if (results.empty()) return false;
+            
+            for (auto&& root : positions)
+            {
+                if (!root.tryGet().has_value())
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     };
 
     struct Entry
