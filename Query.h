@@ -68,9 +68,39 @@ namespace query
                 {
                     positionOpt->doMove(*moveOpt);
                 }
+                else
+                {
+                    return {};
+                }
             }
 
             return positionOpt;
+        }
+
+        [[nodiscard]] std::optional<std::pair<Position, ReverseMove>> tryGetWithHistory() const
+        {
+            std::optional<Position> positionOpt = Position::tryFromFen(fen);
+            ReverseMove reverseMove{};
+
+            if (!positionOpt.has_value())
+            {
+                return {};
+            }
+
+            if (move.has_value())
+            {
+                const std::optional<Move> moveOpt = san::trySanToMove(*positionOpt, *move);
+                if (moveOpt.has_value() && *moveOpt != Move::null())
+                {
+                    reverseMove = positionOpt->doMove(*moveOpt);
+                }
+                else
+                {
+                    return {};
+                }
+            }
+
+            return std::make_pair(*positionOpt, reverseMove);
         }
     };
 
@@ -455,4 +485,191 @@ namespace query
             };
         }
     };
+
+    enum struct PositionQueryOrigin
+    {
+        Root,
+        Child
+    };
+
+    enum struct CategoryMask : unsigned
+    {
+        None = 0,
+        OnlyContinuations = 1 << ordinal(Category::Continuations),
+        OnlyTranspositions = 1 << ordinal(Category::Transpositions),
+        AllSeparate = OnlyContinuations | OnlyTranspositions,
+        AllCombined = 1 << ordinal(Category::All)
+    };
+
+    [[nodiscard]] constexpr CategoryMask operator|(CategoryMask lhs, CategoryMask rhs)
+    {
+        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
+    }
+
+    [[nodiscard]] constexpr CategoryMask operator|(CategoryMask lhs, Category rhs)
+    {
+        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) | (1 << static_cast<unsigned>(rhs)));
+    }
+
+    [[nodiscard]] constexpr CategoryMask operator&(CategoryMask lhs, CategoryMask rhs)
+    {
+        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) & static_cast<unsigned>(rhs));
+    }
+
+    [[nodiscard]] constexpr CategoryMask operator&(CategoryMask lhs, Category rhs)
+    {
+        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) & (1 << static_cast<unsigned>(rhs)));
+    }
+
+    constexpr CategoryMask& operator|=(CategoryMask& lhs, CategoryMask rhs)
+    {
+        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
+        return lhs;
+    }
+
+    constexpr CategoryMask& operator|=(CategoryMask& lhs, Category rhs)
+    {
+        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) | (1 << static_cast<unsigned>(rhs)));
+        return lhs;
+    }
+
+    constexpr CategoryMask& operator&=(CategoryMask& lhs, CategoryMask rhs)
+    {
+        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) & static_cast<unsigned>(rhs));
+        return lhs;
+    }
+
+    constexpr CategoryMask& operator&=(CategoryMask& lhs, Category rhs)
+    {
+        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) & (1 << static_cast<unsigned>(rhs)));
+        return lhs;
+    }
+
+    [[nodiscard]] constexpr CategoryMask asMask(Category cat)
+    {
+        return static_cast<CategoryMask>(1 << static_cast<unsigned>(cat));
+    }
+
+    // checks whether lhs contains rhs
+    [[nodiscard]] constexpr bool contains(CategoryMask lhs, CategoryMask rhs)
+    {
+        return (lhs & rhs) == rhs;
+    }
+
+    [[nodiscard]] constexpr bool contains(CategoryMask lhs, Category rhs)
+    {
+        return (lhs & rhs) == asMask(rhs);
+    }
+
+    [[nodiscard]] constexpr bool isValid(CategoryMask mask)
+    {
+        return 
+            mask == CategoryMask::OnlyContinuations
+            || mask == CategoryMask::OnlyTranspositions
+            || mask == CategoryMask::AllSeparate
+            || mask == CategoryMask::AllCombined;
+    }
+
+    struct PositionQuerySet
+    {
+        struct EntryConstRef
+        {
+            const Position& position;
+            const ReverseMove& reverseMove;
+            const std::size_t fenId;
+            const PositionQueryOrigin origin;
+        };
+
+        PositionQuerySet(
+            std::vector<Position>&& positions,
+            std::vector<ReverseMove>&& reverseMoves,
+            std::vector<std::size_t>&& fenIds,
+            std::vector<PositionQueryOrigin>&& origins
+        ) :
+            m_positions(std::move(positions)),
+            m_reverseMoves(std::move(reverseMoves)),
+            m_fenIds(std::move(fenIds)),
+            m_origins(std::move(origins))
+        {
+        }
+
+        const auto& positions() const
+        {
+            return m_positions;
+        }
+
+        const auto& reverseMoves() const
+        {
+            return m_reverseMoves;
+        }
+
+        const auto& fenIds() const
+        {
+            return m_fenIds;
+        }
+
+        const auto& origins() const
+        {
+            return m_origins;
+        }
+
+        const EntryConstRef operator[](std::size_t i) const
+        {
+            return {
+                m_positions[i],
+                m_reverseMoves[i],
+                m_fenIds[i],
+                m_origins[i]
+            };
+        }
+
+    private:
+        std::vector<Position> m_positions;
+        std::vector<ReverseMove> m_reverseMoves;
+        std::vector<std::size_t> m_fenIds;
+        std::vector<PositionQueryOrigin> m_origins;
+    };
+
+    // Assumes all root positions in the query are valid.
+    [[nodiscard]] PositionQuerySet gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
+    {
+        // NOTE: we don't remove duplicates because there should be no
+        //       duplicates when we consider reverse move
+
+        std::vector<Position> positions;
+        std::vector<ReverseMove> reverseMoves;
+        std::vector<std::size_t> fenIds;
+        std::vector<PositionQueryOrigin> origins;
+        for (std::size_t i = 0; i < rootPositions.size(); ++i)
+        {
+            const auto& rootPos = rootPositions[i];
+
+            // If the fen is invalid we use the start position as a placeholder
+            // Then when reading the results we will disregard them if they come from an invalid fen.
+            const auto posOpt = rootPos.tryGetWithHistory();
+            if (!posOpt.has_value()) throw std::runtime_error("Invalid position in query");
+
+            const auto& pos = posOpt->first;
+            const auto& rev = posOpt->second;
+
+            positions.emplace_back(pos);
+            reverseMoves.emplace_back(rev);
+            fenIds.emplace_back(i);
+            origins.emplace_back(PositionQueryOrigin::Root);
+
+            // If the query is not valid we only need one placeholder, no need to query everything
+            if (fetchChildren)
+            {
+                movegen::forEachLegalMove(pos, [&](Move move) {
+                    auto posCpy = pos;
+                    reverseMoves.emplace_back(posCpy.doMove(move));
+                    positions.emplace_back(posCpy);
+                    fenIds.emplace_back(i);
+                    origins.emplace_back(PositionQueryOrigin::Child);
+                });
+            }
+        }
+
+        return { std::move(positions), std::move(reverseMoves), std::move(fenIds), std::move(origins) };
+    }
 }
