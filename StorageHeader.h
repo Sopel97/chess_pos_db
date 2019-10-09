@@ -263,6 +263,11 @@ namespace persistence
             }
         }
 
+        friend void from_json(const nlohmann::json& j, GameHeader& data)
+        {
+            // TODO: this
+        }
+
     private:
         std::uint32_t m_gameIdx;
         GameResult m_result;

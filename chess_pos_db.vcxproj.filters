@@ -104,6 +104,9 @@
     <ClInclude Include="HddStorageFormat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Query.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="info.txt">

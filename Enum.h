@@ -50,13 +50,13 @@ template <typename EnumT, typename FormatT>
 }
 
 template <typename EnumT>
-[[nodiscard]] EnumT fromString(std::string_view str)
+[[nodiscard]] decltype(auto) fromString(std::string_view str)
 {
     return EnumTraits<EnumT>::fromString(str);
 }
 
 template <typename EnumT, typename FormatT>
-[[nodiscard]] EnumT fromString(FormatT&& f, std::string_view str)
+[[nodiscard]] decltype(auto) fromString(FormatT&& f, std::string_view str)
 {
     return EnumTraits<EnumT>::fromString(std::forward<FormatT>(f), str);
 }
