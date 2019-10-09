@@ -420,18 +420,8 @@ namespace query
             std::map<Move, Entries, MoveCompareLess> children;
         };
 
-        Result(std::string fen) :
-            position{ std::move(fen) }
-        {
-        }
-
-        Result(std::string fen, std::string move) :
-            position{ std::move(fen), std::move(move) }
-        {
-        }
-
-        Result(std::string fen, std::optional<std::string> move) :
-            position{ std::move(fen), std::move(move) }
+        Result(const RootPosition& pos) :
+            position(pos)
         {
         }
 
@@ -576,19 +566,19 @@ namespace query
         {
             const Position& position;
             const ReverseMove& reverseMove;
-            const std::size_t fenId;
+            const std::size_t rootId;
             const PositionQueryOrigin origin;
         };
 
         PositionQuerySet(
             std::vector<Position>&& positions,
             std::vector<ReverseMove>&& reverseMoves,
-            std::vector<std::size_t>&& fenIds,
+            std::vector<std::size_t>&& rootIds,
             std::vector<PositionQueryOrigin>&& origins
         ) :
             m_positions(std::move(positions)),
             m_reverseMoves(std::move(reverseMoves)),
-            m_fenIds(std::move(fenIds)),
+            m_rootIds(std::move(rootIds)),
             m_origins(std::move(origins))
         {
         }
@@ -603,9 +593,9 @@ namespace query
             return m_reverseMoves;
         }
 
-        const auto& fenIds() const
+        const auto& rootIds() const
         {
-            return m_fenIds;
+            return m_rootIds;
         }
 
         const auto& origins() const
@@ -618,7 +608,7 @@ namespace query
             return {
                 m_positions[i],
                 m_reverseMoves[i],
-                m_fenIds[i],
+                m_rootIds[i],
                 m_origins[i]
             };
         }
@@ -626,7 +616,7 @@ namespace query
     private:
         std::vector<Position> m_positions;
         std::vector<ReverseMove> m_reverseMoves;
-        std::vector<std::size_t> m_fenIds;
+        std::vector<std::size_t> m_rootIds;
         std::vector<PositionQueryOrigin> m_origins;
     };
 
@@ -667,5 +657,54 @@ namespace query
         }
 
         return { std::move(positions), std::move(reverseMoves), std::move(fenIds), std::move(origins) };
+    }
+
+    [[nodiscard]] PositionQuerySet gatherPositionsForRootPositions(const Request& query)
+    {
+        const bool fetchChildren = std::any_of(
+            query.fetchingOptions.begin(), 
+            query.fetchingOptions.end(), 
+            [](auto&& v) {return v.second.fetchChildren; }
+        );
+        return gatherPositionsForRootPositions(query.positions, fetchChildren);
+    }
+
+    // This is the result type to be used by databases' query functions
+    // It is flatter, allows easier in memory manipulation.
+    using PositionQueryResultSet = std::vector<EnumMap<Category, Entries>>;
+
+    [[nodiscard]] std::vector<Result> unflatten(PositionQueryResultSet&& raw, const Request& query, const PositionQuerySet& individialQueries)
+    {
+        std::vector<Result> results;
+        for (auto&& rootPosition : query.positions)
+        {
+            results.emplace_back(rootPosition);
+        }
+
+        const std::size_t size = raw.size();
+        for(std::size_t i = 0; i < size; ++i)
+        {
+            auto&& entriesByCategory = raw[i];
+            auto [position, reverseMove, rootId, origin] = individialQueries[i];
+
+            for (auto&& [cat, fetch] : query.fetchingOptions)
+            {
+                if (origin == PositionQueryOrigin::Child && !fetch.fetchChildren)
+                {
+                    continue;
+                }
+
+                auto&& entries = entriesByCategory[cat];
+
+                auto& entriesDestination =
+                    origin == PositionQueryOrigin::Child
+                    ? results[rootId].resultsByCategory[cat].children[reverseMove.move]
+                    : results[rootId].resultsByCategory[cat].root;
+
+                entriesDestination = std::move(entries);
+            }
+        }
+
+        return results;
     }
 }
