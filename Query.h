@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Assert.h"
 #include "Enum.h"
 #include "GameClassification.h"
 #include "Position.h"
@@ -389,6 +390,32 @@ namespace query
             }
         }
 
+        Entry& at(GameLevel level, GameResult result)
+        {
+            for (auto&& [origin, entry] : m_entries)
+            {
+                if (origin.level == level && origin.result == result)
+                {
+                    return entry;
+                }
+            }
+
+            throw std::out_of_range("");
+        }
+
+        const Entry& at(GameLevel level, GameResult result) const
+        {
+            for (auto&& [origin, entry] : m_entries)
+            {
+                if (origin.level == level && origin.result == result)
+                {
+                    return entry;
+                }
+            }
+
+            throw std::out_of_range("");
+        }
+
     private:
         std::vector<std::pair<Origin, Entry>> m_entries;
     };
@@ -706,5 +733,39 @@ namespace query
         }
 
         return results;
+    }
+
+    struct GameHeaderDestination
+    {
+        using HeaderMemberPtr = std::optional<persistence::GameHeader> Entry::*;
+
+        GameHeaderDestination(std::size_t queryId, Category category, GameLevel level, GameResult result, HeaderMemberPtr headerPtr) :
+            queryId(queryId),
+            category(category),
+            level(level),
+            result(result),
+            headerPtr(headerPtr)
+        {
+        }
+
+        std::size_t queryId;
+        Category category;
+        GameLevel level;
+        GameResult result;
+        HeaderMemberPtr headerPtr;
+    };
+
+    void assignGameHeaders(PositionQueryResultSet& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers)
+    {
+        ASSERT(destination.size() == headers.size());
+
+        const std::size_t size = destinations.size();
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            auto&& [queryId, category, level, result, headerPtr] = destinations[i];
+
+            auto& entry = raw[queryId][category].at(level, result);
+            (entry.*headerPtr).emplace(std::move(headers[i]));
+        }
     }
 }
