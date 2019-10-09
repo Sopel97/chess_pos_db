@@ -4,6 +4,7 @@
 #include "Eco.h"
 #include "External.h"
 #include "Pgn.h"
+#include "Unsort.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -357,79 +358,40 @@ namespace persistence
             std::filesystem::copy_file(m_indexPath, newIndexPath, std::filesystem::copy_options::overwrite_existing);
         }
 
-        [[nodiscard]] std::vector<PackedGameHeader> queryByIndices(const std::vector<std::uint32_t>& keys)
+        [[nodiscard]] std::vector<PackedGameHeader> queryByOffsets(std::vector<std::uint64_t> offsets)
         {
-            // TODO: think about a good abstraction for iterating in a sorted order
-            //       with ability to retrieve original indices
+            const std::size_t numKeys = offsets.size();
 
-            const std::size_t numKeys = keys.size();
-
-            std::vector<std::uint32_t> orderedKeys;
-            std::vector<std::size_t> originalIds;
-            std::vector<std::pair<std::uint32_t, std::size_t>> compound;
-            orderedKeys.reserve(numKeys);
-            originalIds.reserve(numKeys);
-            compound.reserve(numKeys);
-            for (std::size_t i = 0; i < numKeys; ++i)
-            {
-                compound.emplace_back(keys[i], i);
-            }
-            std::sort(compound.begin(), compound.end(), [](auto&& lhs, auto&& rhs) { return lhs.first < rhs.first; });
-            for (auto&& [key, id] : compound)
-            {
-                orderedKeys.emplace_back(key);
-                originalIds.emplace_back(id);
-            }
-
-            std::vector<std::size_t> offsets;
-            offsets.reserve(numKeys);
-            for (auto& key : orderedKeys)
-            {
-                offsets.emplace_back(m_index[key]);
-            }
+            auto unsort = reversibleSort(offsets);
 
             std::vector<PackedGameHeader> headers;
-            headers.resize(numKeys);
+            headers.reserve(numKeys);
             for (std::size_t i = 0; i < numKeys; ++i)
             {
-                headers[originalIds[i]] = PackedGameHeader(m_header, offsets[i]);
+                headers.emplace_back(m_header, offsets[i]);
             }
+
+            unsort(headers);
 
             return headers;
         }
 
-        [[nodiscard]] std::vector<PackedGameHeader> queryByOffsets(const std::vector<std::uint64_t>& keys)
+        [[nodiscard]] std::vector<PackedGameHeader> queryByIndices(std::vector<std::uint32_t> keys)
         {
-            // TODO: think about a good abstraction for iterating in a sorted order
-            //       with ability to retrieve original indices
-
             const std::size_t numKeys = keys.size();
 
-            std::vector<std::uint64_t> orderedKeys;
-            std::vector<std::size_t> originalIds;
-            std::vector<std::pair<std::uint64_t, std::size_t>> compound;
-            orderedKeys.reserve(numKeys);
-            originalIds.reserve(numKeys);
-            compound.reserve(numKeys);
-            for (std::size_t i = 0; i < numKeys; ++i)
+            auto unsort = reversibleSort(keys);
+
+            std::vector<std::size_t> offsets;
+            offsets.reserve(numKeys);
+            for (auto& key : keys)
             {
-                compound.emplace_back(keys[i], i);
-            }
-            std::sort(compound.begin(), compound.end(), [](auto&& lhs, auto&& rhs) { return lhs.first < rhs.first; });
-            for (auto&& [key, id] : compound)
-            {
-                orderedKeys.emplace_back(key);
-                originalIds.emplace_back(id);
+                offsets.emplace_back(m_index[key]);
             }
 
-            std::vector<PackedGameHeader> headers;
-            headers.resize(numKeys);
-            for (std::size_t i = 0; i < numKeys; ++i)
-            {
-                headers[originalIds[i]] = PackedGameHeader(m_header, orderedKeys[i]);
-            }
+            unsort(offsets);
 
-            return headers;
+            return queryByOffsets(offsets);
         }
 
         // returns the index of the header (not the address)

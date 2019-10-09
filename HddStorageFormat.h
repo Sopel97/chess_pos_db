@@ -8,6 +8,7 @@
 #include "Pgn.h"
 #include "PositionSignature.h"
 #include "StorageHeader.h"
+#include "Unsort.h"
 
 #include <algorithm>
 #include <array>
@@ -1420,7 +1421,6 @@ namespace persistence
                 return m_headers[level].queryByOffsets(offsets);
             }
 
-            // TODO: refactor
             // We don't have QueryTarget here because we query all at once anyway.
             [[nodiscard]] std::vector<QueryResult> queryRanges(
                 const std::vector<Position>& positions,
@@ -1429,48 +1429,31 @@ namespace persistence
             {
                 const std::size_t numPositions = positions.size();
 
-                std::vector<PositionSignatureWithReverseMoveAndGameClassification> orderedKeys;
-                std::vector<std::size_t> originalIds;
-                std::vector<std::pair<PositionSignatureWithReverseMoveAndGameClassification, std::size_t>> compound;
-                orderedKeys.reserve(numPositions);
-                originalIds.reserve(numPositions);
-                compound.reserve(numPositions);
+                std::vector<PositionSignatureWithReverseMoveAndGameClassification> keys;
+                keys.reserve(numPositions);
                 for (std::size_t i = 0; i < numPositions; ++i)
                 {
                     if (reverseMoves.size() > i)
                     {
-                        compound.emplace_back(PositionSignatureWithReverseMoveAndGameClassification(positions[i], reverseMoves[i]), i);
+                        keys.emplace_back(positions[i], reverseMoves[i]);
                     }
                     else
                     {
-                        compound.emplace_back(PositionSignatureWithReverseMoveAndGameClassification(positions[i]), i);
+                        keys.emplace_back(positions[i]);
                     }
                 }
-
-                auto cmp = detail::Entry::CompareLessWithReverseMove{};
-                std::sort(compound.begin(), compound.end(), [cmp](auto&& lhs, auto&& rhs) { return cmp(lhs.first, rhs.first); });
-                for (auto&& [key, id] : compound)
-                {
-                    orderedKeys.emplace_back(key);
-                    originalIds.emplace_back(id);
-                }
+                auto unsort = reversibleSort(keys, detail::Entry::CompareLessWithReverseMove{});
 
                 std::vector<QueryResult> results;
+                results.resize(numPositions);
+                m_partition.query(results, keys);
+                if (!reverseMoves.empty())
                 {
-                    std::vector<QueryResult> orderedResults;
-                    orderedResults.resize(numPositions);
-                    m_partition.query(orderedResults, orderedKeys);
-                    if (!reverseMoves.empty())
-                    {
-                        m_partition.queryDirect(orderedResults, orderedKeys);
-                    }
-
-                    results.resize(numPositions);
-                    for (std::size_t i = 0; i < numPositions; ++i)
-                    {
-                        results[originalIds[i]] = orderedResults[i];
-                    }
+                    m_partition.queryDirect(results, keys);
                 }
+
+                unsort(results);
+
                 return results;
             }
 

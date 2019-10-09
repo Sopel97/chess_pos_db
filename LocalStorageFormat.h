@@ -8,6 +8,7 @@
 #include "Pgn.h"
 #include "PositionSignature.h"
 #include "StorageHeader.h"
+#include "Unsort.h"
 
 #include <algorithm>
 #include <array>
@@ -1230,7 +1231,6 @@ namespace persistence
                 return m_header.queryByIndices(indices);
             }
 
-            // TODO: refactor
             [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(
                 const std::vector<QueryTarget>& targets, 
                 const std::vector<Position>& positions,
@@ -1239,31 +1239,21 @@ namespace persistence
             {
                 const std::size_t numPositions = positions.size();
 
-                std::vector<PositionSignatureWithReverseMove> orderedKeys;
-                std::vector<std::size_t> originalIds;
-                std::vector<std::pair<PositionSignatureWithReverseMove, std::size_t>> compound;
-                orderedKeys.reserve(numPositions);
-                originalIds.reserve(numPositions);
-                compound.reserve(numPositions);
+                std::vector<PositionSignatureWithReverseMove> keys;
+                keys.reserve(numPositions);
                 for (std::size_t i = 0; i < numPositions; ++i)
                 {
                     if (reverseMoves.size() > i)
                     {
-                        compound.emplace_back(PositionSignatureWithReverseMove(positions[i], reverseMoves[i]), i);
+                        keys.emplace_back(positions[i], reverseMoves[i]);
                     }
                     else
                     {
-                        compound.emplace_back(PositionSignatureWithReverseMove(positions[i]), i);
+                        keys.emplace_back(positions[i]);
                     }
                 }
 
-                auto cmp = detail::Entry::CompareLessWithReverseMove{};
-                std::sort(compound.begin(), compound.end(), [cmp](auto&& lhs, auto&& rhs) { return cmp(lhs.first, rhs.first); });
-                for (auto&& [key, id] : compound)
-                {
-                    orderedKeys.emplace_back(key);
-                    originalIds.emplace_back(id);
-                }
+                auto unsort = reversibleSort(keys, detail::Entry::CompareLessWithReverseMove{});
 
                 EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> results;
                 for (auto&& target : targets)
@@ -1271,19 +1261,15 @@ namespace persistence
                     const GameLevel level = target.level;
                     const GameResult result = target.result;
 
-                    std::vector<QueryResult> orderedResults;
-                    orderedResults.resize(numPositions);
-                    m_partitions[level][result].queryRanges(orderedResults, orderedKeys);
+                    std::vector<QueryResult>& r = results[level][result];
+                    r.resize(numPositions);
+                    m_partitions[level][result].queryRanges(r, keys);
                     if (!reverseMoves.empty())
                     {
-                        m_partitions[level][result].queryDirectRanges(orderedResults, orderedKeys);
+                        m_partitions[level][result].queryDirectRanges(r, keys);
                     }
 
-                    results[level][result].resize(numPositions);
-                    for (std::size_t i = 0; i < numPositions; ++i)
-                    {
-                        results[level][result][originalIds[i]] = orderedResults[i];
-                    }
+                    unsort(r);
                 }
                 return results;
             }

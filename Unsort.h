@@ -16,7 +16,7 @@ struct Unsorter
     }
 
     template <typename T>
-    void unsort(std::vector<T>& values) const
+    void operator()(std::vector<T>& values) const
     {
         const std::size_t size = values.size();
 

@@ -22,6 +22,7 @@
 #include "PositionSignature.h"
 #include "Query.h"
 #include "San.h"
+#include "Unsort.h"
 
 #include "lib/json/json.hpp"
 
@@ -1411,8 +1412,8 @@ void testMerge(std::string name)
 int main()
 {
     //testQuery();
-    newFormatBuild(".v2");
-    testMerge(".v2");
+    //newFormatBuild(".v2");
+    //testMerge(".v2");
     testHddQuery(".v2");
 
     
