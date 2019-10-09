@@ -597,6 +597,8 @@ namespace query
             const PositionQueryOrigin origin;
         };
 
+        PositionQuerySet() = default;
+
         PositionQuerySet(
             std::vector<Position>&& positions,
             std::vector<ReverseMove>&& reverseMoves,
@@ -608,29 +610,40 @@ namespace query
             m_rootIds(std::move(rootIds)),
             m_origins(std::move(origins))
         {
+            ASSERT(m_positions.size() == m_reverseMoves.size());
+            ASSERT(m_positions.size() == m_rootIds.size());
+            ASSERT(m_positions.size() == m_origins.size());
         }
 
-        const auto& positions() const
+        [[nodiscard]] const auto& positions() const
         {
             return m_positions;
         }
 
-        const auto& reverseMoves() const
+        [[nodiscard]] const auto& reverseMoves() const
         {
             return m_reverseMoves;
         }
 
-        const auto& rootIds() const
+        [[nodiscard]] const auto& rootIds() const
         {
             return m_rootIds;
         }
 
-        const auto& origins() const
+        [[nodiscard]] const auto& origins() const
         {
             return m_origins;
         }
 
-        const EntryConstRef operator[](std::size_t i) const
+        void emplace(const Position& position, const ReverseMove& reverseMove, std::size_t rootId, PositionQueryOrigin origin)
+        {
+            m_positions.emplace_back(position);
+            m_reverseMoves.emplace_back(reverseMove);
+            m_rootIds.emplace_back(rootId);
+            m_origins.emplace_back(origin);
+        }
+
+        [[nodiscard]] const EntryConstRef operator[](std::size_t i) const
         {
             return {
                 m_positions[i],
@@ -638,6 +651,11 @@ namespace query
                 m_rootIds[i],
                 m_origins[i]
             };
+        }
+
+        [[nodiscard]] std::size_t size() const
+        {
+            return m_positions.size();
         }
 
     private:
@@ -649,13 +667,7 @@ namespace query
 
     [[nodiscard]] PositionQuerySet gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
     {
-        // NOTE: we don't remove duplicates because there should be no
-        //       duplicates when we consider reverse move
-
-        std::vector<Position> positions;
-        std::vector<ReverseMove> reverseMoves;
-        std::vector<std::size_t> fenIds;
-        std::vector<PositionQueryOrigin> origins;
+        PositionQuerySet queries;
         for (std::size_t i = 0; i < rootPositions.size(); ++i)
         {
             const auto& rootPos = rootPositions[i];
@@ -666,24 +678,19 @@ namespace query
             const auto& pos = posOpt->first;
             const auto& rev = posOpt->second;
 
-            positions.emplace_back(pos);
-            reverseMoves.emplace_back(rev);
-            fenIds.emplace_back(i);
-            origins.emplace_back(PositionQueryOrigin::Root);
+            queries.emplace(pos, rev, i, PositionQueryOrigin::Root);
 
             if (fetchChildren)
             {
                 movegen::forEachLegalMove(pos, [&](Move move) {
                     auto posCpy = pos;
-                    reverseMoves.emplace_back(posCpy.doMove(move));
-                    positions.emplace_back(posCpy);
-                    fenIds.emplace_back(i);
-                    origins.emplace_back(PositionQueryOrigin::Child);
+                    auto rev = posCpy.doMove(move);
+                    queries.emplace(posCpy, rev, i, PositionQueryOrigin::Child);
                 });
             }
         }
 
-        return { std::move(positions), std::move(reverseMoves), std::move(fenIds), std::move(origins) };
+        return queries;
     }
 
     [[nodiscard]] PositionQuerySet gatherPositionsForRootPositions(const Request& query)
@@ -718,6 +725,9 @@ namespace query
             {
                 if (origin == PositionQueryOrigin::Child && !fetch.fetchChildren)
                 {
+                    // We have to check for this because we may only want children
+                    // for one category. In this case we would just reassign empty Entries.
+                    // We don't want that because we would create nodes in the map.
                     continue;
                 }
 
