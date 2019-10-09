@@ -630,7 +630,6 @@ namespace query
         std::vector<PositionQueryOrigin> m_origins;
     };
 
-    // Assumes all root positions in the query are valid.
     [[nodiscard]] PositionQuerySet gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
     {
         // NOTE: we don't remove duplicates because there should be no
@@ -644,8 +643,6 @@ namespace query
         {
             const auto& rootPos = rootPositions[i];
 
-            // If the fen is invalid we use the start position as a placeholder
-            // Then when reading the results we will disregard them if they come from an invalid fen.
             const auto posOpt = rootPos.tryGetWithHistory();
             if (!posOpt.has_value()) throw std::runtime_error("Invalid position in query");
 
@@ -657,7 +654,6 @@ namespace query
             fenIds.emplace_back(i);
             origins.emplace_back(PositionQueryOrigin::Root);
 
-            // If the query is not valid we only need one placeholder, no need to query everything
             if (fetchChildren)
             {
                 movegen::forEachLegalMove(pos, [&](Move move) {
