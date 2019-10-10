@@ -509,6 +509,31 @@ namespace query
         Child
     };
 
+    template <>
+    struct EnumTraits<PositionQueryOrigin>
+    {
+        using IdType = int;
+        using EnumType = PositionQueryOrigin;
+
+        static constexpr int cardinality = 2;
+        static constexpr bool isNaturalIndex = true;
+
+        static constexpr std::array<EnumType, cardinality> values{
+            PositionQueryOrigin::Root,
+            PositionQueryOrigin::Child
+        };
+
+        [[nodiscard]] static constexpr IdType ordinal(EnumType c) noexcept
+        {
+            return static_cast<IdType>(c);
+        }
+
+        [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
+        {
+            return static_cast<EnumType>(id);
+        }
+    };
+
     enum struct CategoryMask : unsigned
     {
         None = 0,
@@ -643,7 +668,7 @@ namespace query
             m_origins.emplace_back(origin);
         }
 
-        [[nodiscard]] const EntryConstRef operator[](std::size_t i) const
+        [[nodiscard]] EntryConstRef operator[](std::size_t i) const
         {
             return {
                 m_positions[i],
@@ -777,5 +802,32 @@ namespace query
             auto& entry = raw[queryId][category].at(level, result);
             (entry.*headerPtr).emplace(std::move(headers[i]));
         }
+    }
+
+    struct GameFetchSettings
+    {
+        bool fetchFirst;
+        bool fetchLast;
+    };
+
+    [[nodiscard]] EnumMap2<PositionQueryOrigin, Category, GameFetchSettings> buildGameHeaderFetchLookup(const Request& query)
+    {
+        EnumMap2<PositionQueryOrigin, Category, GameFetchSettings> lookup;
+
+        for (auto origin : values<PositionQueryOrigin>())
+        {
+            for (auto cat : values<Category>())
+            {
+                lookup[origin][cat] = { false, false };
+            }
+        }
+
+        for (auto&& [cat, fetch] : query.fetchingOptions)
+        {
+            lookup[PositionQueryOrigin::Root][cat] = { fetch.fetchFirstGame, fetch.fetchLastGame };
+            lookup[PositionQueryOrigin::Child][cat] = { fetch.fetchFirstGameForEachChild, fetch.fetchLastGameForEachChild };
+        }
+
+        return lookup;
     }
 }
