@@ -612,87 +612,27 @@ namespace query
             || mask == CategoryMask::AllCombined;
     }
 
-    struct PositionQuerySet
+    struct PositionQuery
     {
-        struct EntryConstRef
-        {
-            const Position& position;
-            const ReverseMove& reverseMove;
-            const std::size_t rootId;
-            const PositionQueryOrigin origin;
-        };
+        Position position;
+        ReverseMove reverseMove;
+        std::size_t rootId;
+        PositionQueryOrigin origin;
 
-        PositionQuerySet() = default;
-
-        PositionQuerySet(
-            std::vector<Position>&& positions,
-            std::vector<ReverseMove>&& reverseMoves,
-            std::vector<std::size_t>&& rootIds,
-            std::vector<PositionQueryOrigin>&& origins
-        ) :
-            m_positions(std::move(positions)),
-            m_reverseMoves(std::move(reverseMoves)),
-            m_rootIds(std::move(rootIds)),
-            m_origins(std::move(origins))
+        PositionQuery(const Position& pos, const ReverseMove& rev, std::size_t rootId, PositionQueryOrigin origin) :
+            position(pos),
+            reverseMove(rev),
+            rootId(rootId),
+            origin(origin)
         {
-            ASSERT(m_positions.size() == m_reverseMoves.size());
-            ASSERT(m_positions.size() == m_rootIds.size());
-            ASSERT(m_positions.size() == m_origins.size());
         }
-
-        [[nodiscard]] const auto& positions() const
-        {
-            return m_positions;
-        }
-
-        [[nodiscard]] const auto& reverseMoves() const
-        {
-            return m_reverseMoves;
-        }
-
-        [[nodiscard]] const auto& rootIds() const
-        {
-            return m_rootIds;
-        }
-
-        [[nodiscard]] const auto& origins() const
-        {
-            return m_origins;
-        }
-
-        void emplace(const Position& position, const ReverseMove& reverseMove, std::size_t rootId, PositionQueryOrigin origin)
-        {
-            m_positions.emplace_back(position);
-            m_reverseMoves.emplace_back(reverseMove);
-            m_rootIds.emplace_back(rootId);
-            m_origins.emplace_back(origin);
-        }
-
-        [[nodiscard]] EntryConstRef operator[](std::size_t i) const
-        {
-            return {
-                m_positions[i],
-                m_reverseMoves[i],
-                m_rootIds[i],
-                m_origins[i]
-            };
-        }
-
-        [[nodiscard]] std::size_t size() const
-        {
-            return m_positions.size();
-        }
-
-    private:
-        std::vector<Position> m_positions;
-        std::vector<ReverseMove> m_reverseMoves;
-        std::vector<std::size_t> m_rootIds;
-        std::vector<PositionQueryOrigin> m_origins;
     };
 
-    [[nodiscard]] PositionQuerySet gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
+    using PositionQueries = std::vector<PositionQuery>;
+
+    [[nodiscard]] PositionQueries gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
     {
-        PositionQuerySet queries;
+        PositionQueries queries;
         for (std::size_t i = 0; i < rootPositions.size(); ++i)
         {
             const auto& rootPos = rootPositions[i];
@@ -703,14 +643,14 @@ namespace query
             const auto& pos = posOpt->first;
             const auto& rev = posOpt->second;
 
-            queries.emplace(pos, rev, i, PositionQueryOrigin::Root);
+            queries.emplace_back(pos, rev, i, PositionQueryOrigin::Root);
 
             if (fetchChildren)
             {
                 movegen::forEachLegalMove(pos, [&](Move move) {
                     auto posCpy = pos;
                     auto rev = posCpy.doMove(move);
-                    queries.emplace(posCpy, rev, i, PositionQueryOrigin::Child);
+                    queries.emplace_back(posCpy, rev, i, PositionQueryOrigin::Child);
                 });
             }
         }
@@ -718,7 +658,7 @@ namespace query
         return queries;
     }
 
-    [[nodiscard]] PositionQuerySet gatherPositionsForRootPositions(const Request& query)
+    [[nodiscard]] PositionQueries gatherPositionsForRootPositions(const Request& query)
     {
         const bool fetchChildren = std::any_of(
             query.fetchingOptions.begin(), 
@@ -732,7 +672,7 @@ namespace query
     // It is flatter, allows easier in memory manipulation.
     using PositionQueryResultSet = std::vector<EnumMap<Category, Entries>>;
 
-    [[nodiscard]] std::vector<Result> unflatten(PositionQueryResultSet&& raw, const Request& query, const PositionQuerySet& individialQueries)
+    [[nodiscard]] std::vector<Result> unflatten(PositionQueryResultSet&& raw, const Request& query, const PositionQueries& individialQueries)
     {
         std::vector<Result> results;
         for (auto&& rootPosition : query.positions)
