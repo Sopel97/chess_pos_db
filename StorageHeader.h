@@ -206,6 +206,22 @@ namespace persistence
             }
         }
 
+        GameHeader& operator=(const PackedGameHeader& header)
+        {
+            m_gameIdx = header.gameIdx();
+            m_result = header.result();
+            m_date = header.date();
+            m_eco = header.eco();
+            m_plyCount = header.plyCount();
+            if (m_plyCount == PackedGameHeader::unknownPlyCount)
+            {
+                m_plyCount.reset();
+            }
+            m_event = header.event();
+            m_white = header.white();
+            m_black = header.black();
+        }
+
         [[nodiscard]] std::uint32_t gameIdx() const
         {
             return m_gameIdx;

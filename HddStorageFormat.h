@@ -7,6 +7,7 @@
 #include "MemoryAmount.h"
 #include "Pgn.h"
 #include "PositionSignature.h"
+#include "Query.h"
 #include "StorageHeader.h"
 #include "Unsort.h"
 
@@ -549,6 +550,70 @@ namespace persistence
                 std::cout << "Index size: " << m_index.size() << "\n";
             }
 
+            void decode(
+                const std::vector<detail::Entry>& entries,
+                const PositionSignatureWithReverseMoveAndGameClassification& key,
+                const query::Request& query,
+                const query::PositionQueries<PositionSignatureWithReverseMoveAndGameClassification>& queries,
+                const query::FetchLookups& fetchLookup,
+                EnumMap<query::Category, EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset>>& match)
+            {
+                for (std::size_t i = 0; i < entries.size(); ++i)
+                {
+                    auto&& [key, position, reverseMove, rootId, origin] = queries[i];
+                    auto&& entry = entries[i];
+
+                    for (auto&& [cat, fetch] : query.fetchingOptions)
+                    {
+                        if (origin == query::PositionQueryOrigin::Child && !fetch.fetchChildren)
+                        {
+                            continue;
+                        }
+
+                        const GameLevel level = entry.level();
+                        const GameResult result = entry.result();
+
+                        if (cat == query::Category::Continuations && detail::Entry::CompareEqualWithReverseMove{}(entry, key))
+                        {
+                            match[cat][level][result].combine(entry.countAndGameOffset());
+                        }
+                        else if (cat == query::Category::Transpositions && detail::Entry::CompareEqualWithoutReverseMove{}(entry, key) && !detail::Entry::CompareEqualWithReverseMove{}(entry, key))
+                        {
+                            match[cat][level][result].combine(entry.countAndGameOffset());
+                        }
+                        else if (cat == query::Category::All && detail::Entry::CompareEqualWithoutReverseMove{}(entry, key))
+                        {
+                            match[cat][level][result].combine(entry.countAndGameOffset());
+                        }
+                    }
+                }
+            }
+
+            void query(
+                const query::Request& query,
+                const query::PositionQueries<PositionSignatureWithReverseMoveAndGameClassification>& queries,
+                const query::FetchLookups& fetchLookup,
+                std::vector<std::size_t>& offsets,
+                std::vector<query::GameHeaderDestination>& destinations,
+                std::vector<EnumMap<query::Category, EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset>>>& matches)
+            {
+                static constexpr std::size_t end = -1;
+
+                std::vector<detail::Entry> buffer;
+                for (std::size_t i = 0; i < queries.size(); ++i)
+                {
+                    auto& key = queries[i].key;
+                    auto [a, b] = m_index.equal_range(key, end);
+
+                    const std::size_t count = b.it - a.it;
+                    if (count == 0) continue; // the range is empty, the value certainly does not exist
+
+                    buffer.resize(count);
+                    (void)m_entries.read(buffer.data(), a.it, count);
+                    decode(buffer, key, query, queries, fetchLookup, matches[i]);
+                }
+            }
+
             [[nodiscard]] FileQueryResult decodeQueryResultDirect(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const;
             [[nodiscard]] FileQueryResult decodeQueryResult(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const;
 
@@ -1017,6 +1082,20 @@ namespace persistence
 
                 discoverFiles();
             }
+            
+            void query(
+                const query::Request& query, 
+                const query::PositionQueries<PositionSignatureWithReverseMoveAndGameClassification>& queries, 
+                const query::FetchLookups& fetchLookup,
+                std::vector<std::size_t>& offsets,
+                std::vector<query::GameHeaderDestination>& destinations,
+                std::vector<EnumMap<query::Category, EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset>>>& matches)
+            {
+                for (auto&& file : m_files)
+                {
+                    file.query(query, queries, fetchLookup, offsets, destinations, matches);
+                }
+            }
 
             void query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
             {
@@ -1419,6 +1498,102 @@ namespace persistence
             [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, GameLevel level)
             {
                 return m_headers[level].queryByOffsets(offsets);
+            }
+
+            [[nodiscard]] std::vector<GameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestination>& destinations)
+            {
+                EnumMap<GameLevel, std::vector<std::uint64_t>> offsetsByLevel;
+                EnumMap<GameLevel, std::vector<std::size_t>> indices;
+
+                for (std::size_t i = 0; i < offsets.size(); ++i)
+                {
+                    offsetsByLevel[destinations[i].level].emplace_back(offsets[i]);
+                    indices[destinations[i].level].emplace_back(i);
+                }
+
+                EnumMap<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
+                for (GameLevel level : values<GameLevel>())
+                {
+                    packedHeadersByLevel[level] = queryHeadersByOffsets(offsetsByLevel[level], level);
+                }
+
+                std::vector<GameHeader> headers(offsets.size());
+
+                for (GameLevel level : values<GameLevel>())
+                {
+                    const auto size = offsetsByLevel[level].size();
+                    for (std::size_t i = 0; i < size; ++i)
+                    {
+                        headers[indices[level][i]] = packedHeadersByLevel[level][i];
+                    }
+                }
+
+                return headers;
+            }
+
+            [[nodiscard]] query::Response query(const query::Request& query)
+            {
+                using KeyType = PositionSignatureWithReverseMoveAndGameClassification;
+                query::PositionQueries<KeyType> posQueries = query::gatherPositionsForRootPositions<KeyType>(query);
+                query::PositionQueryResultSet results(posQueries.size());
+                query::FetchLookups lookup = query::buildGameHeaderFetchLookup(query);
+                std::vector<std::uint64_t> offsets;
+                std::vector<query::GameHeaderDestination> destinations;
+
+                auto cmp = typename KeyType::CompareLessWithReverseMove{};
+                auto unsort = reversibleSort(posQueries, [cmp](auto&& lhs, auto&& rhs) {return cmp(lhs.key, rhs.key); });
+
+                std::vector<EnumMap<query::Category, EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset>>> matches(posQueries.size());
+                for (auto&& match : matches)
+                {
+                    for (query::Category cat : values<query::Category>())
+                    {
+                        for (GameLevel level : values<GameLevel>())
+                        {
+                            for (GameResult result : values<GameResult>())
+                            {
+                                match[cat][level][result] = detail::CountAndGameOffset(0, std::numeric_limits<std::uint64_t>::max());
+                            }
+                        }
+                    }
+                }
+
+                m_partition.query(query, posQueries, lookup, offsets, destinations, matches);
+
+                for (std::size_t i = 0; i < posQueries.size(); ++i)
+                {
+                    auto&& [key, position, reverseMove, rootId, origin] = posQueries[i];
+                    auto&& match = matches[i];
+
+                    for(auto&& [cat, fetch] : query.fetchingOptions)
+                    {
+                        if (origin == query::PositionQueryOrigin::Child && !fetch.fetchChildren)
+                        {
+                            continue;
+                        }
+
+                        for (GameLevel level : values<GameLevel>())
+                        {
+                            for (GameResult result : values<GameResult>())
+                            {
+                                auto& entry = match[cat][level][result];
+                                results[i][cat].emplace(level, result, entry.count());
+
+                                if (lookup[origin][cat].fetchFirst)
+                                {
+                                    offsets.emplace_back(entry.gameOffset());
+                                    destinations.emplace_back(i, cat, level, result, &query::Entry::firstGame);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                query::assignGameHeaders(results, destinations, queryHeadersByOffsets(offsets, destinations));
+
+                unsort(results);
+
+                return { query, query::unflatten(std::move(results), query, posQueries) };
             }
 
             // We don't have QueryTarget here because we query all at once anyway.

@@ -258,7 +258,7 @@ struct PositionSignatureWithReverseMoveAndGameClassification
 
     struct CompareLessWithReverseMove
     {
-        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) noexcept
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) const noexcept
         {
             if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
             else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
@@ -275,7 +275,7 @@ struct PositionSignatureWithReverseMoveAndGameClassification
 
     struct CompareLessWithoutReverseMove
     {
-        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) noexcept
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) const noexcept
         {
             if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
             else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
@@ -290,7 +290,7 @@ struct PositionSignatureWithReverseMoveAndGameClassification
 
     struct CompareLessFull
     {
-        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) noexcept
+        [[nodiscard]] bool operator()(const PositionSignatureWithReverseMoveAndGameClassification& lhs, const PositionSignatureWithReverseMoveAndGameClassification& rhs) const noexcept
         {
             if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
             else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
