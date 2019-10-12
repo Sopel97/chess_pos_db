@@ -387,12 +387,12 @@ namespace persistence
                         lastGameFile = rhs.lastGameFile;
                         lastGameEntryIdx = rhs.lastGameEntryIdx;
                     }
-                    else if (rhs.lastGameFile != nullptr && rhs.lastGameFile->id() < lastGameFile->id())
+                    else if (rhs.lastGameFile != nullptr && rhs.lastGameFile->id() > lastGameFile->id())
                     {
                         lastGameFile = rhs.lastGameFile;
                         lastGameEntryIdx = rhs.lastGameEntryIdx;
                     }
-                    else if (rhs.lastGameFile->id() == lastGameFile->id() && rhs.lastGameEntryIdx < lastGameEntryIdx)
+                    else if (rhs.lastGameFile->id() == lastGameFile->id() && rhs.lastGameEntryIdx > lastGameEntryIdx)
                     {
                         lastGameEntryIdx = rhs.lastGameEntryIdx;
                     }
