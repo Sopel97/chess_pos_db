@@ -554,7 +554,7 @@ namespace persistence
                 detail::Entry::CompareLessWithoutReverseMove
             >;
 
-            auto&& index = [this]() {
+            auto&& index = [this]() -> decltype(auto) {
                 if constexpr (SelectV == query::Select::Continuations)
                 {
                     return m_indexWithReverseMove;
