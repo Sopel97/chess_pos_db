@@ -1410,11 +1410,11 @@ void testHddQuery2(std::string name)
     query.token = "toktok";
     query.positions = { { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", std::nullopt } };
     //query.positions = { { "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" , "e5"} };
-    query.fetchingOptions[query::Select::Transpositions].fetchFirstGame = true;
-    query.fetchingOptions[query::Select::Transpositions].fetchLastGame = true;
-    query.fetchingOptions[query::Select::Transpositions].fetchFirstGameForEachChild = true;
-    query.fetchingOptions[query::Select::Transpositions].fetchLastGameForEachChild = true;
-    query.fetchingOptions[query::Select::Transpositions].fetchChildren = true;
+    query.fetchingOptions[query::Select::All].fetchFirstGame = true;
+    query.fetchingOptions[query::Select::All].fetchLastGame = true;
+    query.fetchingOptions[query::Select::All].fetchFirstGameForEachChild = true;
+    query.fetchingOptions[query::Select::All].fetchLastGameForEachChild = true;
+    query.fetchingOptions[query::Select::All].fetchChildren = true;
     query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
     query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
     for(int i = 0; i < 10; ++i)

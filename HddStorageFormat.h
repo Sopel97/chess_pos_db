@@ -1544,7 +1544,6 @@ namespace persistence
 
             [[nodiscard]] auto commitStatsAsResults(
                 const query::Request& query,
-                const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys,
                 const query::PositionQueries& posQueries,
                 std::vector<detail::PositionStats>& stats)
             {
@@ -1559,7 +1558,6 @@ namespace persistence
                 for (std::size_t i = 0; i < posQueries.size(); ++i)
                 {
                     auto&& [position, reverseMove, rootId, origin] = posQueries[i];
-                    auto&& key = keys[i];
                     auto&& stat = stats[i];
 
                     for (auto&& [select, fetch] : query.fetchingOptions)
@@ -1617,7 +1615,7 @@ namespace persistence
 
                 m_partition.executeQuery(query, keys, posQueries, stats);
 
-                auto results = commitStatsAsResults(query, keys, posQueries, stats);
+                auto results = commitStatsAsResults(query, posQueries, stats);
                 
                 // We have to either unsort both results and posQueries, or none.
                 // unflatten only needs relative order of results and posQueries to match

@@ -613,6 +613,28 @@ namespace query
             || mask == SelectMask::AllCombined;
     }
 
+    [[nodiscard]] SelectMask selectMask(const Request& query)
+    {
+        SelectMask mask = SelectMask::None;
+        for (auto&& [select, fetch] : query.fetchingOptions)
+        {
+            mask |= select;
+        }
+        return mask;
+    }
+
+    [[nodiscard]] SelectMask fetchChildrenSelectMask(const Request& query)
+    {
+        SelectMask mask = SelectMask::None;
+        for (auto&& [select, fetch] : query.fetchingOptions)
+        {
+            if (!fetch.fetchChildren) continue;
+
+            mask |= select;
+        }
+        return mask;
+    }
+
     struct PositionQuery
     {
         Position position;
@@ -742,6 +764,20 @@ namespace query
 
             auto& entry = raw[queryId][select].at(level, result);
             (entry.*headerPtr).emplace(std::move(headers[i]));
+        }
+    }
+
+    void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, const std::vector<persistence::PackedGameHeader>& headers)
+    {
+        ASSERT(destination.size() == headers.size());
+
+        const std::size_t size = destinations.size();
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            auto&& [queryId, select, level, result, headerPtr] = destinations[i];
+
+            auto& entry = raw[queryId][select].at(level, result);
+            (entry.*headerPtr).emplace(headers[i]);
         }
     }
 
