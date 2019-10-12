@@ -3299,9 +3299,10 @@ namespace ext
         }
 
         // end is returned when there is no range with the given key
-        template <typename IterT>
-        [[nodiscard]] std::pair<IterValueType, IterValueType> equal_range(const KeyType& key, IterT end) const
+        [[nodiscard]] std::pair<IterValueType, IterValueType> equal_range(const KeyType& key) const
         {
+            const auto end = m_entries.back().high + 1;
+
             auto cmp = CompareT{};
 
             // Find a range entry that contains keys[i] or, if there is none, get
@@ -3867,7 +3868,7 @@ namespace ext
             ranges.reserve(keys.size());
             for (int i = 0; i < keys.size(); ++i)
             {
-                ranges.emplace_back(index.equal_range(keys[i], end));
+                ranges.emplace_back(index.equal_range(keys[i]));
             }
 
             return equal_range_multiple_impl(

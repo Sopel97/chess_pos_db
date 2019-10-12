@@ -106,7 +106,7 @@ namespace query
         }
     };
 
-    enum struct Category
+    enum struct Select
     {
         Continuations,
         Transpositions,
@@ -114,18 +114,18 @@ namespace query
     };
 
     template <>
-    struct EnumTraits<Category>
+    struct EnumTraits<Select>
     {
         using IdType = int;
-        using EnumType = Category;
+        using EnumType = Select;
 
         static constexpr int cardinality = 3;
         static constexpr bool isNaturalIndex = true;
 
         static constexpr std::array<EnumType, cardinality> values{
-            Category::Continuations,
-            Category::Transpositions,
-            Category::All
+            Select::Continuations,
+            Select::Transpositions,
+            Select::All
         };
 
         [[nodiscard]] static constexpr IdType ordinal(EnumType c) noexcept
@@ -138,36 +138,36 @@ namespace query
             return static_cast<EnumType>(id);
         }
 
-        [[nodiscard]] static std::string_view toString(Category cat)
+        [[nodiscard]] static std::string_view toString(Select select)
         {
             using namespace std::literals;
 
-            switch (cat)
+            switch (select)
             {
-            case Category::Continuations:
+            case Select::Continuations:
                 return "continuations"sv;
-            case Category::Transpositions:
+            case Select::Transpositions:
                 return "transpositions"sv;
-            case Category::All:
+            case Select::All:
                 return "all"sv;
             }
 
             return ""sv;
         }
 
-        [[nodiscard]] static std::optional<Category> fromString(std::string_view sv)
+        [[nodiscard]] static std::optional<Select> fromString(std::string_view sv)
         {
             using namespace std::literals;
 
-            if (sv == "continuations"sv) return Category::Continuations;
-            if (sv == "transpositions"sv) return Category::Transpositions;
-            if (sv == "all"sv) return Category::All;
+            if (sv == "continuations"sv) return Select::Continuations;
+            if (sv == "transpositions"sv) return Select::Transpositions;
+            if (sv == "all"sv) return Select::All;
 
             return {};
         }
     };
 
-    struct FetchingOptions
+    struct AdditionalFetchingOptions
     {
         bool fetchChildren;
 
@@ -177,7 +177,7 @@ namespace query
         bool fetchFirstGameForEachChild;
         bool fetchLastGameForEachChild;
 
-        friend void to_json(nlohmann::json& j, const FetchingOptions& opt)
+        friend void to_json(nlohmann::json& j, const AdditionalFetchingOptions& opt)
         {
             j = nlohmann::json{
                 { "fetch_children", opt.fetchChildren},
@@ -188,7 +188,7 @@ namespace query
             };
         }
 
-        friend void from_json(const nlohmann::json& j, FetchingOptions& opt)
+        friend void from_json(const nlohmann::json& j, AdditionalFetchingOptions& opt)
         {
             j["fetch_children"].get_to(opt.fetchChildren);
             j["fetch_first_game"].get_to(opt.fetchFirstGame);
@@ -216,7 +216,7 @@ namespace query
 
         std::vector<GameLevel> levels;
         std::vector<GameResult> results;
-        std::map<Category, FetchingOptions> fetchingOptions;
+        std::map<Select, AdditionalFetchingOptions> fetchingOptions;
 
         friend void to_json(nlohmann::json& j, const Request& query)
         {
@@ -238,9 +238,9 @@ namespace query
                 results.emplace_back(toString(GameResultWordFormat{}, result));
             }
 
-            for (auto&& [cat, opt] : query.fetchingOptions)
+            for (auto&& [select, opt] : query.fetchingOptions)
             {
-                j[std::string(toString(cat))] = opt;
+                j[std::string(toString(select))] = opt;
             }
         }
 
@@ -264,12 +264,12 @@ namespace query
                 query.results.emplace_back(fromString<GameResult>(GameResultWordFormat{}, resultStr));
             }
 
-            for (const Category cat : values<Category>())
+            for (const Select select : values<Select>())
             {
-                const auto catStr = std::string(toString(cat));
-                if (j.contains(catStr))
+                const auto selectStr = std::string(toString(select));
+                if (j.contains(selectStr))
                 {
-                    query.fetchingOptions.emplace(cat, j[catStr].get<FetchingOptions>());
+                    query.fetchingOptions.emplace(select, j[selectStr].get<AdditionalFetchingOptions>());
                 }
             }
         }
@@ -278,7 +278,7 @@ namespace query
         {
             if (fetchingOptions.empty()) return false;
             if (fetchingOptions.size() > 2) return false;
-            if (fetchingOptions.size() == 2 && fetchingOptions.count(Category::All) != 0) return false;
+            if (fetchingOptions.size() == 2 && fetchingOptions.count(Select::All) != 0) return false;
             if (levels.empty()) return false;
             if (results.empty()) return false;
             
@@ -337,7 +337,7 @@ namespace query
         }
     };
 
-    struct Entries
+    struct SegregatedEntries
     {
     private:
         struct Origin
@@ -347,7 +347,7 @@ namespace query
         };
 
     public:
-        Entries() = default;
+        SegregatedEntries() = default;
 
         template <typename... Args>
         decltype(auto) emplace(GameLevel level, GameResult result, Args&&... args)
@@ -379,7 +379,7 @@ namespace query
             return m_entries.end();
         }
 
-        friend void to_json(nlohmann::json& j, const Entries& entries)
+        friend void to_json(nlohmann::json& j, const SegregatedEntries& entries)
         {
             j = nlohmann::json::object();
 
@@ -421,7 +421,7 @@ namespace query
         std::vector<std::pair<Origin, Entry>> m_entries;
     };
 
-    struct Result
+    struct ResultForRoot
     {
         struct MoveCompareLess
         {
@@ -442,21 +442,21 @@ namespace query
             }
         };
 
-        struct SubResult
+        struct SelectResult
         {
-            Entries root;
-            std::map<Move, Entries, MoveCompareLess> children;
+            SegregatedEntries root;
+            std::map<Move, SegregatedEntries, MoveCompareLess> children;
         };
 
-        Result(const RootPosition& pos) :
+        ResultForRoot(const RootPosition& pos) :
             position(pos)
         {
         }
 
         RootPosition position;
-        std::map<Category, SubResult> resultsByCategory;
+        std::map<Select, SelectResult> resultsBySelect;
 
-        friend void to_json(nlohmann::json& j, const Result& result)
+        friend void to_json(nlohmann::json& j, const ResultForRoot& result)
         {
             const std::optional<Position> positionOpt = result.position.tryGet();
             if (!positionOpt.has_value())
@@ -471,9 +471,9 @@ namespace query
                 { "position", result.position },
             });
 
-            for (auto&& [cat, subresult] : result.resultsByCategory)
+            for (auto&& [select, subresult] : result.resultsBySelect)
             {
-                auto& jsonSubresult = j[std::string(toString(cat))];
+                auto& jsonSubresult = j[std::string(toString(select))];
 
                 jsonSubresult["--"] = subresult.root;
 
@@ -493,7 +493,7 @@ namespace query
     struct Response
     {
         Request query;
-        std::vector<Result> results;
+        std::vector<ResultForRoot> results;
 
         friend void to_json(nlohmann::json& j, const Response& response)
         {
@@ -535,82 +535,82 @@ namespace query
         }
     };
 
-    enum struct CategoryMask : unsigned
+    enum struct SelectMask : unsigned
     {
         None = 0,
-        OnlyContinuations = 1 << ordinal(Category::Continuations),
-        OnlyTranspositions = 1 << ordinal(Category::Transpositions),
+        OnlyContinuations = 1 << ordinal(Select::Continuations),
+        OnlyTranspositions = 1 << ordinal(Select::Transpositions),
         AllSeparate = OnlyContinuations | OnlyTranspositions,
-        AllCombined = 1 << ordinal(Category::All)
+        AllCombined = 1 << ordinal(Select::All)
     };
 
-    [[nodiscard]] constexpr CategoryMask operator|(CategoryMask lhs, CategoryMask rhs)
+    [[nodiscard]] constexpr SelectMask operator|(SelectMask lhs, SelectMask rhs)
     {
-        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
+        return static_cast<SelectMask>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
     }
 
-    [[nodiscard]] constexpr CategoryMask operator|(CategoryMask lhs, Category rhs)
+    [[nodiscard]] constexpr SelectMask operator|(SelectMask lhs, Select rhs)
     {
-        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) | (1 << static_cast<unsigned>(rhs)));
+        return static_cast<SelectMask>(static_cast<unsigned>(lhs) | (1 << static_cast<unsigned>(rhs)));
     }
 
-    [[nodiscard]] constexpr CategoryMask operator&(CategoryMask lhs, CategoryMask rhs)
+    [[nodiscard]] constexpr SelectMask operator&(SelectMask lhs, SelectMask rhs)
     {
-        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) & static_cast<unsigned>(rhs));
+        return static_cast<SelectMask>(static_cast<unsigned>(lhs) & static_cast<unsigned>(rhs));
     }
 
-    [[nodiscard]] constexpr CategoryMask operator&(CategoryMask lhs, Category rhs)
+    [[nodiscard]] constexpr SelectMask operator&(SelectMask lhs, Select rhs)
     {
-        return static_cast<CategoryMask>(static_cast<unsigned>(lhs) & (1 << static_cast<unsigned>(rhs)));
+        return static_cast<SelectMask>(static_cast<unsigned>(lhs) & (1 << static_cast<unsigned>(rhs)));
     }
 
-    constexpr CategoryMask& operator|=(CategoryMask& lhs, CategoryMask rhs)
+    constexpr SelectMask& operator|=(SelectMask& lhs, SelectMask rhs)
     {
-        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
+        lhs = static_cast<SelectMask>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
         return lhs;
     }
 
-    constexpr CategoryMask& operator|=(CategoryMask& lhs, Category rhs)
+    constexpr SelectMask& operator|=(SelectMask& lhs, Select rhs)
     {
-        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) | (1 << static_cast<unsigned>(rhs)));
+        lhs = static_cast<SelectMask>(static_cast<unsigned>(lhs) | (1 << static_cast<unsigned>(rhs)));
         return lhs;
     }
 
-    constexpr CategoryMask& operator&=(CategoryMask& lhs, CategoryMask rhs)
+    constexpr SelectMask& operator&=(SelectMask& lhs, SelectMask rhs)
     {
-        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) & static_cast<unsigned>(rhs));
+        lhs = static_cast<SelectMask>(static_cast<unsigned>(lhs) & static_cast<unsigned>(rhs));
         return lhs;
     }
 
-    constexpr CategoryMask& operator&=(CategoryMask& lhs, Category rhs)
+    constexpr SelectMask& operator&=(SelectMask& lhs, Select rhs)
     {
-        lhs = static_cast<CategoryMask>(static_cast<unsigned>(lhs) & (1 << static_cast<unsigned>(rhs)));
+        lhs = static_cast<SelectMask>(static_cast<unsigned>(lhs) & (1 << static_cast<unsigned>(rhs)));
         return lhs;
     }
 
-    [[nodiscard]] constexpr CategoryMask asMask(Category cat)
+    [[nodiscard]] constexpr SelectMask asMask(Select select)
     {
-        return static_cast<CategoryMask>(1 << static_cast<unsigned>(cat));
+        return static_cast<SelectMask>(1 << static_cast<unsigned>(select));
     }
 
     // checks whether lhs contains rhs
-    [[nodiscard]] constexpr bool contains(CategoryMask lhs, CategoryMask rhs)
+    [[nodiscard]] constexpr bool contains(SelectMask lhs, SelectMask rhs)
     {
         return (lhs & rhs) == rhs;
     }
 
-    [[nodiscard]] constexpr bool contains(CategoryMask lhs, Category rhs)
+    [[nodiscard]] constexpr bool contains(SelectMask lhs, Select rhs)
     {
         return (lhs & rhs) == asMask(rhs);
     }
 
-    [[nodiscard]] constexpr bool isValid(CategoryMask mask)
+    [[nodiscard]] constexpr bool isValid(SelectMask mask)
     {
         return 
-            mask == CategoryMask::OnlyContinuations
-            || mask == CategoryMask::OnlyTranspositions
-            || mask == CategoryMask::AllSeparate
-            || mask == CategoryMask::AllCombined;
+            mask == SelectMask::OnlyContinuations
+            || mask == SelectMask::OnlyTranspositions
+            || mask == SelectMask::AllSeparate
+            || mask == SelectMask::AllCombined;
     }
 
     struct PositionQuery
@@ -631,7 +631,7 @@ namespace query
 
     using PositionQueries = std::vector<PositionQuery>;
 
-    [[nodiscard]] PositionQueries gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
+    [[nodiscard]] PositionQueries gatherPositionQueries(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
     {
         PositionQueries queries;
         for (std::size_t i = 0; i < rootPositions.size(); ++i)
@@ -659,23 +659,23 @@ namespace query
         return queries;
     }
 
-    [[nodiscard]] PositionQueries gatherPositionsForRootPositions(const Request& query)
+    [[nodiscard]] PositionQueries gatherPositionQueries(const Request& query)
     {
         const bool fetchChildren = std::any_of(
             query.fetchingOptions.begin(), 
             query.fetchingOptions.end(), 
             [](auto&& v) {return v.second.fetchChildren; }
         );
-        return gatherPositionsForRootPositions(query.positions, fetchChildren);
+        return gatherPositionQueries(query.positions, fetchChildren);
     }
 
     // This is the result type to be used by databases' query functions
     // It is flatter, allows easier in memory manipulation.
-    using PositionQueryResultSet = std::vector<EnumMap<Category, Entries>>;
+    using PositionQueryResults = std::vector<EnumMap<Select, SegregatedEntries>>;
 
-    [[nodiscard]] std::vector<Result> unflatten(PositionQueryResultSet&& raw, const Request& query, const PositionQueries& individialQueries)
+    [[nodiscard]] std::vector<ResultForRoot> unflatten(PositionQueryResults&& raw, const Request& query, const PositionQueries& individialQueries)
     {
-        std::vector<Result> results;
+        std::vector<ResultForRoot> results;
         for (auto&& rootPosition : query.positions)
         {
             results.emplace_back(rootPosition);
@@ -684,25 +684,25 @@ namespace query
         const std::size_t size = raw.size();
         for(std::size_t i = 0; i < size; ++i)
         {
-            auto&& entriesByCategory = raw[i];
+            auto&& entriesBySelect = raw[i];
             auto&& [position, reverseMove, rootId, origin] = individialQueries[i];
 
-            for (auto&& [cat, fetch] : query.fetchingOptions)
+            for (auto&& [select, fetch] : query.fetchingOptions)
             {
                 if (origin == PositionQueryOrigin::Child && !fetch.fetchChildren)
                 {
                     // We have to check for this because we may only want children
-                    // for one category. In this case we would just reassign empty Entries.
+                    // for one select. In this case we would just reassign empty Entries.
                     // We don't want that because we would create nodes in the map.
                     continue;
                 }
 
-                auto&& entries = entriesByCategory[cat];
+                auto&& entries = entriesBySelect[select];
 
                 auto& entriesDestination =
                     origin == PositionQueryOrigin::Child
-                    ? results[rootId].resultsByCategory[cat].children[reverseMove.move]
-                    : results[rootId].resultsByCategory[cat].root;
+                    ? results[rootId].resultsBySelect[select].children[reverseMove.move]
+                    : results[rootId].resultsBySelect[select].root;
 
                 entriesDestination = std::move(entries);
             }
@@ -715,9 +715,9 @@ namespace query
     {
         using HeaderMemberPtr = std::optional<persistence::GameHeader> Entry::*;
 
-        GameHeaderDestination(std::size_t queryId, Category category, GameLevel level, GameResult result, HeaderMemberPtr headerPtr) :
+        GameHeaderDestination(std::size_t queryId, Select select, GameLevel level, GameResult result, HeaderMemberPtr headerPtr) :
             queryId(queryId),
-            category(category),
+            select(select),
             level(level),
             result(result),
             headerPtr(headerPtr)
@@ -725,22 +725,22 @@ namespace query
         }
 
         std::size_t queryId;
-        Category category;
+        Select select;
         GameLevel level;
         GameResult result;
         HeaderMemberPtr headerPtr;
     };
 
-    void assignGameHeaders(PositionQueryResultSet& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers)
+    void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers)
     {
         ASSERT(destination.size() == headers.size());
 
         const std::size_t size = destinations.size();
         for (std::size_t i = 0; i < size; ++i)
         {
-            auto&& [queryId, category, level, result, headerPtr] = destinations[i];
+            auto&& [queryId, select, level, result, headerPtr] = destinations[i];
 
-            auto& entry = raw[queryId][category].at(level, result);
+            auto& entry = raw[queryId][select].at(level, result);
             (entry.*headerPtr).emplace(std::move(headers[i]));
         }
     }
@@ -751,24 +751,16 @@ namespace query
         bool fetchLast;
     };
 
-    using FetchLookups = EnumMap2<PositionQueryOrigin, Category, GameFetchSettings>;
+    using FetchLookups = EnumMap2<PositionQueryOrigin, Select, GameFetchSettings>;
 
     [[nodiscard]] FetchLookups buildGameHeaderFetchLookup(const Request& query)
     {
         FetchLookups lookup{};
 
-        for (auto origin : values<PositionQueryOrigin>())
+        for (auto&& [select, fetch] : query.fetchingOptions)
         {
-            for (auto cat : values<Category>())
-            {
-                lookup[origin][cat] = { false, false };
-            }
-        }
-
-        for (auto&& [cat, fetch] : query.fetchingOptions)
-        {
-            lookup[PositionQueryOrigin::Root][cat] = { fetch.fetchFirstGame, fetch.fetchLastGame };
-            lookup[PositionQueryOrigin::Child][cat] = { fetch.fetchFirstGameForEachChild, fetch.fetchLastGameForEachChild };
+            lookup[PositionQueryOrigin::Root][select] = { fetch.fetchFirstGame, fetch.fetchLastGame };
+            lookup[PositionQueryOrigin::Child][select] = { fetch.fetchFirstGameForEachChild, fetch.fetchLastGameForEachChild };
         }
 
         return lookup;

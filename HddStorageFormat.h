@@ -467,7 +467,7 @@ namespace persistence
             static_assert(sizeof(Entry) == 16 + sizeof(CountAndGameOffsetType));
             static_assert(std::is_trivially_copyable_v<Entry>);
 
-            using PositionStats = EnumMap<query::Category, EnumMap2<GameLevel, GameResult, CountAndGameOffset>>;
+            using PositionStats = EnumMap<query::Select, EnumMap2<GameLevel, GameResult, CountAndGameOffset>>;
 
             using Index = ext::RangeIndex<typename Entry::Signature, Entry::CompareLessWithoutReverseMove>;
 
@@ -569,34 +569,30 @@ namespace persistence
                 const std::vector<detail::Entry>& entries,
                 const query::Request& query,
                 const PositionSignatureWithReverseMoveAndGameClassification& key,
-                const query::PositionQuery& posQuery,
+                query::PositionQueryOrigin origin,
                 detail::PositionStats& stats)
             {
-                auto&& [position, reverseMove, rootId, origin] = posQuery;
-
-                for (auto&& [cat, fetch] : query.fetchingOptions)
+                for (auto&& [select, fetch] : query.fetchingOptions)
                 {
-                    auto&& statsForCat = stats[cat];
+                    auto&& statsForThisSelect = stats[select];
 
                     if (origin == query::PositionQueryOrigin::Child && !fetch.fetchChildren)
                     {
                         continue;
                     }
 
-                    for (std::size_t i = 0; i < entries.size(); ++i)
+                    for(auto&& entry : entries)
                     {
-                        auto&& entry = entries[i];
-
                         const GameLevel level = entry.level();
                         const GameResult result = entry.result();
 
                         if (
-                               (cat == query::Category::Continuations && detail::Entry::CompareEqualWithReverseMove{}(entry, key))
-                            || (cat == query::Category::Transpositions && detail::Entry::CompareEqualWithoutReverseMove{}(entry, key) && !detail::Entry::CompareEqualWithReverseMove{}(entry, key))
-                            || (cat == query::Category::All && detail::Entry::CompareEqualWithoutReverseMove{}(entry, key))
+                               (select == query::Select::Continuations && detail::Entry::CompareEqualWithReverseMove{}(entry, key))
+                            || (select == query::Select::Transpositions && detail::Entry::CompareEqualWithoutReverseMove{}(entry, key) && !detail::Entry::CompareEqualWithReverseMove{}(entry, key))
+                            || (select == query::Select::All && detail::Entry::CompareEqualWithoutReverseMove{}(entry, key))
                             )
                         {
-                            statsForCat[level][result].combine(entry.countAndGameOffset());
+                            statsForThisSelect[level][result].combine(entry.countAndGameOffset());
                         }
                     }
                 }
@@ -608,20 +604,21 @@ namespace persistence
                 const query::PositionQueries& queries,
                 std::vector<detail::PositionStats>& stats)
             {
-                static constexpr std::size_t end = -1;
+                ASSERT(queries.size() == stats.size());
+                ASSERT(queries.size() == keys.size());
 
                 std::vector<detail::Entry> buffer;
                 for (std::size_t i = 0; i < queries.size(); ++i)
                 {
                     auto& key = keys[i];
-                    auto [a, b] = m_index.equal_range(key, end);
+                    auto [a, b] = m_index.equal_range(key);
 
                     const std::size_t count = b.it - a.it;
                     if (count == 0) continue; // the range is empty, the value certainly does not exist
 
                     buffer.resize(count);
                     (void)m_entries.read(buffer.data(), a.it, count);
-                    accumulateStatsFromEntries(buffer, query, key, queries[i], stats[i]);
+                    accumulateStatsFromEntries(buffer, query, key, queries[i].origin, stats[i]);
                 }
             }
 
@@ -780,13 +777,11 @@ namespace persistence
 
         void File::queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
         {
-            static constexpr std::size_t end = -1;
-
             std::vector<detail::Entry> buffer;
             for (std::size_t i = 0; i < keys.size(); ++i)
             {
                 auto& key = keys[i];
-                auto [a, b] = m_index.equal_range(key, end);
+                auto [a, b] = m_index.equal_range(key);
 
                 const std::size_t count = b.it - a.it;
                 if (count == 0) continue; // the range is empty, the value certainly does not exist
@@ -799,13 +794,11 @@ namespace persistence
 
         void File::query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
         {
-            static constexpr std::size_t end = -1;
-
             std::vector<detail::Entry> buffer;
             for (std::size_t i = 0; i < keys.size(); ++i)
             {
                 auto& key = keys[i];
-                auto [a, b] = m_index.equal_range(key, end);
+                auto [a, b] = m_index.equal_range(key);
 
                 const std::size_t count = b.it - a.it;
                 if (count == 0) continue; // the range is empty, the value certainly does not exist
@@ -1542,20 +1535,23 @@ namespace persistence
 
             void disableUnsupportedQueryFeatures(query::Request& query) const
             {
-                for (auto&& [cat, fetch] : query.fetchingOptions)
+                for (auto&& [select, fetch] : query.fetchingOptions)
                 {
                     fetch.fetchLastGame = false;
                     fetch.fetchLastGameForEachChild = false;
                 }
             }
 
-            [[nodiscard]] auto convertStatsToQueryResults(
+            [[nodiscard]] auto commitStatsAsResults(
                 const query::Request& query,
                 const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys,
                 const query::PositionQueries& posQueries,
                 std::vector<detail::PositionStats>& stats)
             {
-                query::PositionQueryResultSet results(posQueries.size());
+                ASSERT(keys.size() == posQueries.size());
+                ASSERT(keys.size() == stats.size());
+
+                query::PositionQueryResults results(posQueries.size());
                 std::vector<std::uint64_t> offsets;
                 std::vector<query::GameHeaderDestination> destinations;
                 query::FetchLookups lookup = query::buildGameHeaderFetchLookup(query);
@@ -1566,7 +1562,7 @@ namespace persistence
                     auto&& key = keys[i];
                     auto&& stat = stats[i];
 
-                    for (auto&& [cat, fetch] : query.fetchingOptions)
+                    for (auto&& [select, fetch] : query.fetchingOptions)
                     {
                         if (origin == query::PositionQueryOrigin::Child && !fetch.fetchChildren)
                         {
@@ -1577,20 +1573,22 @@ namespace persistence
                         {
                             for (GameResult result : query.results)
                             {
-                                auto& entry = stat[cat][level][result];
-                                results[i][cat].emplace(level, result, entry.count());
+                                auto& entry = stat[select][level][result];
+                                results[i][select].emplace(level, result, entry.count());
 
-                                if (lookup[origin][cat].fetchFirst && entry.gameOffset() != detail::invalidGameOffset)
+                                if (lookup[origin][select].fetchFirst && entry.gameOffset() != detail::invalidGameOffset)
                                 {
                                     offsets.emplace_back(entry.gameOffset());
-                                    destinations.emplace_back(i, cat, level, result, &query::Entry::firstGame);
+                                    destinations.emplace_back(i, select, level, result, &query::Entry::firstGame);
                                 }
                             }
                         }
                     }
                 }
 
-                return std::make_tuple(std::move(results), std::move(offsets), std::move(destinations));
+                query::assignGameHeaders(results, destinations, queryHeadersByOffsets(offsets, destinations));
+
+                return results;
             }
 
             [[nodiscard]] std::vector<PositionSignatureWithReverseMoveAndGameClassification> getKeys(const query::PositionQueries& queries)
@@ -1610,7 +1608,7 @@ namespace persistence
 
                 using KeyType = PositionSignatureWithReverseMoveAndGameClassification;
 
-                query::PositionQueries posQueries = query::gatherPositionsForRootPositions(query);
+                query::PositionQueries posQueries = query::gatherPositionQueries(query);
                 auto keys = getKeys(posQueries);
                 std::vector<detail::PositionStats> stats(posQueries.size());
 
@@ -1619,13 +1617,14 @@ namespace persistence
 
                 m_partition.executeQuery(query, keys, posQueries, stats);
 
-                auto [results, headerOffsets, headerDestinations] = convertStatsToQueryResults(query, keys, posQueries, stats);
+                auto results = commitStatsAsResults(query, keys, posQueries, stats);
+                
+                // We have to either unsort both results and posQueries, or none.
+                // unflatten only needs relative order of results and posQueries to match
+                // So we don't unsort any.
+                auto unflattened = query::unflatten(std::move(results), query, posQueries);
 
-                query::assignGameHeaders(results, headerDestinations, queryHeadersByOffsets(headerOffsets, headerDestinations));
-
-                unsort(results);
-
-                return { query, query::unflatten(std::move(results), query, posQueries) };
+                return { std::move(query), std::move(unflattened) };
             }
 
             // We don't have QueryTarget here because we query all at once anyway.
