@@ -1293,7 +1293,7 @@ app::AggregatedQueryResults queryAggregate(
                 if (fetchFirstGameForContinuations && directCount > 0)
                 {
                     auto offset = results[i].firstDirectGameOffset(level, result);
-                    if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                    if (offset != persistence::hdd::detail::invalidGameOffset)
                     {
                         gameQueries[level].emplace_back(offset);
                     }
@@ -1323,7 +1323,7 @@ app::AggregatedQueryResults queryAggregate(
                 if (fetchFirstGame && count > 0)
                 {
                     auto offset = results.back().firstDirectGameOffset(level, result);
-                    if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                    if (offset != persistence::hdd::detail::invalidGameOffset)
                     {
                         gameQueries[level].emplace_back(offset);
                     }
@@ -1339,7 +1339,7 @@ app::AggregatedQueryResults queryAggregate(
         EnumMap<GameLevel, IterType> iters;
         for (auto level : values<GameLevel>())
         {
-            headers[level] = db.queryHeadersByOffsets(gameQueries[level] , level);
+            headers[level] = db.queryHeadersByOffsets(gameQueries[level], level);
             iters[level] = headers[level].begin();
         }
         for (int i = 0; i < moves.size(); ++i)
@@ -1354,7 +1354,7 @@ app::AggregatedQueryResults queryAggregate(
                     if (fetchFirstGameForContinuations && directCount > 0)
                     {
                         auto offset = results[i].firstDirectGameOffset(level, result);
-                        if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                        if (offset != persistence::hdd::detail::invalidGameOffset)
                         {
                             aggResult.games[level][result] = persistence::GameHeader(*iters[level]++);
                         }
@@ -1373,7 +1373,7 @@ app::AggregatedQueryResults queryAggregate(
                 if (fetchFirstGame && count > 0)
                 {
                     auto offset = results.back().firstDirectGameOffset(level, result);
-                    if (offset != persistence::hdd::detail::PackedCountAndGameOffset::invalidGameOffset)
+                    if (offset != persistence::hdd::detail::invalidGameOffset)
                     {
                         aggResult.games[level][result] = persistence::GameHeader(*iters[level]++);
                     }
@@ -1401,6 +1401,28 @@ void testHddQuery(std::string name)
     }
 }
 
+void testHddQuery2(std::string name)
+{
+    persistence::hdd::Database db("w:/catobase/" + name);
+
+    auto pos = Position::startPosition();
+    query::Request query;
+    query.token = "toktok";
+    //query.fens = { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" };
+    query.positions = { { "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" , "e5"} };
+    query.fetchingOptions[query::Category::Continuations].fetchFirstGame = true;
+    query.fetchingOptions[query::Category::Continuations].fetchLastGame = true;
+    query.fetchingOptions[query::Category::Continuations].fetchFirstGameForEachChild = true;
+    query.fetchingOptions[query::Category::Continuations].fetchLastGameForEachChild = true;
+    query.fetchingOptions[query::Category::Continuations].fetchChildren = true;
+    query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
+    query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
+    for(int i = 0; i < 10; ++i)
+        auto result = db.executeQuery(query);
+    auto result = db.executeQuery(query);
+    std::cout << nlohmann::json(result).dump(4) << '\n';
+}
+
 void testMerge(std::string name)
 {
     persistence::hdd::Database db("w:/catobase/" + name);
@@ -1414,7 +1436,8 @@ int main()
     //testQuery();
     //newFormatBuild(".v2");
     //testMerge(".v2");
-    testHddQuery(".v2");
+    //testHddQuery(".v2");
+    testHddQuery2(".v2");
 
     
     app::App app;

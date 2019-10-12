@@ -3,6 +3,7 @@
 #include "Assert.h"
 #include "Enum.h"
 #include "GameClassification.h"
+#include "MoveGenerator.h"
 #include "Position.h"
 #include "StorageHeader.h"
 
@@ -612,17 +613,14 @@ namespace query
             || mask == CategoryMask::AllCombined;
     }
 
-    template <typename KeyT>
     struct PositionQuery
     {
-        KeyT key;
         Position position;
         ReverseMove reverseMove;
         std::size_t rootId;
         PositionQueryOrigin origin;
 
         PositionQuery(const Position& pos, const ReverseMove& rev, std::size_t rootId, PositionQueryOrigin origin) :
-            key(pos, rev),
             position(pos),
             reverseMove(rev),
             rootId(rootId),
@@ -631,13 +629,11 @@ namespace query
         }
     };
 
-    template <typename KeyT>
-    using PositionQueries = std::vector<PositionQuery<KeyT>>;
+    using PositionQueries = std::vector<PositionQuery>;
 
-    template <typename KeyT>
-    [[nodiscard]] PositionQueries<KeyT> gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
+    [[nodiscard]] PositionQueries gatherPositionsForRootPositions(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
     {
-        PositionQueries<KeyT> queries;
+        PositionQueries queries;
         for (std::size_t i = 0; i < rootPositions.size(); ++i)
         {
             const auto& rootPos = rootPositions[i];
@@ -663,23 +659,21 @@ namespace query
         return queries;
     }
 
-    template <typename KeyT>
-    [[nodiscard]] PositionQueries<KeyT> gatherPositionsForRootPositions(const Request& query)
+    [[nodiscard]] PositionQueries gatherPositionsForRootPositions(const Request& query)
     {
         const bool fetchChildren = std::any_of(
             query.fetchingOptions.begin(), 
             query.fetchingOptions.end(), 
             [](auto&& v) {return v.second.fetchChildren; }
         );
-        return gatherPositionsForRootPositions<KeyT>(query.positions, fetchChildren);
+        return gatherPositionsForRootPositions(query.positions, fetchChildren);
     }
 
     // This is the result type to be used by databases' query functions
     // It is flatter, allows easier in memory manipulation.
     using PositionQueryResultSet = std::vector<EnumMap<Category, Entries>>;
 
-    template <typename KeyT>
-    [[nodiscard]] std::vector<Result> unflatten(PositionQueryResultSet&& raw, const Request& query, const PositionQueries<KeyT>& individialQueries)
+    [[nodiscard]] std::vector<Result> unflatten(PositionQueryResultSet&& raw, const Request& query, const PositionQueries& individialQueries)
     {
         std::vector<Result> results;
         for (auto&& rootPosition : query.positions)
@@ -691,7 +685,7 @@ namespace query
         for(std::size_t i = 0; i < size; ++i)
         {
             auto&& entriesByCategory = raw[i];
-            auto&& [key, position, reverseMove, rootId, origin] = individialQueries[i];
+            auto&& [position, reverseMove, rootId, origin] = individialQueries[i];
 
             for (auto&& [cat, fetch] : query.fetchingOptions)
             {
@@ -761,7 +755,7 @@ namespace query
 
     [[nodiscard]] FetchLookups buildGameHeaderFetchLookup(const Request& query)
     {
-        FetchLookups lookup;
+        FetchLookups lookup{};
 
         for (auto origin : values<PositionQueryOrigin>())
         {

@@ -220,6 +220,8 @@ namespace persistence
             m_event = header.event();
             m_white = header.white();
             m_black = header.black();
+
+            return *this;
         }
 
         [[nodiscard]] std::uint32_t gameIdx() const
