@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Assert.h"
+#include "IntegerConversions.h"
 
 #include <cstdint>
 #include <string>
@@ -9,6 +10,16 @@
 struct Eco
 {
     Eco() = default;
+
+    static std::optional<Eco> tryParse(std::string_view sv)
+    {
+        if (sv.size() != 3) return std::nullopt;
+        if (sv[0] < 'A' || sv[0] > 'E') return std::nullopt;
+        if (!detail::isDigit(sv[1])) return std::nullopt;
+        if (!detail::isDigit(sv[2])) return std::nullopt;
+
+        return Eco(sv);
+    }
 
     Eco(char category, std::uint8_t index) :
         m_category(category),

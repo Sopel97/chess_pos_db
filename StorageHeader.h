@@ -267,7 +267,7 @@ namespace persistence
         friend void to_json(nlohmann::json& j, const GameHeader& data)
         {
             j = nlohmann::json{
-                { "game_idx", data.m_gameIdx },
+                { "game_id", data.m_gameIdx },
                 { "result", toString(GameResultPgnFormat{}, data.m_result) },
                 { "date", data.m_date.toString() },
                 { "eco", data.m_eco.toString() },
@@ -284,7 +284,39 @@ namespace persistence
 
         friend void from_json(const nlohmann::json& j, GameHeader& data)
         {
-            // TODO: this
+            j["game_id"].get_to(data.m_gameIdx);
+
+            auto resultOpt = fromString<GameResult>(GameResultPgnFormat{}, j["result"]);
+            if (resultOpt.has_value())
+            {
+                // TODO: throw otherwise?
+                data.m_result = *resultOpt;
+            }
+
+            auto dateOpt = Date::tryParse(j["date"]);
+            if (dateOpt.has_value())
+            {
+                data.m_date = *dateOpt;
+            }
+
+            auto ecoOpt = Eco::tryParse(j["eco"]);
+            if (ecoOpt.has_value())
+            {
+                data.m_eco = *ecoOpt;
+            }
+
+            if (j.contains("ply_count"))
+            {
+                auto plyCountOpt = detail::tryParseUInt16(j["ply_count"]);
+                if (plyCountOpt.has_value())
+                {
+                    data.m_plyCount = *plyCountOpt;
+                }
+            }
+
+            j["event"].get_to(data.m_event);
+            j["white"].get_to(data.m_white);
+            j["black"].get_to(data.m_black);
         }
 
     private:

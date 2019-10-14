@@ -259,6 +259,7 @@ namespace query
                 auto levelOpt = fromString<GameLevel>(levelStr);
                 if (levelOpt.has_value())
                 {
+                    // TODO: throw otherwise?
                     query.levels.emplace_back(*levelOpt);
                 }
             }

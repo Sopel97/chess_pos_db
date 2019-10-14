@@ -4,6 +4,8 @@
 #include <string>
 #include <string_view>
 
+#include "IntegerConversions.h"
+
 struct Date 
 {
     Date() :
@@ -11,6 +13,62 @@ struct Date
         m_month(0),
         m_day(0)
     {
+    }
+
+    static std::optional<Date> tryParse(std::string_view sv)
+    {
+        std::uint16_t year = 0;
+        std::uint8_t month = 0;
+        std::uint8_t day = 0;
+
+        auto yearOpt = detail::tryParseUInt16(sv.substr(0, 4));
+        if (yearOpt.has_value())
+        {
+            year = *yearOpt;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+
+        if (sv.size() >= 7)
+        {
+            if (sv[4] != '.') return std::nullopt;
+            if (!detail::isDigit(sv[5])) return std::nullopt;
+            if (!detail::isDigit(sv[6])) return std::nullopt;
+            month = (sv[5] - '0') * 10 + (sv[6] - '0');
+        }
+        else if (sv.size() != 4) return std::nullopt;
+
+        if (sv.size() >= 10)
+        {
+            if (sv[7] != '.') return std::nullopt;
+            if (!detail::isDigit(sv[8])) return std::nullopt;
+            if (!detail::isDigit(sv[9])) return std::nullopt;
+            month = (sv[5] - '0') * 10 + (sv[6] - '0');
+        }
+        else if (sv.size() != 7) return std::nullopt;
+
+        return Date(year, month, day);
+    }
+
+    Date(std::string_view sv)
+    {
+        ASSERT(sv.size() >= 4);
+
+        std::uint16_t m_year = detail::parseUInt16(sv.substr(0, 4));
+        std::uint8_t m_month = 0;
+        std::uint8_t m_day = 0;
+
+        if (sv.size() >= 7)
+        {
+            m_month = (sv[5] - '0') * 10 + (sv[6] - '0');
+        }
+
+        if (sv.size() >= 10)
+        {
+            m_day = (sv[8] - '0') * 10 + (sv[9] - '0');
+        }
     }
 
     Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :

@@ -12,6 +12,7 @@
 #include "Assert.h"
 #include "Date.h"
 #include "Eco.h"
+#include "IntegerConversions.h"
 #include "Position.h"
 #include "San.h"
 
@@ -27,55 +28,10 @@ namespace pgn
 
     namespace detail
     {
-        [[nodiscard]] std::uint16_t parseUInt16(std::string_view sv)
-        {
-            ASSERT(sv.size() > 0);
-            ASSERT(sv.size() <= 5);
-
-            std::uint16_t v = 0;
-
-            std::size_t idx = 0;
-            switch (sv.size())
-            {
-            case 5:
-                v += (sv[idx++] - '0') * 10000;
-            case 4:
-                v += (sv[idx++] - '0') * 1000;
-            case 3:
-                v += (sv[idx++] - '0') * 100;
-            case 2:
-                v += (sv[idx++] - '0') * 10;
-            case 1:
-                v += sv[idx] - '0';
-                break;
-
-            default:
-                ASSERT(false);
-            }
-
-            return v;
-        }
-
         // Date parsing is a bit lenient - it accepts yyyy, yyyy.mm, yyyy.mm.dd
         [[nodiscard]] Date parseDate(std::string_view sv)
         {
-            ASSERT(sv.size() >= 4);
-
-            std::uint16_t year = parseUInt16(sv.substr(0, 4));
-            std::uint8_t month = 0;
-            std::uint8_t day = 0;
-
-            if (sv.size() >= 7)
-            {
-                month = (sv[5] - '0') * 10 + (sv[6] - '0');
-            }
-
-            if (sv.size() >= 10)
-            {
-                day = (sv[8] - '0') * 10 + (sv[9] - '0');
-            }
-
-            return Date(year, month, day);
+            return Date(sv);
         }
 
         [[nodiscard]] constexpr bool isCommentBegin(char c)
@@ -764,7 +720,7 @@ namespace pgn
                 }
                 else if (tag.key == "PlyCount"sv)
                 {
-                    plyCount = detail::parseUInt16(tag.value);
+                    plyCount = ::detail::parseUInt16(tag.value);
                 }
             }
         }
@@ -799,7 +755,7 @@ namespace pgn
         [[nodiscard]] std::uint16_t plyCount() const
         {
             const std::string_view tag = detail::findTagValue(m_tagSection, "PlyCount"sv);
-            return detail::parseUInt16(tag);
+            return ::detail::parseUInt16(tag);
         }
 
         [[nodiscard]] std::uint16_t plyCount(std::uint16_t def) const
@@ -809,7 +765,7 @@ namespace pgn
             {
                 return def;
             }
-            return detail::parseUInt16(tag);
+            return ::detail::parseUInt16(tag);
         }
 
         [[nodiscard]] std::string_view tag(std::string_view tag) const
