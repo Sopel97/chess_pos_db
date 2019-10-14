@@ -256,12 +256,20 @@ namespace query
 
             for (auto&& levelStr : j["levels"])
             {
-                query.levels.emplace_back(fromString<GameLevel>(levelStr));
+                auto levelOpt = fromString<GameLevel>(levelStr);
+                if (levelOpt.has_value())
+                {
+                    query.levels.emplace_back(*levelOpt);
+                }
             }
 
             for (auto&& resultStr : j["results"])
             {
-                query.results.emplace_back(fromString<GameResult>(GameResultWordFormat{}, resultStr));
+                auto resultOpt = fromString<GameResult>(GameResultWordFormat{}, resultStr);
+                if (resultOpt.has_value())
+                {
+                    query.results.emplace_back(*resultOpt);
+                }
             }
 
             for (const Select select : values<Select>())

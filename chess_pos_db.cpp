@@ -78,7 +78,7 @@ namespace app
             std::string levelStr, pgnPath;
             std::getline(ss, levelStr, ';');
             if (levelStr.empty()) continue;
-            const auto levelOpt = gameLevelFromString(levelStr);
+            const auto levelOpt = fromString<GameLevel>(levelStr);
             if (!levelOpt.has_value())
             {
                 std::cerr << "Invalid level: " << levelStr << '\n';
@@ -458,7 +458,11 @@ namespace app
                 j["levels"].get_to(levelsStr);
                 for (auto&& levelStr : levelsStr)
                 {
-                    query.levels.emplace_back(fromString<GameLevel>(levelStr));
+                    auto levelOpt = fromString<GameLevel>(levelStr);
+                    if (levelOpt.has_value())
+                    {
+                        query.levels.emplace_back(*levelOpt);
+                    }
                 }
             }
 
@@ -467,7 +471,11 @@ namespace app
                 j["results"].get_to(resultsStr);
                 for (auto&& resultStr : resultsStr)
                 {
-                    query.results.emplace_back(fromString<GameResult>(GameResultWordFormat{}, resultStr));
+                    auto resultOpt = fromString<GameResult>(GameResultWordFormat{}, resultStr);
+                    if (resultOpt.has_value())
+                    {
+                        query.results.emplace_back(*resultOpt);
+                    }
                 }
             }
 

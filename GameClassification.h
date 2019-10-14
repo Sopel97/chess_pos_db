@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <optional>
 
 enum struct GameResult : std::uint8_t
 {
@@ -74,7 +75,7 @@ struct EnumTraits<GameResult>
         return ""sv;
     }
 
-    [[nodiscard]] static GameResult fromString(GameResultWordFormat, std::string_view sv)
+    [[nodiscard]] static std::optional<GameResult> fromString(GameResultWordFormat, std::string_view sv)
     {
         using namespace std::literals;
 
@@ -82,10 +83,10 @@ struct EnumTraits<GameResult>
         if (sv == "loss"sv) return GameResult::BlackWin;
         if (sv == "draw"sv) return GameResult::Draw;
 
-        return GameResult::Draw;
+        return std::nullopt;
     }
 
-    [[nodiscard]] static GameResult fromString(GameResultPgnFormat, std::string_view sv)
+    [[nodiscard]] static std::optional<GameResult> fromString(GameResultPgnFormat, std::string_view sv)
     {
         using namespace std::literals;
 
@@ -93,7 +94,7 @@ struct EnumTraits<GameResult>
         if (sv == "0-1"sv) return GameResult::BlackWin;
         if (sv == "1/2-1/2"sv) return GameResult::Draw;
 
-        return GameResult::Draw;
+        return std::nullopt;
     }
 };
 
@@ -146,7 +147,7 @@ struct EnumTraits<GameLevel>
         return ""sv;
     }
 
-    [[nodiscard]] static GameLevel fromString(std::string_view sv)
+    [[nodiscard]] static std::optional<GameLevel> fromString(std::string_view sv)
     {
         using namespace std::literals;
 
@@ -154,6 +155,6 @@ struct EnumTraits<GameLevel>
         if (sv == "engine"sv) return GameLevel::Engine;
         if (sv == "server"sv) return GameLevel::Server;
 
-        return GameLevel::Human;
+        return std::nullopt;
     }
 };
