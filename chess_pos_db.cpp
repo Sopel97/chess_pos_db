@@ -218,6 +218,79 @@ namespace app
         return aggResults;
     }
 
+    void printAggregatedResult(const query::SegregatedEntries& entriesDirect, const query::SegregatedEntries& entriesTrans)
+    {
+        std::size_t total = 0;
+        std::size_t totalDirect = 0;
+
+        EnumMap2<GameLevel, GameResult, std::pair<std::size_t, std::size_t>> cc{};
+
+        for (auto& [origin, e] : entriesDirect)
+        {
+            totalDirect += e.count;
+            cc[origin.level][origin.result].first += e.count;
+            cc[origin.level][origin.result].second += e.count;
+        }
+        total = totalDirect;
+        for (auto& [origin, e] : entriesTrans)
+        {
+            total += e.count;
+            cc[origin.level][origin.result].first += e.count;
+        }
+        std::cout << std::setw(5) << total << ' ' << totalDirect << ' ';
+
+        for(auto&& c : cc)
+            std::cout << std::setw(19) << resultsToString(c) << ' ';
+
+        std::cout << '\n';
+
+        const persistence::GameHeader* firstGame = nullptr;
+        for (auto& [origin, e] : entriesDirect)
+        {
+            if (!e.firstGame.has_value())
+            {
+                continue;
+            }
+
+            if (firstGame == nullptr || e.firstGame->gameIdx() < firstGame->gameIdx())
+            {
+                firstGame = &*(e.firstGame);
+            }
+        }
+
+        if (firstGame)
+        {
+            std::string plyCount = firstGame->plyCount() ? std::to_string(*firstGame->plyCount()) : "-"s;
+            std::cout
+                << firstGame->date().toString()
+                << ' ' << toString(GameResultWordFormat{}, firstGame->result())
+                << ' ' << firstGame->eco().toString()
+                << ' ' << firstGame->event()
+                << ' ' << plyCount
+                << ' ' << firstGame->white()
+                << ' ' << firstGame->black()
+                << '\n';
+        }
+    }
+
+    void printAggregatedResults(const query::Response& res)
+    {
+        for (auto&& result : res.results)
+        {
+            auto pos = *result.position.tryGet();
+            auto direct = result.resultsBySelect.at(query::Select::Continuations);
+            auto trans = result.resultsBySelect.at(query::Select::Transpositions);
+
+            printAggregatedResult(direct.root, trans.root);
+            for (auto&& [move, e] : direct.children)
+            {
+                auto&& transE = trans.children.at(move);
+                std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check | san::SanSpec::Compact>(pos, move) << " ";
+                printAggregatedResult(e, transE);
+            }
+        }
+    }
+
     void printAggregatedResult(const AggregatedQueryResult& res)
     {
         std::size_t total = 0;
@@ -845,8 +918,9 @@ namespace app
         return std::make_unique<persistence::local::Database>(path);
     }
 
-    void query(persistence::local::Database& db, const Position& pos)
+    void query(persistence::local::Database& db, std::string fen)
     {
+        /*
         auto agg = queryAggregate(db, pos, true, true, true, false);
 
         printAggregatedResult(agg.main);
@@ -856,6 +930,25 @@ namespace app
             std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check | san::SanSpec::Compact>(pos, move) << " ";
             printAggregatedResult(res);
         }
+        */
+
+        query::Request query;
+        query.token = "toktok";
+        query.positions = { { std::move(fen), std::nullopt } };
+        //query.positions = { { "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" , "e5"} };
+        query.fetchingOptions[query::Select::Continuations].fetchFirstGame = true;
+        query.fetchingOptions[query::Select::Continuations].fetchLastGame = false;
+        query.fetchingOptions[query::Select::Continuations].fetchFirstGameForEachChild = true;
+        query.fetchingOptions[query::Select::Continuations].fetchLastGameForEachChild = false;
+        query.fetchingOptions[query::Select::Continuations].fetchChildren = true;
+        query.fetchingOptions[query::Select::Transpositions].fetchFirstGame = true;
+        query.fetchingOptions[query::Select::Transpositions].fetchLastGame = false;
+        query.fetchingOptions[query::Select::Transpositions].fetchFirstGameForEachChild = true;
+        query.fetchingOptions[query::Select::Transpositions].fetchLastGameForEachChild = false;
+        query.fetchingOptions[query::Select::Transpositions].fetchChildren = true;
+        query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
+        query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
+        printAggregatedResults(db.executeQuery(query));
     }
 
     void merge(persistence::local::Database& db, const std::filesystem::path& destination)
@@ -1078,7 +1171,7 @@ namespace app
                 throw InvalidCommand("Invalid fen.");
             }
 
-            app::query(*m_database, *position);
+            app::query(*m_database, args[0]);
         }
 
         void info(const Args& args)
@@ -1423,6 +1516,28 @@ void testHddQuery2(std::string name)
     std::cout << nlohmann::json(result).dump(4) << '\n';
 }
 
+void testLocalQuery2(std::string name)
+{
+    persistence::local::Database db("w:/catobase/" + name);
+
+    auto pos = Position::startPosition();
+    query::Request query;
+    query.token = "toktok";
+    query.positions = { { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", std::nullopt } };
+    //query.positions = { { "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" , "e5"} };
+    query.fetchingOptions[query::Select::Continuations].fetchFirstGame = true;
+    query.fetchingOptions[query::Select::Continuations].fetchLastGame = true;
+    query.fetchingOptions[query::Select::Continuations].fetchFirstGameForEachChild = true;
+    query.fetchingOptions[query::Select::Continuations].fetchLastGameForEachChild = true;
+    query.fetchingOptions[query::Select::Continuations].fetchChildren = true;
+    query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
+    query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
+    for (int i = 0; i < 10; ++i)
+        auto result = db.executeQuery(query);
+    auto result = db.executeQuery(query);
+    std::cout << nlohmann::json(result).dump(4) << '\n';
+}
+
 void testMerge(std::string name)
 {
     persistence::hdd::Database db("w:/catobase/" + name);
@@ -1437,7 +1552,8 @@ int main()
     //newFormatBuild(".v2");
     //testMerge(".v2");
     //testHddQuery(".v2");
-    testHddQuery2(".v2");
+    //testHddQuery2(".v2");
+    //testLocalQuery2(".v1");
 
     
     app::App app;
