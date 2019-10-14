@@ -44,9 +44,9 @@ namespace app
         std::cout << "\n\n";
     }
 
-    persistence::local::PgnFiles parsePgnListFile(const std::filesystem::path& path)
+    persistence::ImportablePgnFiles parsePgnListFile(const std::filesystem::path& path)
     {
-        persistence::local::PgnFiles pgns;
+        persistence::ImportablePgnFiles pgns;
 
         std::ifstream file(path);
         std::string line;
@@ -358,25 +358,25 @@ namespace app
         db.printInfo(out);
     }
 
-    void create(const std::filesystem::path& destination, const persistence::local::PgnFiles& pgns, const std::filesystem::path& temp)
+    void create(const std::filesystem::path& destination, const persistence::ImportablePgnFiles& pgns, const std::filesystem::path& temp)
     {
         assertDirectoryEmpty(destination);
         assertDirectoryEmpty(temp);
 
         {
             persistence::local::Database db(temp);
-            db.importPgns(pgns, importMemory);
+            db.import(pgns, importMemory);
             db.replicateMergeAll(destination);
         }
         std::filesystem::remove_all(temp);
     }
 
-    void create(const std::filesystem::path& destination, const persistence::local::PgnFiles& pgns)
+    void create(const std::filesystem::path& destination, const persistence::ImportablePgnFiles& pgns)
     {
         assertDirectoryEmpty(destination);
 
         persistence::local::Database db(destination);
-        db.importPgns(pgns, importMemory);
+        db.import(pgns, importMemory);
     }
 
     void destroy(std::unique_ptr<persistence::local::Database> db)

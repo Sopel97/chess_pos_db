@@ -105,6 +105,38 @@ namespace persistence
 
         virtual void clear() = 0;
 
+        [[nodiscard]] ManifestValidationResult createOrValidateManifest() const
+        {
+            if (std::filesystem::exists(manifestPath()))
+            {
+                return validateManifest();
+            }
+            else
+            {
+                createManifest();
+                return ManifestValidationResult::Ok;
+            }
+        }
+
+        void initializeManifest() const
+        {
+            auto res = createOrValidateManifest();
+            switch (res)
+            {
+            case ManifestValidationResult::EndiannessMismatch:
+                throw std::runtime_error("Cannot load database. Endianness mismatch.");
+            case ManifestValidationResult::KeyMismatch:
+                throw std::runtime_error("Cannot load database. Key mismatch.");
+            case ManifestValidationResult::InvalidManifest:
+                throw std::runtime_error("Cannot load database. Invalid manifest.");
+            }
+        }
+
+        virtual ~Database() {};
+
+    private:
+        static const inline std::filesystem::path m_manifestFilename = "manifest";
+
         void createManifest() const
         {
             const auto& manifestData = this->manifest();
@@ -124,12 +156,14 @@ namespace persistence
             const std::uint8_t keyLengthLow = static_cast<std::uint8_t>(keyLength);
             std::memcpy(data.data(), &keyLengthLow, 1);
             std::memcpy(data.data() + 1, manifestData.key.data(), keyLength);
-            
+
             if (endiannessSignatureLength != 0)
             {
                 const EndiannessSignature sig;
                 std::memcpy(data.data() + 1 + keyLength, &sig, endiannessSignatureLength);
             }
+
+            writeManifest(data);
         }
 
         [[nodiscard]] ManifestValidationResult validateManifest() const
@@ -164,7 +198,7 @@ namespace persistence
                         : ManifestValidationResult::EndiannessMismatch;
                 }
             }
-            else if(manifestData.size() == 1 + keyLength)
+            else if (manifestData.size() == 1 + keyLength)
             {
                 return ManifestValidationResult::Ok;
             }
@@ -173,11 +207,6 @@ namespace persistence
                 return ManifestValidationResult::InvalidManifest;
             }
         }
-
-        virtual ~Database() {};
-
-    private:
-        static const inline std::filesystem::path m_manifestFilename = "manifest";
 
         [[nodiscard]] std::filesystem::path manifestPath() const
         {
