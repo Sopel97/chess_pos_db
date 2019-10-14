@@ -229,8 +229,6 @@ namespace persistence
             };
         }
 
-        struct QueryResult;
-
         struct File;
 
         namespace detail
@@ -346,9 +344,6 @@ namespace persistence
                 executeQuery<query::Select::All>(keys, stats, level, result);
             }
 
-            void queryDirectRanges(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMove>& keys) const;
-            void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMove>& keys) const;
-
         private:
             ext::ImmutableSpan<detail::Entry> m_entries;
             detail::IndexWithoutReverseMove m_indexWithoutReverseMove;
@@ -399,145 +394,6 @@ namespace persistence
                 }
             }
         }
-
-        struct QueryTarget
-        {
-            GameLevel level;
-            GameResult result;
-        };
-
-        struct FileQueryResult
-        {
-            FileQueryResult(const File& file, std::size_t begin, std::size_t end) :
-                m_file(&file),
-                m_begin(begin),
-                m_end(end)
-            {
-            }
-
-            [[nodiscard]] const File& file() const
-            {
-                return *m_file;
-            }
-
-            [[nodiscard]] std::size_t begin() const
-            {
-                return m_begin;
-            }
-
-            [[nodiscard]] std::size_t end() const
-            {
-                return m_end;
-            }
-
-            void print() const
-            {
-                std::cout << m_file->path() << ' ' << m_begin << ' ' << m_end << '\n';
-            }
-
-            [[nodiscard]] std::size_t count() const
-            {
-                return m_end - m_begin;
-            }
-
-            [[nodiscard]] std::uint32_t firstGameIndex() const
-            {
-                ASSERT(m_begin != m_end);
-
-                return m_file->at(m_begin).gameIdx();
-            }
-
-            [[nodiscard]] std::uint32_t lastGameIndex() const
-            {
-                ASSERT(m_begin != m_end);
-
-                return m_file->at(m_end - 1u).gameIdx();
-            }
-
-        private:
-            const File* m_file;
-            std::size_t m_begin;
-            std::size_t m_end;
-        };
-
-        struct QueryResult
-        {
-            template <typename... ArgsTs>
-            void emplaceRange(ArgsTs&& ... args)
-            {
-                m_ranges.emplace_back(std::forward<ArgsTs>(args)...);
-            }
-
-            template <typename... ArgsTs>
-            void emplaceDirectRange(ArgsTs&& ... args)
-            {
-                m_directRanges.emplace_back(std::forward<ArgsTs>(args)...);
-            }
-
-            void print() const
-            {
-                for (auto&& range : m_ranges)
-                {
-                    range.print();
-                }
-                std::cout << '\n';
-            }
-
-            [[nodiscard]] std::size_t count() const
-            {
-                std::size_t c = 0;
-                for (auto&& range : m_ranges)
-                {
-                    c += range.count();
-                }
-                return c;
-            }
-
-            [[nodiscard]] std::size_t directCount() const
-            {
-                std::size_t c = 0;
-                for (auto&& range : m_directRanges)
-                {
-                    c += range.count();
-                }
-                return c;
-            }
-
-            [[nodiscard]] std::uint32_t firstGameIndex() const
-            {
-                ASSERT(!m_ranges.empty());
-
-                return m_ranges.front().firstGameIndex();
-            }
-
-            [[nodiscard]] std::uint32_t lastGameIndex() const
-            {
-                ASSERT(!m_ranges.empty());
-
-                return m_ranges.back().lastGameIndex();
-            }
-
-            [[nodiscard]] std::uint32_t firstDirectGameIndex() const
-            {
-                ASSERT(!m_directRanges.empty());
-
-                return m_directRanges.front().firstGameIndex();
-            }
-
-            [[nodiscard]] std::uint32_t lastDirectGameIndex() const
-            {
-                ASSERT(!m_directRanges.empty());
-
-                return m_directRanges.back().lastGameIndex();
-            }
-
-        private:
-            // Where the position hash matches
-            std::vector<FileQueryResult> m_ranges;
-
-            // Where both position hash and reverse move match
-            std::vector<FileQueryResult> m_directRanges;
-        };
 
         template <query::Select SelectV>
         void File::executeQuery(
@@ -607,80 +463,6 @@ namespace persistence
                 newEntry.lastGameEntryIdx = range.second - 1;
 
                 currentEntry.combine(newEntry);
-            }
-        }
-
-        void File::queryDirectRanges(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMove>& keys) const
-        {
-            auto searchResults = [this, &keys]() {
-                if constexpr (detail::useIndex)
-                {
-                    return ext::equal_range_multiple_interp_indexed_cross(
-                        m_entries,
-                        m_indexWithReverseMove,
-                        keys,
-                        detail::Entry::CompareLessWithReverseMove{},
-                        detail::extractEntryKey,
-                        detail::entryKeyToArithmetic,
-                        detail::entryKeyArithmeticToSizeT
-                    );
-                }
-                else
-                {
-                    return ext::equal_range_multiple_interp_cross(
-                        m_entries,
-                        keys,
-                        detail::Entry::CompareLessWithReverseMove{},
-                        detail::extractEntryKey,
-                        detail::entryKeyToArithmetic,
-                        detail::entryKeyArithmeticToSizeT
-                    );
-                }
-            }();
-            for (int i = 0; i < searchResults.size(); ++i)
-            {
-                const auto& result = searchResults[i];
-                const auto count = result.second - result.first;
-                if (count == 0) continue;
-
-                results[i].emplaceDirectRange(*this, result.first, result.second);
-            }
-        }
-        
-        void File::queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMove>& keys) const
-        {
-            auto searchResults = [this, &keys]() {
-                if constexpr (detail::useIndex)
-                {
-                    return ext::equal_range_multiple_interp_indexed_cross(
-                        m_entries, 
-                        m_indexWithoutReverseMove, 
-                        keys, 
-                        detail::Entry::CompareLessWithoutReverseMove{},
-                        detail::extractEntryKey,
-                        detail::entryKeyToArithmeticWithoutReverseMove,
-                        detail::entryKeyArithmeticToSizeT
-                    );
-                }
-                else
-                {
-                    return ext::equal_range_multiple_interp_cross(
-                        m_entries, 
-                        keys, 
-                        detail::Entry::CompareLessWithoutReverseMove{},
-                        detail::extractEntryKey,
-                        detail::entryKeyToArithmeticWithoutReverseMove,
-                        detail::entryKeyArithmeticToSizeT
-                    );
-                }
-            }();
-            for (int i = 0; i < searchResults.size(); ++i)
-            {
-                const auto& result = searchResults[i];
-                const auto count = result.second - result.first;
-                if (count == 0) continue;
-
-                results[i].emplaceRange(*this, result.first, result.second);
             }
         }
 
@@ -955,22 +737,6 @@ namespace persistence
                 for (auto&& file : m_files)
                 {
                     file.executeQueryAll(keys, stats, level, result);
-                }
-            }
-
-            void queryRanges(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMove>& keys) const
-            {
-                for (auto&& file : m_files)
-                {
-                    file.queryRanges(results, keys);
-                }
-            }
-
-            void queryDirectRanges(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMove>& keys) const
-            {
-                for (auto&& file : m_files)
-                {
-                    file.queryDirectRanges(results, keys);
                 }
             }
 
@@ -1347,26 +1113,6 @@ namespace persistence
             static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["local"]["pgn_parser_memory"].get<MemoryAmount>();
 
         public:
-
-            static const std::vector<QueryTarget>& allQueryTargets()
-            {
-                static const std::vector<QueryTarget> s_allQueryTargets = []() {
-                    std::vector<QueryTarget> s_allQueryTargets;
-
-                    for (auto level : values<GameLevel>())
-                    {
-                        for (auto result : values<GameResult>())
-                        {
-                            s_allQueryTargets.emplace_back(QueryTarget{ level, result });
-                        }
-                    }
-
-                    return s_allQueryTargets;
-                }();
-
-                return s_allQueryTargets;
-            }
-
             Database(std::filesystem::path path) :
                 m_path(path),
                 m_header(path)
@@ -1565,66 +1311,6 @@ namespace persistence
                 auto unflattened = query::unflatten(std::move(results), query, posQueries);
 
                 return { std::move(query), std::move(unflattened) };
-            }
-
-            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(
-                const std::vector<QueryTarget>& targets, 
-                const std::vector<Position>& positions,
-                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
-            ) const
-            {
-                const std::size_t numPositions = positions.size();
-
-                std::vector<PositionSignatureWithReverseMove> keys;
-                keys.reserve(numPositions);
-                for (std::size_t i = 0; i < numPositions; ++i)
-                {
-                    if (reverseMoves.size() > i)
-                    {
-                        keys.emplace_back(positions[i], reverseMoves[i]);
-                    }
-                    else
-                    {
-                        keys.emplace_back(positions[i]);
-                    }
-                }
-
-                auto unsort = reversibleSort(keys, detail::Entry::CompareLessWithReverseMove{});
-
-                EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> results;
-                for (auto&& target : targets)
-                {
-                    const GameLevel level = target.level;
-                    const GameResult result = target.result;
-
-                    std::vector<QueryResult>& r = results[level][result];
-                    r.resize(numPositions);
-                    m_partitions[level][result].queryRanges(r, keys);
-                    if (!reverseMoves.empty())
-                    {
-                        m_partitions[level][result].queryDirectRanges(r, keys);
-                    }
-
-                    unsort(r);
-                }
-                return results;
-            }
-
-            [[nodiscard]] std::vector<QueryResult> queryRanges(
-                QueryTarget target, 
-                const std::vector<Position>& positions,
-                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
-            ) const
-            {
-                return queryRanges(std::vector<QueryTarget>{ { target } }, positions, reverseMoves)[target.level][target.result];
-            }
-
-            [[nodiscard]] EnumMap2<GameLevel, GameResult, std::vector<QueryResult>> queryRanges(
-                const std::vector<Position>& positions,
-                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
-            ) const
-            {
-                return queryRanges(allQueryTargets(), positions, reverseMoves);
             }
 
             void mergeAll()

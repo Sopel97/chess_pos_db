@@ -495,9 +495,6 @@ namespace persistence
             };
         }
 
-        struct QueryResult;
-        struct FileQueryResult;
-
         struct File
         {
             static std::filesystem::path pathForId(const std::filesystem::path& path, std::uint32_t id)
@@ -622,192 +619,11 @@ namespace persistence
                 }
             }
 
-            [[nodiscard]] FileQueryResult decodeQueryResultDirect(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const;
-            [[nodiscard]] FileQueryResult decodeQueryResult(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const;
-
-            void queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const;
-            void query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const;
-
         private:
             ext::ImmutableSpan<detail::Entry> m_entries;
             detail::Index m_index;
             std::uint32_t m_id;
         };
-
-        struct FileQueryResult
-        {
-            FileQueryResult(const File& file, const EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset>& entries) :
-                m_file(&file),
-                m_entries(entries)
-            {
-            }
-
-            [[nodiscard]] const File& file() const
-            {
-                return *m_file;
-            }
-
-            [[nodiscard]] std::size_t count(GameLevel level, GameResult result) const
-            {
-                return m_entries[level][result].count();
-            }
-
-            [[nodiscard]] std::uint64_t firstGameOffset(GameLevel level, GameResult result) const
-            {
-                return m_entries[level][result].gameOffset();
-            }
-
-        private:
-            const File* m_file;
-            EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset> m_entries;
-        };
-
-        struct QueryResult
-        {
-            template <typename... ArgsTs>
-            void emplace(ArgsTs&& ... args)
-            {
-                m_subResults.emplace_back(std::forward<ArgsTs>(args)...);
-            }
-
-            template <typename... ArgsTs>
-            void emplaceDirect(ArgsTs&& ... args)
-            {
-                m_directSubResults.emplace_back(std::forward<ArgsTs>(args)...);
-            }
-
-            [[nodiscard]] std::size_t count(GameLevel level, GameResult result) const
-            {
-                std::size_t c = 0;
-                for (auto&& range : m_subResults)
-                {
-                    c += range.count(level, result);
-                }
-                return c;
-            }
-
-            [[nodiscard]] std::size_t directCount(GameLevel level, GameResult result) const
-            {
-                std::size_t c = 0;
-                for (auto&& range : m_directSubResults)
-                {
-                    c += range.count(level, result);
-                }
-                return c;
-            }
-
-            [[nodiscard]] std::uint64_t firstGameOffset(GameLevel level, GameResult result) const
-            {
-                ASSERT(!m_ranges.empty());
-
-                return m_subResults.front().firstGameOffset(level, result);
-            }
-
-            [[nodiscard]] std::uint64_t firstDirectGameOffset(GameLevel level, GameResult result) const
-            {
-                ASSERT(!m_directRanges.empty());
-
-                return m_directSubResults.front().firstGameOffset(level, result);
-            }
-
-        private:
-            // Where the position hash matches
-            std::vector<FileQueryResult> m_subResults;
-
-            // Where both position hash and reverse move match
-            std::vector<FileQueryResult> m_directSubResults;
-        };
-
-        // game classification in query keys is ignored
-        [[nodiscard]] FileQueryResult File::decodeQueryResultDirect(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const
-        {
-            EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset> matchingEntries;
-            for (GameLevel level : values<GameLevel>())
-            {
-                for (GameResult result : values<GameResult>())
-                {
-                    matchingEntries[level][result] = detail::CountAndGameOffset(0, std::numeric_limits<std::uint64_t>::max());
-                }
-            }
-
-            auto cmp = detail::Entry::CompareEqualWithReverseMove{};
-
-            // we look for an entry that matches key
-            for (auto& entry : entries)
-            {
-                if (cmp(entry, key))
-                {
-                    const GameLevel level = entry.level();
-                    const GameResult result = entry.result();
-                    auto& matchingEntry = matchingEntries[level][result];
-                    matchingEntry.combine(entry.countAndGameOffset());
-                }
-            }
-
-            return FileQueryResult(*this, matchingEntries);
-        }
-
-        [[nodiscard]] FileQueryResult File::decodeQueryResult(const std::vector<detail::Entry>& entries, const PositionSignatureWithReverseMoveAndGameClassification& key) const
-        {
-            EnumMap2<GameLevel, GameResult, detail::CountAndGameOffset> matchingEntries;
-            for (GameLevel level : values<GameLevel>())
-            {
-                for (GameResult result : values<GameResult>())
-                {
-                    matchingEntries[level][result] = detail::CountAndGameOffset(0, std::numeric_limits<std::uint64_t>::max());
-                }
-            }
-
-            auto cmp = detail::Entry::CompareEqualWithoutReverseMove{};
-
-            // we look for an entry that matches key
-            for (auto& entry : entries)
-            {
-                if (cmp(entry, key))
-                {
-                    const GameLevel level = entry.level();
-                    const GameResult result = entry.result();
-                    auto& matchingEntry = matchingEntries[level][result];
-                    matchingEntry.combine(entry.countAndGameOffset());
-                }
-            }
-
-            return FileQueryResult(*this, matchingEntries);
-        }
-
-        void File::queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
-        {
-            std::vector<detail::Entry> buffer;
-            for (std::size_t i = 0; i < keys.size(); ++i)
-            {
-                auto& key = keys[i];
-                auto [a, b] = m_index.equal_range(key);
-
-                const std::size_t count = b.it - a.it;
-                if (count == 0) continue; // the range is empty, the value certainly does not exist
-
-                buffer.resize(count);
-                (void)m_entries.read(buffer.data(), a.it, count);
-                results[i].emplaceDirect(decodeQueryResultDirect(buffer, key));
-            }
-        }
-
-        void File::query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
-        {
-            std::vector<detail::Entry> buffer;
-            for (std::size_t i = 0; i < keys.size(); ++i)
-            {
-                auto& key = keys[i];
-                auto [a, b] = m_index.equal_range(key);
-
-                const std::size_t count = b.it - a.it;
-                if (count == 0) continue; // the range is empty, the value certainly does not exist
-
-                buffer.resize(count);
-                (void)m_entries.read(buffer.data(), a.it, count);
-                results[i].emplace(decodeQueryResult(buffer, key));
-            }
-        }
 
         struct FutureFile
         {
@@ -1096,22 +912,6 @@ namespace persistence
                 for (auto&& file : m_files)
                 {
                     file.executeQuery(query, keys, queries, stats);
-                }
-            }
-
-            void query(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
-            {
-                for (auto&& file : m_files)
-                {
-                    file.query(results, keys);
-                }
-            }
-
-            void queryDirect(std::vector<QueryResult>& results, const std::vector<PositionSignatureWithReverseMoveAndGameClassification>& keys) const
-            {
-                for (auto&& file : m_files)
-                {
-                    file.queryDirect(results, keys);
                 }
             }
 
@@ -1623,42 +1423,6 @@ namespace persistence
                 auto unflattened = query::unflatten(std::move(results), query, posQueries);
 
                 return { std::move(query), std::move(unflattened) };
-            }
-
-            // We don't have QueryTarget here because we query all at once anyway.
-            [[nodiscard]] std::vector<QueryResult> queryRanges(
-                const std::vector<Position>& positions,
-                const std::vector<ReverseMove>& reverseMoves = std::vector<ReverseMove>{}
-            ) const
-            {
-                const std::size_t numPositions = positions.size();
-
-                std::vector<PositionSignatureWithReverseMoveAndGameClassification> keys;
-                keys.reserve(numPositions);
-                for (std::size_t i = 0; i < numPositions; ++i)
-                {
-                    if (reverseMoves.size() > i)
-                    {
-                        keys.emplace_back(positions[i], reverseMoves[i]);
-                    }
-                    else
-                    {
-                        keys.emplace_back(positions[i]);
-                    }
-                }
-                auto unsort = reversibleSort(keys, detail::Entry::CompareLessWithReverseMove{});
-
-                std::vector<QueryResult> results;
-                results.resize(numPositions);
-                m_partition.query(results, keys);
-                if (!reverseMoves.empty())
-                {
-                    m_partition.queryDirect(results, keys);
-                }
-
-                unsort(results);
-
-                return results;
             }
 
             void mergeAll()
