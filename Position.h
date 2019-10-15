@@ -1184,20 +1184,49 @@ struct Position : public Board
 
     [[nodiscard]] auto hash() const
     {
+        constexpr std::size_t epSquareFileBits = 4;
+        constexpr std::size_t castlingRightsBits = 4;
+
         std::array<std::uint32_t, 4> arrh;
         auto h = xxhash::XXH3_128bits(piecesRaw(), 64);
         std::memcpy(arrh.data(), &h, sizeof(std::uint32_t) * 4);
         arrh[0] ^= ordinal(m_sideToMove);
+
+        arrh[0] <<= epSquareFileBits;
+        // 0xF is certainly not a file number
+        arrh[0] ^= m_epSquare == Square::none() ? 0xF : ordinal(m_epSquare);
+
+        arrh[0] <<= castlingRightsBits;
+        arrh[0] ^= ordinal(m_castlingRights);
+
         return arrh;
+    }
+
+    [[nodiscard]] constexpr bool isEpPossible() const
+    {
+        return m_epSquare != Square::none();
     }
 
 private:
     Color m_sideToMove;
-    Square m_epSquare; // TODO: use in hash
+    Square m_epSquare;
     CastlingRights m_castlingRights;
 };
 
 static_assert(sizeof(Position) == 192);
+
+static_assert(Position::fromFen("k7/6p1/5q2/5P2/8/8/5K2/8 b - - 0 1").piecesBB() == (Bitboard::square(F2) | F5 | F6 | G7 | A8));
+static_assert(bb::isAttackedBySlider(F2, {}, {}, Bitboard::square(F6), (Bitboard::square(F2) | F6 | A8)));
+
+static_assert(
+    (
+        bb::pawnAttacks(Bitboard::square(G6), Color::Black) &
+        Position::fromFen("k7/8/5q2/5Pp1/8/8/5K2/8 w - - 0 2").piecesBB(Piece(PieceType::Pawn, Color::White))
+    ) == Bitboard::square(F5));
+
+static_assert(Position::fromFen("rnbqkbnr/ppp2ppp/8/3ppP2/8/4P3/PPPP2PP/RNBQKBNR b KQkq - 0 3").afterMove(Move{ G7, G5 }).isEpPossible());
+static_assert(!Position::fromFen("rnb1kbnr/pp3ppp/5q2/2pppP2/8/2N1P3/PPPP1KPP/R1BQ1BNR b kq - 3 5").afterMove(Move{ G7, G5 }).isEpPossible());
+static_assert(Position::fromFen("rnb1kbnr/pp3ppp/5q2/2pppP2/8/2N1P3/PPPP1KPP/R1BQ1BNR b kq - 3 5").afterMove(Move{ G7, G5 }).createsDiscoveredAttackOnOwnKing(Move{ F5, G6, MoveType::EnPassant }));
 
 static_assert(Position::startPosition().afterMove(Move{ A2, A4 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR b KQkq -"));
 static_assert(Position::startPosition().afterMove(Move{ E2, E3 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq -"));
