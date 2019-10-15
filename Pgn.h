@@ -371,7 +371,6 @@ namespace pgn
                 m_position(Position::startPosition()),
                 m_moveSection(moveSection)
             {
-                ASSERT(m_moveSection.front() == '1');
             }
 
             const UnparsedPositionsIterator& operator++()
@@ -673,7 +672,10 @@ namespace pgn
                 }
                 else if (tag.key == "ECO"sv)
                 {
-                    eco = Eco(tag.value);
+                    if (tag.value.size() == 3)
+                    {
+                        eco = Eco(tag.value);
+                    }
                 }
                 else if (tag.key == "Result"sv)
                 {

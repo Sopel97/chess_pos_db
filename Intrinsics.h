@@ -14,6 +14,9 @@
 
 #elif defined(_MSC_VER)
 
+// NOTE: for some reason it breaks the profiler a little
+//       keep it on only when not profiling.
+//#define FORCEINLINE __forceinline
 #define FORCEINLINE
 
 #else

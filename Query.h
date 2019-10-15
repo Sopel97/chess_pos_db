@@ -770,7 +770,7 @@ namespace query
 
     void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers)
     {
-        ASSERT(destination.size() == headers.size());
+        ASSERT(destinations.size() == headers.size());
 
         const std::size_t size = destinations.size();
         for (std::size_t i = 0; i < size; ++i)
@@ -784,7 +784,7 @@ namespace query
 
     void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, const std::vector<persistence::PackedGameHeader>& headers)
     {
-        ASSERT(destination.size() == headers.size());
+        ASSERT(destinations.size() == headers.size());
 
         const std::size_t size = destinations.size();
         for (std::size_t i = 0; i < size; ++i)

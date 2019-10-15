@@ -1524,9 +1524,6 @@ namespace persistence
                 const query::PositionQueries& posQueries,
                 std::vector<detail::PositionStats>& stats)
             {
-                ASSERT(keys.size() == posQueries.size());
-                ASSERT(keys.size() == stats.size());
-
                 query::PositionQueryResults results(posQueries.size());
                 std::vector<std::uint64_t> offsets;
                 std::vector<query::GameHeaderDestination> destinations;

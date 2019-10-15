@@ -228,7 +228,7 @@ namespace san
             return '\0';
         }
 
-        [[nodiscard]] FORCEINLINE constexpr Move sanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] constexpr Move sanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
         {
             // since we remove capture information it's either
             // 012345 idx
@@ -328,7 +328,7 @@ namespace san
         }
 
         template <PieceType PieceTypeV>
-        [[nodiscard]] FORCEINLINE constexpr Move sanToMove(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san, std::size_t sanLen)
         {
             static_assert(
                 PieceTypeV == PieceType::Knight
@@ -432,7 +432,7 @@ namespace san
             return Move::null();
         }
 
-        [[nodiscard]] FORCEINLINE INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, const char* san, std::size_t length)
         {
             // since we remove captures the only possible case is 
             // Ka1
@@ -445,7 +445,7 @@ namespace san
             return Move{ fromSq, toSq };
         }
 
-        [[nodiscard]] FORCEINLINE constexpr Move sanToMove_Castle(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] constexpr Move sanToMove_Castle(const Position& pos, const char* san, std::size_t length)
         {
             // either:
             // 012345 - idx
@@ -745,6 +745,35 @@ namespace san
             return move;
         }
 
+        namespace lookup::sanToMove
+        {
+            constexpr std::array<Move(*)(const Position&, const char*, std::size_t), 256> funcs = []() {
+                std::array<Move(*)(const Position&, const char*, std::size_t), 256> funcs{};
+
+                for (auto& f : funcs)
+                {
+                    f = [](const Position& pos, const char* san, std::size_t length) {return Move::null(); };
+                }
+
+                funcs['N'] = detail::sanToMove<PieceType::Knight>;
+                funcs['B'] = detail::sanToMove<PieceType::Bishop>;
+                funcs['R'] = detail::sanToMove<PieceType::Rook>;
+                funcs['Q'] = detail::sanToMove<PieceType::Queen>;
+                funcs['K'] = detail::sanToMove_King;
+                funcs['O'] = detail::sanToMove_Castle;
+                funcs['a'] = detail::sanToMove_Pawn;
+                funcs['b'] = detail::sanToMove_Pawn;
+                funcs['c'] = detail::sanToMove_Pawn;
+                funcs['d'] = detail::sanToMove_Pawn;
+                funcs['e'] = detail::sanToMove_Pawn;
+                funcs['f'] = detail::sanToMove_Pawn;
+                funcs['g'] = detail::sanToMove_Pawn;
+                funcs['h'] = detail::sanToMove_Pawn;
+
+                return funcs;
+            }();
+        }
+
         // assumes that the the san is correct and the move
         // described by it is legal
         // NOT const char* because it removes signs of capture
@@ -756,25 +785,7 @@ namespace san
 
             length = detail::removeSanDecorations(san, length);
 
-            switch (san[0])
-            {
-            case 'N':
-                return detail::sanToMove<PieceType::Knight>(pos, san, length);
-            case 'B':
-                return detail::sanToMove<PieceType::Bishop>(pos, san, length);
-            case 'R':
-                return detail::sanToMove<PieceType::Rook>(pos, san, length);
-            case 'Q':
-                return detail::sanToMove<PieceType::Queen>(pos, san, length);
-            case 'K':
-                return detail::sanToMove_King(pos, san, length);
-            case 'O':
-                return detail::sanToMove_Castle(pos, san, length);
-            case '-':
-                return Move::null();
-            default:
-                return detail::sanToMove_Pawn(pos, san, length);
-            }
+            return lookup::sanToMove::funcs[static_cast<unsigned char>(san[0])](pos, san, length);
         }
 
         [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, char* san, std::size_t length)
