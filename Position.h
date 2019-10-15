@@ -9,7 +9,7 @@
 #include <iterator>
 #include <string>
 
-#include "lib/xxhash//xxhash_cpp.h"
+#include "lib/xxhash/xxhash_cpp.h"
 
 enum struct CastlingRights : std::uint8_t
 {
