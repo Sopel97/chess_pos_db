@@ -25,6 +25,20 @@
 
 #endif
 
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+
+#define NOINLINE __attribute__((noinline))
+
+#elif defined(_MSC_VER)
+
+#define NOINLINE __declspec(noinline)
+
+#else
+
+#define NOINLINE
+
+#endif
+
 
 // the following enables constexpr intrinsics, but they are slower
 // it's useful for running compile time tests

@@ -115,9 +115,9 @@ namespace san
                 return length;
             }
 
-            std::size_t i = 0;
-            for (; i < length && *san != 'x'; ++i, ++san);
-            if (i == length)
+            const char* end = san + length;
+            for (; san != end && *san != 'x'; ++san);
+            if (san == end)
             {
                 return length;
             }

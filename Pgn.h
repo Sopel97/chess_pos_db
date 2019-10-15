@@ -47,7 +47,7 @@ namespace pgn
         // Readjusts `s` to start at the first character after comment ends.
         // If the comment doesn't end then makes `s` empty
         // Comments cannot be recursive.
-        inline void skipComment(std::string_view& s)
+        NOINLINE inline void skipComment(std::string_view& s)
         {
             const char first = s[0];
             ASSERT(isCommentBegin(first));
@@ -66,7 +66,7 @@ namespace pgn
         // Readjusts `s` to start at the first character after variation ends.
         // If the variation doesn't end then makes `s` empty
         // Variations can be recursive.
-        inline void skipVariation(std::string_view& s)
+        NOINLINE inline void skipVariation(std::string_view& s)
         {
             ASSERT(isVariationBegin(s[0]));
 
@@ -231,13 +231,14 @@ namespace pgn
             {
                 return {};
             }
-            std::string_view key = s.substr(1, space - 1);
 
             const std::size_t end = s.find('\"', space + 2);
             if (end == std::string::npos)
             {
                 return {};
             }
+
+            std::string_view key = s.substr(1, space - 1);
             std::string_view value = s.substr(space + 2, end - (space + 2));
 
             s.remove_prefix(end + 2);
@@ -350,8 +351,8 @@ namespace pgn
         }
     }
 
-    constexpr std::string_view tagSectionEndSequence = "]\n\n";
-    constexpr std::string_view moveSectionEndSequence = "\n\n";
+    constexpr std::string_view tagSectionEndSequence = "\n\n"sv;
+    constexpr std::string_view moveSectionEndSequence = "\n\n"sv;
 
     struct UnparsedGamePositions
     {
@@ -375,11 +376,6 @@ namespace pgn
 
             const UnparsedPositionsIterator& operator++()
             {
-                // TODO: Indicate somehow that there was an error and the position
-                //       stream is ending abruptly.
-                //       For example when a move is missing "22.Ba3 -- 23.a6 b4"
-                //       we want to propagate that to the importer so the game can be skipped.
-
                 detail::seekNextMove(m_moveSection);
                 if (m_moveSection.empty())
                 {
@@ -478,11 +474,6 @@ namespace pgn
 
             const UnparsedMovesIterator& operator++()
             {
-                // TODO: Indicate somehow that there was an error and the position
-                //       stream is ending abruptly.
-                //       For example when a move is missing "22.Ba3 -- 23.a6 b4"
-                //       we want to propagate that to the importer so the game can be skipped.
-
                 detail::seekNextMove(m_moveSection);
                 if (m_moveSection.empty())
                 {
@@ -672,7 +663,7 @@ namespace pgn
                 }
                 else if (tag.key == "ECO"sv)
                 {
-                    if (tag.value.size() == 3)
+                    if (tag.value != "?"sv)
                     {
                         eco = Eco(tag.value);
                     }
@@ -714,7 +705,10 @@ namespace pgn
                 }
                 else if (tag.key == "ECO"sv)
                 {
-                    eco = Eco(tag.value);
+                    if (tag.value != "?"sv)
+                    {
+                        eco = Eco(tag.value);
+                    }
                 }
                 else if (tag.key == "Result"sv)
                 {
@@ -951,7 +945,7 @@ namespace pgn
                 }
             }
 
-            void refillBuffer()
+            NOINLINE void refillBuffer()
             {
                 // copies unprocessed data to the beginning
                 // and fills the rest with new data
