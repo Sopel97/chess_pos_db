@@ -6,6 +6,7 @@
 
 #include "Configuration.h"
 #include "MemoryAmount.h"
+#include "Logger.h"
 
 #include <iostream>
 
@@ -29,23 +30,6 @@ namespace ext
 {
     // TODO: we need to use non-portable functions to allow >32bit file offsets
     //       so consider moving to std::fstream
-
-    namespace detail
-    {
-        decltype(auto) timestamp()
-        {
-            auto time_now = std::time(nullptr);
-            return std::put_time(std::localtime(&time_now), "%Y-%m-%d %OH:%OM:%OS");
-        }
-
-        template <typename... ArgsTs>
-        void log(ArgsTs&& ... args)
-        {
-            std::cerr << timestamp();
-            (std::cerr << ... << args);
-            std::cerr << '\n';
-        }
-    }
 
     struct Exception : public std::runtime_error
     {
@@ -654,10 +638,10 @@ namespace ext
 
                     for (auto&& spec : specs())
                     {
-                        detail::log(": Creating thread pool for paths: ");
+                        Logger::instance().logInfo(": Creating thread pool for paths: ");
                         for (auto&& path : spec.paths)
                         {
-                            detail::log(":     ", path);
+                            Logger::instance().logInfo(":     ", path);
                         }
                         s_instances.emplace_back(new ThreadPool(spec.numThreads));
                     }
@@ -756,7 +740,7 @@ namespace ext
             ThreadPool(std::size_t numThreads = defaultNumThreads) :
                 m_done(false)
             {
-                detail::log(": Creating thread pool with ", numThreads, " threads.");
+                Logger::instance().logInfo(": Creating thread pool with ", numThreads, " threads.");
                 m_threads.reserve(numThreads);
                 for (std::size_t i = 0; i < numThreads; ++i)
                 {

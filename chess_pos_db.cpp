@@ -16,6 +16,7 @@
 #include "External.h"
 #include "DatabaseFormatAlpha.h"
 #include "DatabaseFormatBeta.h"
+#include "Logger.h"
 #include "MoveGenerator.h"
 #include "Pgn.h"
 #include "Position.h"

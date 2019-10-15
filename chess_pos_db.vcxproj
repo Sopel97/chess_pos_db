@@ -263,6 +263,7 @@
     <ClInclude Include="IntegerConversions.h" />
     <ClInclude Include="Intrinsics.h" />
     <ClInclude Include="DatabaseFormatAlpha.h" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="MemoryAmount.h" />
     <ClInclude Include="MoveGenerator.h" />
     <ClInclude Include="MoveGeneratorTest.h" />

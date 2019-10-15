@@ -6,6 +6,7 @@
 #include "External.h"
 #include "GameClassification.h"
 #include "MemoryAmount.h"
+#include "Logger.h"
 #include "Pgn.h"
 #include "Position.h"
 #include "Query.h"
@@ -34,20 +35,6 @@ namespace persistence
     {
         namespace detail
         {
-            decltype(auto) timestamp()
-            {
-                auto time_now = std::time(nullptr);
-                return std::put_time(std::localtime(&time_now), "%Y-%m-%d %OH:%OM:%OS");
-            }
-
-            template <typename... ArgsTs>
-            void log(ArgsTs&& ... args)
-            {
-                std::cerr << timestamp();
-                (std::cerr << ... << args);
-                std::cerr << '\n';
-            }
-
             static constexpr bool usePacked = true;
 
             // Have ranges of mixed values be at most this long
@@ -701,13 +688,6 @@ namespace persistence
                     return m_entries;
                 }
 
-                void printInfo(std::ostream& out) const
-                {
-                    std::cout << "Location: " << m_entries.path() << "\n";
-                    std::cout << "Entry count: " << m_entries.size() << "\n";
-                    std::cout << "Index size: " << m_index.size() << "\n";
-                }
-
                 void accumulateStatsFromEntries(
                     const std::vector<Entry>& entries,
                     const query::Request& query,
@@ -1174,17 +1154,6 @@ namespace persistence
                     return m_path;
                 }
 
-                void printInfo(std::ostream& out) const
-                {
-                    std::cout << "Location: " << m_path << "\n";
-                    std::cout << "Files: \n";
-                    for (auto&& file : m_files)
-                    {
-                        file.printInfo(out);
-                        std::cout << "\n";
-                    }
-                }
-
                 void clear()
                 {
                     collectFutureFiles();
@@ -1377,13 +1346,6 @@ namespace persistence
                 return m_manifest;
             }
 
-            void printInfo(std::ostream& out) const
-            {
-                std::cout << "Location: " << m_path << "\n";
-                m_partition.printInfo(out);
-                std::cout << '\n';
-            }
-
             void clear() override
             {
                 for (auto& header : m_headers)
@@ -1423,16 +1385,16 @@ namespace persistence
 
             void mergeAll() override
             {
-                detail::log(": Merging files...");
+                Logger::instance().logInfo(": Merging files...");
 
                 auto progressReport = [](const ext::ProgressReport& report) {
-                    detail::log(":     ", static_cast<int>(report.ratio() * 100), "%.");
+                    Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
                 };
 
                 m_partition.mergeAll(progressReport);
 
-                detail::log(": Finalizing...");
-                detail::log(": Completed.");
+                Logger::instance().logInfo(": Finalizing...");
+                Logger::instance().logInfo(": Completed.");
             }
 
             void replicateMergeAll(const std::filesystem::path& path) override
@@ -1448,16 +1410,16 @@ namespace persistence
                     header.replicateTo(path);
                 }
 
-                detail::log(": Merging files...");
+                Logger::instance().logInfo(": Merging files...");
 
                 auto progressReport = [](const ext::ProgressReport& report) {
-                    detail::log(":     ", static_cast<int>(report.ratio() * 100), "%.");
+                    Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
                 };
 
                 m_partition.replicateMergeAll(path / partitionDirectory, progressReport);
 
-                detail::log(": Finalizing...");
-                detail::log(": Completed.");
+                Logger::instance().logInfo(": Finalizing...");
+                Logger::instance().logInfo(": Completed.");
             }
 
             ImportStats import(
@@ -1542,21 +1504,21 @@ namespace persistence
                     numSortingThreads
                 );
 
-                detail::log(": Importing pgns...");
+                Logger::instance().logInfo(": Importing pgns...");
                 ImportStats statsTotal = importPgnsImpl(std::execution::seq, pipeline, pgns, [&totalSize, &totalSizeProcessed](auto&& pgn) {
                     totalSizeProcessed += std::filesystem::file_size(pgn);
-                    detail::log(":     ", static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), "% - completed ", pgn, ".");
+                    Logger::instance().logInfo(":     ", static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), "% - completed ", pgn, ".");
                     });
-                detail::log(": Finalizing...");
+                Logger::instance().logInfo(": Finalizing...");
 
                 pipeline.waitForCompletion();
                 collectFutureFiles();
 
                 flush();
 
-                detail::log(": Completed.");
+                Logger::instance().logInfo(": Completed.");
 
-                detail::log(": Imported ", statsTotal.numGames, " games with ", statsTotal.numPositions, " positions. Skipped ", statsTotal.numSkippedGames, " games.");
+                Logger::instance().logInfo(": Imported ", statsTotal.numGames, " games with ", statsTotal.numPositions, " positions. Skipped ", statsTotal.numSkippedGames, " games.");
 
                 return statsTotal;
             }
@@ -1737,7 +1699,7 @@ namespace persistence
                     pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                     if (!fr.isOpen())
                     {
-                        detail::log("Failed to open file ", path);
+                        Logger::instance().logError("Failed to open file ", path);
                         completionCallback(path);
                         break;
                     }
@@ -1909,7 +1871,7 @@ namespace persistence
                         pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                         if (!fr.isOpen())
                         {
-                            detail::log("Failed to open file ", path);
+                            Logger::instance().logError("Failed to open file ", path);
                             break;
                         }
 

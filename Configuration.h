@@ -8,6 +8,7 @@
 #include "lib/json/json.hpp"
 
 #include "MemoryAmount.h"
+#include "Logger.h"
 
 namespace cfg
 {
@@ -185,10 +186,17 @@ namespace cfg
 
             m_json = defaultJson();
 
-            if (!str.empty())
+            try
             {
-                str = detail::stripComments(str);
-                m_json.merge_patch(nlohmann::json::parse(str));
+                if (!str.empty())
+                {
+                    str = detail::stripComments(str);
+                    m_json.merge_patch(nlohmann::json::parse(str));
+                }
+            }
+            catch (...)
+            {
+                Logger::instance().logError("Invalid configuration file. Keeping default.");
             }
         }
     };

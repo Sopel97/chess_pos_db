@@ -6,6 +6,7 @@
 #include "External.h"
 #include "GameClassification.h"
 #include "MemoryAmount.h"
+#include "Logger.h"
 #include "Pgn.h"
 #include "Query.h"
 #include "StorageHeader.h"
@@ -35,20 +36,6 @@ namespace persistence
     {
         namespace detail
         {
-            decltype(auto) timestamp()
-            {
-                auto time_now = std::time(nullptr);
-                return std::put_time(std::localtime(&time_now), "%Y-%m-%d %OH:%OM:%OS");
-            }
-
-            template <typename... ArgsTs>
-            void log(ArgsTs&& ... args)
-            {
-                std::cerr << timestamp();
-                (std::cerr << ... << args);
-                std::cerr << '\n';
-            }
-
             static constexpr bool useIndex = true;
 
             // Have ranges of mixed values be at most this long
@@ -397,14 +384,6 @@ namespace persistence
                 [[nodiscard]] const ext::ImmutableSpan<Entry>& entries() const
                 {
                     return m_entries;
-                }
-
-                void printInfo(std::ostream& out) const
-                {
-                    std::cout << "Location: " << m_entries.path() << "\n";
-                    std::cout << "Entry count: " << m_entries.size() << "\n";
-                    std::cout << "Index size: " << m_indexWithoutReverseMove.size() << "\n";
-                    std::cout << "Direct Index size: " << m_indexWithReverseMove.size() << "\n";
                 }
 
                 template <query::Select SelectV>
@@ -900,17 +879,6 @@ namespace persistence
                     return m_path;
                 }
 
-                void printInfo(std::ostream& out) const
-                {
-                    std::cout << "Location: " << m_path << "\n";
-                    std::cout << "Files: \n";
-                    for (auto&& file : m_files)
-                    {
-                        file.printInfo(out);
-                        std::cout << "\n";
-                    }
-                }
-
                 void clear()
                 {
                     collectFutureFiles();
@@ -1172,16 +1140,6 @@ namespace persistence
                 return m_manifest;
             }
 
-            void printInfo(std::ostream& out) const
-            {
-                std::cout << "Location: " << m_path << "\n";
-                forEach(m_partitions, [&out](auto&& partition, GameLevel level, GameResult result) {
-                    std::cout << "Partition " << static_cast<unsigned>(level) << ' ' << static_cast<unsigned>(result) << ":\n";
-                    partition.printInfo(out);
-                    std::cout << "\n";
-                    });
-            }
-
             void clear() override
             {
                 m_header.clear();
@@ -1257,20 +1215,20 @@ namespace persistence
             {
                 const std::size_t numPartitions = 9;
                 std::size_t i = 0;
-                detail::log(": Merging files...");
+                Logger::instance().logInfo(": Merging files...");
                 forEach(m_partitions, [numPartitions, &i](auto&& partition, GameLevel level, GameResult result) {
 
                     ++i;
-                    detail::log(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
+                    Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
 
                     auto progressReport = [](const ext::ProgressReport& report) {
-                        detail::log(":     ", static_cast<int>(report.ratio() * 100), "%.");
+                        Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
                     };
 
                     partition.mergeAll(progressReport);
                     });
-                detail::log(": Finalizing...");
-                detail::log(": Completed.");
+                Logger::instance().logInfo(": Finalizing...");
+                Logger::instance().logInfo(": Completed.");
             }
 
             void replicateMergeAll(const std::filesystem::path& path) override
@@ -1286,20 +1244,20 @@ namespace persistence
 
                 const std::size_t numPartitions = 9;
                 std::size_t i = 0;
-                detail::log(": Merging files...");
+                Logger::instance().logInfo(": Merging files...");
                 forEach(m_partitions, [numPartitions, &i, &partitionPaths](auto&& partition, GameLevel level, GameResult result) {
 
                     ++i;
-                    detail::log(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
+                    Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
 
                     auto progressReport = [](const ext::ProgressReport& report) {
-                        detail::log(":     ", static_cast<int>(report.ratio() * 100), "%.");
+                        Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
                     };
 
                     partition.replicateMergeAll(partitionPaths[level][result], progressReport);
                     });
-                detail::log(": Finalizing...");
-                detail::log(": Completed.");
+                Logger::instance().logInfo(": Finalizing...");
+                Logger::instance().logInfo(": Completed.");
             }
 
             ImportStats import(
@@ -1398,7 +1356,7 @@ namespace persistence
                 );
 
                 ImportStats statsTotal{};
-                detail::log(": Importing pgns...");
+                Logger::instance().logInfo(": Importing pgns...");
                 for (auto level : values<GameLevel>())
                 {
                     if (pathsByLevel[level].empty())
@@ -1408,19 +1366,19 @@ namespace persistence
 
                     statsTotal += importPgnsImpl(std::execution::seq, pipeline, pathsByLevel[level], level, [&totalSize, &totalSizeProcessed](auto&& pgn) {
                         totalSizeProcessed += std::filesystem::file_size(pgn);
-                        detail::log(":     ", static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), "% - completed ", pgn, ".");
+                        Logger::instance().logInfo(":     ", static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), "% - completed ", pgn, ".");
                         });
                 }
-                detail::log(": Finalizing...");
+                Logger::instance().logInfo(": Finalizing...");
 
                 pipeline.waitForCompletion();
                 collectFutureFiles();
 
                 flush();
 
-                detail::log(": Completed.");
+                Logger::instance().logInfo(": Completed.");
 
-                detail::log(": Imported ", statsTotal.numGames, " games with ", statsTotal.numPositions, " positions. Skipped ", statsTotal.numSkippedGames, " games.");
+                Logger::instance().logInfo(": Imported ", statsTotal.numGames, " games with ", statsTotal.numPositions, " positions. Skipped ", statsTotal.numSkippedGames, " games.");
 
                 return statsTotal;
             }
@@ -1565,7 +1523,7 @@ namespace persistence
                     pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                     if (!fr.isOpen())
                     {
-                        detail::log("Failed to open file ", path);
+                        Logger::instance().logError("Failed to open file ", path);
                         completionCallback(path);
                         break;
                     }
@@ -1749,7 +1707,7 @@ namespace persistence
                         pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                         if (!fr.isOpen())
                         {
-                            detail::log("Failed to open file ", path);
+                            Logger::instance().logError("Failed to open file ", path);
                             break;
                         }
 
