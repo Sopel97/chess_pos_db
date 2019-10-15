@@ -71,9 +71,6 @@
     <ClInclude Include="External.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="LocalStorageFormat.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="GameClassification.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -101,9 +98,6 @@
     <ClInclude Include="MemoryAmount.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HddStorageFormat.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Query.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -117,6 +111,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Endian.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DatabaseFormatAlpha.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DatabaseFormatBeta.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

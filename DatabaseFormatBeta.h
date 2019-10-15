@@ -30,7 +30,7 @@
 
 namespace persistence
 {
-    namespace hdd
+    namespace db_beta
     {
         namespace detail
         {
@@ -51,7 +51,7 @@ namespace persistence
             static constexpr bool usePacked = true;
 
             // Have ranges of mixed values be at most this long
-            static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["hdd"]["index_granularity"].get<std::size_t>();
+            static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["db_beta"]["index_granularity"].get<std::size_t>();
 
             static constexpr std::uint64_t invalidGameOffset = std::numeric_limits<std::uint64_t>::max();
 
@@ -882,7 +882,7 @@ namespace persistence
 
             struct Partition
             {
-                static inline const std::size_t mergeMemory = cfg::g_config["persistence"]["hdd"]["max_merge_buffer_size"].get<MemoryAmount>();
+                static inline const std::size_t mergeMemory = cfg::g_config["persistence"]["db_beta"]["max_merge_buffer_size"].get<MemoryAmount>();
 
                 Partition() = default;
 
@@ -1193,7 +1193,7 @@ namespace persistence
 
             static inline const std::filesystem::path partitionDirectory = "data";
 
-            static inline const DatabaseManifest m_manifest = { "hdd", true };
+            static inline const DatabaseManifest m_manifest = { "db_beta", true };
 
             static constexpr std::size_t m_totalNumDirectories = 1;
 
@@ -1203,7 +1203,7 @@ namespace persistence
                 "_server"
             };
 
-            static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["hdd"]["pgn_parser_memory"].get<MemoryAmount>();
+            static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
 
         public:
             Database(std::filesystem::path path) :

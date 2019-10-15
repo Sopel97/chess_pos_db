@@ -14,8 +14,8 @@
 #include "Enum.h"
 #include "EnumMap.h"
 #include "External.h"
-#include "LocalStorageFormat.h"
-#include "HddStorageFormat.h"
+#include "DatabaseFormatAlpha.h"
+#include "DatabaseFormatBeta.h"
 #include "MoveGenerator.h"
 #include "Pgn.h"
 #include "Position.h"
@@ -257,14 +257,14 @@ namespace app
         std::cout << "Throughput of " << size / time / 1e6 << " MB/s\n";
     }
 
-    [[nodiscard]] std::unique_ptr<persistence::local::Database> open(const std::filesystem::path& path)
+    [[nodiscard]] std::unique_ptr<persistence::db_alpha::Database> open(const std::filesystem::path& path)
     {
         assertDirectoryNotEmpty(path);
 
-        return std::make_unique<persistence::local::Database>(path);
+        return std::make_unique<persistence::db_alpha::Database>(path);
     }
 
-    void query(persistence::local::Database& db, std::string fen)
+    void query(persistence::db_alpha::Database& db, std::string fen)
     {
         /*
         auto agg = queryAggregate(db, pos, true, true, true, false);
@@ -297,14 +297,14 @@ namespace app
         printAggregatedResults(db.executeQuery(query));
     }
 
-    void merge(persistence::local::Database& db, const std::filesystem::path& destination)
+    void merge(persistence::db_alpha::Database& db, const std::filesystem::path& destination)
     {
         assertDirectoryNotEmpty(destination);
 
         db.replicateMergeAll(destination);
     }
 
-    void merge(persistence::local::Database& db)
+    void merge(persistence::db_alpha::Database& db)
     {
         db.mergeAll();
     }
@@ -365,7 +365,7 @@ namespace app
         std::cerr << "Verified " << idx << " games.\n";
     }
 
-    void info(const persistence::local::Database& db, std::ostream& out)
+    void info(const persistence::db_alpha::Database& db, std::ostream& out)
     {
         db.printInfo(out);
     }
@@ -376,7 +376,7 @@ namespace app
         assertDirectoryEmpty(temp);
 
         {
-            persistence::local::Database db(temp);
+            persistence::db_alpha::Database db(temp);
             db.import(pgns, importMemory);
             db.replicateMergeAll(destination);
         }
@@ -387,11 +387,11 @@ namespace app
     {
         assertDirectoryEmpty(destination);
 
-        persistence::local::Database db(destination);
+        persistence::db_alpha::Database db(destination);
         db.import(pgns, importMemory);
     }
 
-    void destroy(std::unique_ptr<persistence::local::Database> db)
+    void destroy(std::unique_ptr<persistence::db_alpha::Database> db)
     {
         if (db == nullptr)
         {
@@ -453,7 +453,7 @@ namespace app
         }
 
     private:
-        std::unique_ptr<persistence::local::Database> m_database;
+        std::unique_ptr<persistence::db_alpha::Database> m_database;
 
         void help(const Args& args) const
         {
@@ -605,9 +605,6 @@ namespace app
 
 int main()
 {
-    app::bench({ { "c:/dev/chess_pos_db/data/lichess_db_standard_rated_2013-12.pgn" } });
-
-    return 0;
     app::App app;
     app.run();
 

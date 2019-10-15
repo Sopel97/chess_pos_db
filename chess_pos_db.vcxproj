@@ -259,10 +259,10 @@
     <ClInclude Include="External.h" />
     <ClInclude Include="FixedVector.h" />
     <ClInclude Include="GameClassification.h" />
-    <ClInclude Include="HddStorageFormat.h" />
+    <ClInclude Include="DatabaseFormatBeta.h" />
     <ClInclude Include="IntegerConversions.h" />
     <ClInclude Include="Intrinsics.h" />
-    <ClInclude Include="LocalStorageFormat.h" />
+    <ClInclude Include="DatabaseFormatAlpha.h" />
     <ClInclude Include="MemoryAmount.h" />
     <ClInclude Include="MoveGenerator.h" />
     <ClInclude Include="MoveGeneratorTest.h" />

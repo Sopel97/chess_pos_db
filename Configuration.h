@@ -154,13 +154,13 @@ namespace cfg
     "persistence" : {
         "header_writer_memory" : "16MiB",
 
-        "local" : {
+        "db_alpha" : {
             "index_granularity" : 1024,
             "max_merge_buffer_size" : "1GiB",
             "pgn_parser_memory" : "4MiB"
         },
 
-        "hdd" : {
+        "db_beta" : {
             "index_granularity" : 1024,
             "max_merge_buffer_size" : "1GiB",
             "pgn_parser_memory" : "4MiB"

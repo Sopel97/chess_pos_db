@@ -32,7 +32,7 @@
 
 namespace persistence
 {
-    namespace local
+    namespace db_alpha
     {
         namespace detail
         {
@@ -53,7 +53,7 @@ namespace persistence
             static constexpr bool useIndex = true;
 
             // Have ranges of mixed values be at most this long
-            static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["local"]["index_granularity"].get<std::size_t>();
+            static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["db_alpha"]["index_granularity"].get<std::size_t>();
 
             struct Entry
             {
@@ -699,7 +699,7 @@ namespace persistence
 
             struct Partition
             {
-                static inline const std::size_t mergeMemory = cfg::g_config["persistence"]["local"]["max_merge_buffer_size"].get<MemoryAmount>();
+                static inline const std::size_t mergeMemory = cfg::g_config["persistence"]["db_alpha"]["max_merge_buffer_size"].get<MemoryAmount>();
 
                 Partition() = default;
 
@@ -1027,7 +1027,7 @@ namespace persistence
         private:
             using BaseType = persistence::Database;
 
-            static inline const DatabaseManifest m_manifest = { "local", true };
+            static inline const DatabaseManifest m_manifest = { "db_alpha", true };
 
             template <typename T>
             using PerPartition = EnumMap2<GameLevel, GameResult, T>;
@@ -1055,7 +1055,7 @@ namespace persistence
                 cardinality<GameLevel>()
                 * cardinality<GameResult>();
 
-            static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["local"]["pgn_parser_memory"].get<MemoryAmount>();
+            static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["db_alpha"]["pgn_parser_memory"].get<MemoryAmount>();
 
         public:
             Database(std::filesystem::path path) :
