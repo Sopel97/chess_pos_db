@@ -227,11 +227,23 @@ namespace app
         {
             size += std::filesystem::file_size(path);
 
+            for (int i = 0; i < 2; ++i)
+            {
+                // warmup
+                pgn::LazyPgnFileReader reader(path, 4 * 1024 * 1024);
+                for (auto&& game : reader);
+                std::cout << "warmup " << i << " finished\n";
+            }
+
+            std::this_thread::sleep_for(std::chrono::seconds{ 1 });
+
+            auto t0 = std::chrono::high_resolution_clock::now();
             pgn::LazyPgnFileReader reader(path, 4 * 1024 * 1024);
             std::size_t c = 0;
-            auto t0 = std::chrono::high_resolution_clock::now();
             for (auto&& game : reader)
             {
+                persistence::PackedGameHeader h(game, 0, 123);
+
                 for (auto&& position : game.positions())
                 {
                     ++c;
@@ -593,6 +605,9 @@ namespace app
 
 int main()
 {
+    app::bench({ { "c:/dev/chess_pos_db/data/lichess_db_standard_rated_2013-12.pgn" } });
+
+    return 0;
     app::App app;
     app.run();
 

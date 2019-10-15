@@ -1136,7 +1136,7 @@ namespace persistence
                     Index index = ib.end();
                     writeIndexFor(outFilePath, index);
 
-                    return std::move(index);
+                    return index;
                 }
 
                 void discoverFiles()
@@ -1279,8 +1279,6 @@ namespace persistence
 
             void mergeAll() override
             {
-                const std::size_t numPartitions = 9;
-                std::size_t i = 0;
                 detail::log(": Merging files...");
 
                 auto progressReport = [](const ext::ProgressReport& report) {
@@ -1306,8 +1304,6 @@ namespace persistence
                     header.replicateTo(path);
                 }
 
-                const std::size_t numPartitions = 9;
-                std::size_t i = 0;
                 detail::log(": Merging files...");
 
                 auto progressReport = [](const ext::ProgressReport& report) {

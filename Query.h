@@ -112,61 +112,64 @@ namespace query
         Transpositions,
         All
     };
+}
 
-    template <>
-    struct EnumTraits<Select>
-    {
-        using IdType = int;
-        using EnumType = Select;
+template <>
+struct EnumTraits<query::Select>
+{
+    using IdType = int;
+    using EnumType = query::Select;
 
-        static constexpr int cardinality = 3;
-        static constexpr bool isNaturalIndex = true;
+    static constexpr int cardinality = 3;
+    static constexpr bool isNaturalIndex = true;
 
-        static constexpr std::array<EnumType, cardinality> values{
-            Select::Continuations,
-            Select::Transpositions,
-            Select::All
-        };
-
-        [[nodiscard]] static constexpr IdType ordinal(EnumType c) noexcept
-        {
-            return static_cast<IdType>(c);
-        }
-
-        [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
-        {
-            return static_cast<EnumType>(id);
-        }
-
-        [[nodiscard]] static std::string_view toString(Select select)
-        {
-            using namespace std::literals;
-
-            switch (select)
-            {
-            case Select::Continuations:
-                return "continuations"sv;
-            case Select::Transpositions:
-                return "transpositions"sv;
-            case Select::All:
-                return "all"sv;
-            }
-
-            return ""sv;
-        }
-
-        [[nodiscard]] static std::optional<Select> fromString(std::string_view sv)
-        {
-            using namespace std::literals;
-
-            if (sv == "continuations"sv) return Select::Continuations;
-            if (sv == "transpositions"sv) return Select::Transpositions;
-            if (sv == "all"sv) return Select::All;
-
-            return {};
-        }
+    static constexpr std::array<EnumType, cardinality> values{
+        query::Select::Continuations,
+        query::Select::Transpositions,
+        query::Select::All
     };
 
+    [[nodiscard]] static constexpr IdType ordinal(EnumType c) noexcept
+    {
+        return static_cast<IdType>(c);
+    }
+
+    [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
+    {
+        return static_cast<EnumType>(id);
+    }
+
+    [[nodiscard]] static std::string_view toString(query::Select select)
+    {
+        using namespace std::literals;
+
+        switch (select)
+        {
+        case query::Select::Continuations:
+            return "continuations"sv;
+        case query::Select::Transpositions:
+            return "transpositions"sv;
+        case query::Select::All:
+            return "all"sv;
+        }
+
+        return ""sv;
+    }
+
+    [[nodiscard]] static std::optional<query::Select> fromString(std::string_view sv)
+    {
+        using namespace std::literals;
+
+        if (sv == "continuations"sv) return query::Select::Continuations;
+        if (sv == "transpositions"sv) return query::Select::Transpositions;
+        if (sv == "all"sv) return query::Select::All;
+
+        return {};
+    }
+};
+
+namespace query
+{
     struct AdditionalFetchingOptions
     {
         bool fetchChildren;
@@ -208,7 +211,7 @@ namespace query
     };
 
     struct Request
-    {   
+    {
         // token can be used to match queries to results by the client
         std::string token;
 
@@ -290,7 +293,7 @@ namespace query
             if (fetchingOptions.size() == 2 && fetchingOptions.count(Select::All) != 0) return false;
             if (levels.empty()) return false;
             if (results.empty()) return false;
-            
+
             for (auto&& root : positions)
             {
                 if (!root.tryGet().has_value())
@@ -318,7 +321,7 @@ namespace query
         {
             j = nlohmann::json::object({
                 { "count", entry.count }
-            });
+                });
 
             if (entry.firstGame.has_value())
             {
@@ -359,11 +362,11 @@ namespace query
         SegregatedEntries() = default;
 
         template <typename... Args>
-        decltype(auto) emplace(GameLevel level, GameResult result, Args&&... args)
+        decltype(auto) emplace(GameLevel level, GameResult result, Args&& ... args)
         {
             m_entries.emplace_back(
                 std::piecewise_construct,
-                std::forward_as_tuple(Origin{level, result}),
+                std::forward_as_tuple(Origin{ level, result }),
                 std::forward_as_tuple(std::forward<Args>(args)...)
             );
         }
@@ -478,7 +481,7 @@ namespace query
             // We have a valid object, fill it.
             j = nlohmann::json::object({
                 { "position", result.position },
-            });
+                });
 
             for (auto&& [select, subresult] : result.resultsBySelect)
             {
@@ -518,32 +521,35 @@ namespace query
         Root,
         Child
     };
+}
 
-    template <>
-    struct EnumTraits<PositionQueryOrigin>
-    {
-        using IdType = int;
-        using EnumType = PositionQueryOrigin;
+template <>
+struct EnumTraits<query::PositionQueryOrigin>
+{
+    using IdType = int;
+    using EnumType = query::PositionQueryOrigin;
 
-        static constexpr int cardinality = 2;
-        static constexpr bool isNaturalIndex = true;
+    static constexpr int cardinality = 2;
+    static constexpr bool isNaturalIndex = true;
 
-        static constexpr std::array<EnumType, cardinality> values{
-            PositionQueryOrigin::Root,
-            PositionQueryOrigin::Child
-        };
-
-        [[nodiscard]] static constexpr IdType ordinal(EnumType c) noexcept
-        {
-            return static_cast<IdType>(c);
-        }
-
-        [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
-        {
-            return static_cast<EnumType>(id);
-        }
+    static constexpr std::array<EnumType, cardinality> values{
+        query::PositionQueryOrigin::Root,
+        query::PositionQueryOrigin::Child
     };
 
+    [[nodiscard]] static constexpr IdType ordinal(EnumType c) noexcept
+    {
+        return static_cast<IdType>(c);
+    }
+
+    [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
+    {
+        return static_cast<EnumType>(id);
+    }
+};
+
+namespace query
+{
     enum struct SelectMask : unsigned
     {
         None = 0,

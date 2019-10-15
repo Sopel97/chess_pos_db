@@ -8,6 +8,21 @@
 
 #include "Assert.h"
 
+#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
+
+#define FORCEINLINE __attribute__((always_inline))
+
+#elif defined(_MSC_VER)
+
+#define FORCEINLINE
+
+#else
+
+#define FORCEINLINE inline
+
+#endif
+
+
 // the following enables constexpr intrinsics, but they are slower
 // it's useful for running compile time tests
 // TODO: in C++20 replace with std::is_constant_evaluated()

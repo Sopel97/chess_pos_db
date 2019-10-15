@@ -56,9 +56,9 @@ struct Date
     {
         ASSERT(sv.size() >= 4);
 
-        std::uint16_t m_year = detail::parseUInt16(sv.substr(0, 4));
-        std::uint8_t m_month = 0;
-        std::uint8_t m_day = 0;
+        m_year = detail::parseUInt16(sv.substr(0, 4));
+        m_month = 0;
+        m_day = 0;
 
         if (sv.size() >= 7)
         {

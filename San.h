@@ -13,7 +13,7 @@ namespace san
 
     namespace detail
     {
-        [[nodiscard]] constexpr int strlen(const char* san)
+        [[nodiscard]] FORCEINLINE constexpr int strlen(const char* san)
         {
             ASSERT(san != nullptr);
 
@@ -23,7 +23,7 @@ namespace san
             return static_cast<int>(cur - san);
         }
 
-        constexpr void strcpy(char* out, const char* san)
+        FORCEINLINE constexpr void strcpy(char* out, const char* san)
         {
             ASSERT(out != nullptr);
             ASSERT(san != nullptr);
@@ -32,7 +32,7 @@ namespace san
             *out = '\0';
         }
 
-        constexpr void strcpy(char* out, const char* san, std::size_t length)
+        FORCEINLINE constexpr void strcpy(char* out, const char* san, std::size_t length)
         {
             ASSERT(out != nullptr);
             ASSERT(san != nullptr);
@@ -42,70 +42,71 @@ namespace san
             *out = '\0';
         }
 
-        [[nodiscard]] constexpr bool isFile(char c)
+        [[nodiscard]] FORCEINLINE constexpr bool isFile(char c)
         {
             return c >= 'a' && c <= 'h';
         }
 
-        [[nodiscard]] constexpr bool isRank(char c)
+        [[nodiscard]] FORCEINLINE constexpr bool isRank(char c)
         {
             return c >= '1' && c <= '8';
         }
 
-        [[nodiscard]] constexpr Rank parseRank(char c)
+        [[nodiscard]] FORCEINLINE constexpr Rank parseRank(char c)
         {
             ASSERT(isRank(c));
 
             return fromOrdinal<Rank>(c - '1');
         }
 
-        [[nodiscard]] constexpr File parseFile(char c)
+        [[nodiscard]] FORCEINLINE constexpr File parseFile(char c)
         {
             ASSERT(isFile(c));
 
             return fromOrdinal<File>(c - 'a');
         }
 
-        [[nodiscard]] constexpr bool isSquare(const char* s)
+        [[nodiscard]] FORCEINLINE constexpr bool isSquare(const char* s)
         {
             return isFile(s[0]) && isRank(s[1]);
         }
 
-        [[nodiscard]] constexpr Square parseSquare(const char* s)
+        [[nodiscard]] FORCEINLINE constexpr Square parseSquare(const char* s)
         {
             const File file = parseFile(s[0]);
             const Rank rank = parseRank(s[1]);
             return Square(file, rank);
         }
 
-        inline void appendSquareToString(Square sq, std::string& str)
+        FORCEINLINE inline void appendSquareToString(Square sq, std::string& str)
         {
             str += static_cast<char>('a' + ordinal(sq.file()));
             str += static_cast<char>('1' + ordinal(sq.rank()));
         }
 
-        inline void appendRankToString(Rank r, std::string& str)
+        FORCEINLINE inline void appendRankToString(Rank r, std::string& str)
         {
             str += static_cast<char>('1' + ordinal(r));
         }
 
-        inline void appendFileToString(File f, std::string& str)
+        FORCEINLINE inline void appendFileToString(File f, std::string& str)
         {
             str += static_cast<char>('a' + ordinal(f));
         }
 
-        [[nodiscard]] constexpr bool contains(std::string_view s, char c)
+        [[nodiscard]] FORCEINLINE constexpr bool contains(std::string_view s, char c)
         {
             return s.find(c) != std::string::npos;
         }
 
-        [[nodiscard]] constexpr bool isSanCapture(std::string_view san)
+        [[nodiscard]] FORCEINLINE constexpr bool isSanCapture(std::string_view san)
         {
             return contains(san, 'x');
         }
 
         // returns new length
-        constexpr std::size_t removeSanCapture(char* san, std::size_t length)
+        // requires that there is no decorations
+        FORCEINLINE constexpr std::size_t removeSanCapture(char* san, std::size_t length)
         {
             // There is no valid san with length less than 4
             // that has a capture
@@ -114,22 +115,25 @@ namespace san
                 return length;
             }
 
-            for (;;)
+            std::size_t i = 0;
+            for (; i < length && *san != 'x'; ++i, ++san);
+            if (i == length)
             {
-                if (*san == 'x') break;
-                if (*san == '\0') return length;
-                ++san;
+                return length;
             }
 
             ASSERT(san[0] == 'x');
             // x__
             // ^san
-            while (*san)
-            {
-                *san = *(san + 1);
-                ++san;
-            }
-
+            // after the x there is either a1 or a1=Q
+            // so we have to move at most 5 characters (0 terminator)
+            // The buffer is always large enough so that this code is valid.
+            san[0] = san[1];
+            san[1] = san[2];
+            san[2] = san[3];
+            san[3] = san[4];
+            san[4] = san[5];
+            
             ASSERT(!contains(san, 'x'));
 
             return length - 1u;
@@ -149,7 +153,7 @@ namespace san
             }();
         }
 
-        constexpr std::size_t removeSanDecorations(char* san, std::size_t length)
+        FORCEINLINE constexpr std::size_t removeSanDecorations(char* san, std::size_t length)
         {
             // removes capture designation
             // removes instances of the following characters:
@@ -181,12 +185,12 @@ namespace san
             return removeSanCapture(san, length);
         }
 
-        [[nodiscard]] constexpr bool isPromotedPieceType(char c)
+        [[nodiscard]] FORCEINLINE constexpr bool isPromotedPieceType(char c)
         {
             return c == 'N' || c == 'B' || c == 'R' || c == 'Q';
         }
 
-        [[nodiscard]] constexpr PieceType parsePromotedPieceType(char c)
+        [[nodiscard]] FORCEINLINE constexpr PieceType parsePromotedPieceType(char c)
         {
             switch (c)
             {
@@ -204,7 +208,7 @@ namespace san
             return PieceType::None;
         }
 
-        [[nodiscard]] constexpr char pieceTypeToChar(PieceType pt)
+        [[nodiscard]] FORCEINLINE constexpr char pieceTypeToChar(PieceType pt)
         {
             switch (pt)
             {
@@ -224,7 +228,7 @@ namespace san
             return '\0';
         }
 
-        [[nodiscard]] constexpr Move sanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] FORCEINLINE constexpr Move sanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
         {
             // since we remove capture information it's either
             // 012345 idx
@@ -324,7 +328,7 @@ namespace san
         }
 
         template <PieceType PieceTypeV>
-        [[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] FORCEINLINE constexpr Move sanToMove(const Position& pos, const char* san, std::size_t sanLen)
         {
             static_assert(
                 PieceTypeV == PieceType::Knight
@@ -333,20 +337,20 @@ namespace san
                 || PieceTypeV == PieceType::Queen);
 
             // either
-            // 01234 - indices
-            // a1
-            // aa1
-            // 1a1
-            // a1a1
+            // 012345 - indices
+            // Na1
+            // Naa1
+            // N1a1
+            // Na1a1
 
-            ASSERT(sanLen >= 2 && sanLen <= 4);
+            ASSERT(sanLen >= 3 && sanLen <= 5);
 
             const Square toSq = parseSquare(san + (sanLen - 2u));
 
-            if (sanLen == 4)
+            if (sanLen == 5)
             {
                 // we have everything we need already in the san
-                const Square fromSq = parseSquare(san);
+                const Square fromSq = parseSquare(san + 1);
 
                 ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
 
@@ -366,20 +370,20 @@ namespace san
                 return Move{ fromSq, toSq };
             }
 
-            if (sanLen == 3)
+            if (sanLen == 4)
             {
                 // we have one of the following to disambiguate with:
                 // aa1
                 // 1a1
 
-                if (isFile(san[0]))
+                if (isFile(san[1]))
                 {
-                    const File fromFile = parseFile(san[0]);
+                    const File fromFile = parseFile(san[1]);
                     candidates &= bb::file(fromFile);
                 }
                 else // if (isRank(san[0]))
                 {
-                    const Rank fromRank = parseRank(san[0]);
+                    const Rank fromRank = parseRank(san[1]);
                     candidates &= bb::rank(fromRank);
                 }
 
@@ -428,20 +432,20 @@ namespace san
             return Move::null();
         }
 
-        [[nodiscard]] INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] FORCEINLINE INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, const char* san, std::size_t length)
         {
             // since we remove captures the only possible case is 
-            // a1
+            // Ka1
 
             const Square fromSq = pos.kingSquare(pos.sideToMove());
-            const Square toSq = parseSquare(san);
+            const Square toSq = parseSquare(san + 1);
 
             ASSERT(pos.pieceAt(fromSq).type() == PieceType::King);
 
             return Move{ fromSq, toSq };
         }
 
-        [[nodiscard]] constexpr Move sanToMove_Castle(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] FORCEINLINE constexpr Move sanToMove_Castle(const Position& pos, const char* san, std::size_t length)
         {
             // either:
             // 012345 - idx
@@ -587,11 +591,11 @@ namespace san
                 || PieceTypeV == PieceType::Queen);
 
             // either
-            // 01234 - indices
-            // a1
-            // aa1
-            // 1a1
-            // a1a1
+            // 012345 - indices
+            // Na1
+            // Naa1
+            // N1a1
+            // Na1a1
 
             auto isValid = [&pos](Move move) {
                 if (pos.pieceAt(move.from).type() != PieceTypeV) return false;
@@ -601,17 +605,17 @@ namespace san
                 return true;
             };
 
-            if (sanLen < 2 || sanLen > 4) return {};
+            if (sanLen < 3 || sanLen > 5) return {};
             if (!isSquare(san + (sanLen - 2u))) return {};
             
             const Square toSq = parseSquare(san + (sanLen - 2u));
 
-            if (sanLen == 4)
+            if (sanLen == 5)
             {
                 // we have everything we need already in the san
-                if (!isSquare(san)) return {};
+                if (!isSquare(san + 1)) return {};
 
-                const Square fromSq = parseSquare(san);
+                const Square fromSq = parseSquare(san + 1);
 
                 const Move move{ fromSq, toSq };
                 if (!isValid(move)) return {};
@@ -631,20 +635,20 @@ namespace san
                 return move;
             }
 
-            if (sanLen == 3)
+            if (sanLen == 4)
             {
                 // we have one of the following to disambiguate with:
                 // aa1
                 // 1a1
 
-                if (isFile(san[0]))
+                if (isFile(san[1]))
                 {
-                    const File fromFile = parseFile(san[0]);
+                    const File fromFile = parseFile(san[1]);
                     candidates &= bb::file(fromFile);
                 }
-                else if (isRank(san[0]))
+                else if (isRank(san[1]))
                 {
-                    const Rank fromRank = parseRank(san[0]);
+                    const Rank fromRank = parseRank(san[1]);
                     candidates &= bb::rank(fromRank);
                 }
 
@@ -693,13 +697,13 @@ namespace san
         [[nodiscard]] INTRIN_CONSTEXPR std::optional<Move> trySanToMove_King(const Position& pos, const char* san, std::size_t length)
         {
             // since we remove captures the only possible case is 
-            // a1
+            // Ka1
 
-            if (length != 2) return {};
-            if (!isSquare(san)) return {};
+            if (length != 3) return {};
+            if (!isSquare(san + 1)) return {};
 
             const Square fromSq = pos.kingSquare(pos.sideToMove());
-            const Square toSq = parseSquare(san);
+            const Square toSq = parseSquare(san + 1);
 
             const Move move{ fromSq, toSq };
             if (pos.createsAttackOnOwnKing(move)) return {};
@@ -707,7 +711,7 @@ namespace san
             return move;
         }
 
-        [[nodiscard]] __declspec(noinline) constexpr std::optional<Move> trySanToMove_Castle(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] constexpr std::optional<Move> trySanToMove_Castle(const Position& pos, const char* san, std::size_t length)
         {
             // either:
             // 012345 - idx
@@ -740,70 +744,70 @@ namespace san
             
             return move;
         }
-    }
 
-    // assumes that the the san is correct and the move
-    // described by it is legal
-    // NOT const char* because it removes signs of capture
-    [[nodiscard]] constexpr Move sanToMove(const Position& pos, char* san, std::size_t length)
-    {
-        // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
-        // *above regex contains all valid SAN strings
-        // (but also some invalid ones)
-
-        length = detail::removeSanDecorations(san, length);
-
-        switch (san[0])
+        // assumes that the the san is correct and the move
+        // described by it is legal
+        // NOT const char* because it removes signs of capture
+        [[nodiscard]] constexpr Move sanToMove(const Position& pos, char* san, std::size_t length)
         {
-        case 'N':
-            return detail::sanToMove<PieceType::Knight>(pos, san + 1, length - 1);
-        case 'B':
-            return detail::sanToMove<PieceType::Bishop>(pos, san + 1, length - 1);
-        case 'R':
-            return detail::sanToMove<PieceType::Rook>(pos, san + 1, length - 1);
-        case 'Q':
-            return detail::sanToMove<PieceType::Queen>(pos, san + 1, length - 1);
-        case 'K':
-            return detail::sanToMove_King(pos, san + 1, length - 1);
-        case 'O':
-            return detail::sanToMove_Castle(pos, san, length);
-        case '-':
-            return Move::null();
-        default:
-            return detail::sanToMove_Pawn(pos, san, length);
-        }
-    }
+            // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
+            // *above regex contains all valid SAN strings
+            // (but also some invalid ones)
 
-    [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, char* san, std::size_t length)
-    {
-        // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
-        // *above regex contains all valid SAN strings
-        // (but also some invalid ones)
+            length = detail::removeSanDecorations(san, length);
 
-        length = detail::removeSanDecorations(san, length);
-        if (length < 2)
-        {
-            return {};
+            switch (san[0])
+            {
+            case 'N':
+                return detail::sanToMove<PieceType::Knight>(pos, san, length);
+            case 'B':
+                return detail::sanToMove<PieceType::Bishop>(pos, san, length);
+            case 'R':
+                return detail::sanToMove<PieceType::Rook>(pos, san, length);
+            case 'Q':
+                return detail::sanToMove<PieceType::Queen>(pos, san, length);
+            case 'K':
+                return detail::sanToMove_King(pos, san, length);
+            case 'O':
+                return detail::sanToMove_Castle(pos, san, length);
+            case '-':
+                return Move::null();
+            default:
+                return detail::sanToMove_Pawn(pos, san, length);
+            }
         }
 
-        switch (san[0])
+        [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, char* san, std::size_t length)
         {
-        case 'N':
-            return detail::trySanToMove<PieceType::Knight>(pos, san + 1, length - 1);
-        case 'B':
-            return detail::trySanToMove<PieceType::Bishop>(pos, san + 1, length - 1);
-        case 'R':
-            return detail::trySanToMove<PieceType::Rook>(pos, san + 1, length - 1);
-        case 'Q':
-            return detail::trySanToMove<PieceType::Queen>(pos, san + 1, length - 1);
-        case 'K':
-            return detail::trySanToMove_King(pos, san + 1, length - 1);
-        case 'O':
-            return detail::trySanToMove_Castle(pos, san, length);
-        case '-':
-            return Move::null();
-        default:
-            return detail::trySanToMove_Pawn(pos, san, length);
+            // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
+            // *above regex contains all valid SAN strings
+            // (but also some invalid ones)
+
+            length = detail::removeSanDecorations(san, length);
+            if (length < 2)
+            {
+                return {};
+            }
+
+            switch (san[0])
+            {
+            case 'N':
+                return detail::trySanToMove<PieceType::Knight>(pos, san, length);
+            case 'B':
+                return detail::trySanToMove<PieceType::Bishop>(pos, san, length);
+            case 'R':
+                return detail::trySanToMove<PieceType::Rook>(pos, san, length);
+            case 'Q':
+                return detail::trySanToMove<PieceType::Queen>(pos, san, length);
+            case 'K':
+                return detail::trySanToMove_King(pos, san, length);
+            case 'O':
+                return detail::trySanToMove_Castle(pos, san, length);
+            case '-':
+                return Move::null();
+            default:
+                return detail::trySanToMove_Pawn(pos, san, length);
+            }
         }
     }
 
@@ -1021,7 +1025,7 @@ namespace san
         char buffer[maxSanLength + 1] = { '\0' };
         detail::strcpy(buffer, san.data(), san.size());
 
-        return sanToMove(pos, buffer, san.size());
+        return detail::sanToMove(pos, buffer, san.size());
     }
 
     [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, std::string_view san)
@@ -1036,7 +1040,7 @@ namespace san
         char buffer[maxSanLength + 1] = { '\0' };
         detail::strcpy(buffer, san.data(), san.size());
 
-        return trySanToMove(pos, buffer, san.size());
+        return detail::trySanToMove(pos, buffer, san.size());
     }
 }
 
