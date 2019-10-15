@@ -1044,10 +1044,11 @@ struct Position : public Board
     {
         ASSERT(move.from.isOk() && move.to.isOk());
 
-        m_epSquare = Square::none();
         const PieceType movedPiece = pieceAt(move.from).type();
         const Square oldEpSquare = m_epSquare;
         const CastlingRights oldCastlingRights = m_castlingRights;
+
+        m_epSquare = Square::none();
         switch (movedPiece)
         {
         case PieceType::Pawn:
@@ -1055,7 +1056,21 @@ struct Position : public Board
             const int d = move.to.rank() - move.from.rank();
             if (d == -2 || d == 2)
             {
-                m_epSquare = Square(move.from.file(), move.from.rank() + d / 2);
+                const Square potentialEpSquare = Square(move.from.file(), move.from.rank() + d / 2);
+                const Bitboard pawnsAttackingEpSquare =
+                    bb::pawnAttacks(Bitboard::square(potentialEpSquare), m_sideToMove)
+                    & piecesBB(Piece(PieceType::Pawn, !m_sideToMove));
+
+                // only set m_epSquare when it matters, ie. when
+                // the opposite side can actually capture
+                for (Square sq : pawnsAttackingEpSquare)
+                {
+                    if (!BaseType::createsDiscoveredAttackOnOwnKing(Move{ sq, potentialEpSquare, MoveType::EnPassant }, !m_sideToMove))
+                    {
+                        m_epSquare = potentialEpSquare;
+                        break;
+                    }
+                }
             }
             break;
         }
