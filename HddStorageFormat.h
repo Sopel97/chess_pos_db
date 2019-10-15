@@ -1186,7 +1186,7 @@ namespace persistence
             }
         }
 
-        struct Database : persistence::Database
+        struct Database final : persistence::Database
         {
         private:
             using BaseType = persistence::Database;
@@ -1212,6 +1212,8 @@ namespace persistence
                 m_nextGameIdx(numGamesInHeaders()),
                 m_partition(path / partitionDirectory)
             {
+                // This calls virtual functions but it's fine
+                // because this class is final.
                 BaseType::initializeManifest();
             }
 

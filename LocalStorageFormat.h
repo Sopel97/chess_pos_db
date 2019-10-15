@@ -1022,7 +1022,7 @@ namespace persistence
             }
         }
 
-        struct Database : persistence::Database
+        struct Database final : persistence::Database
         {
         private:
             using BaseType = persistence::Database;
@@ -1062,7 +1062,9 @@ namespace persistence
                 m_path(path),
                 m_header(path)
             {
-                initializeManifest();
+                // This calls virtual functions but it's fine
+                // because this class is final.
+                BaseType::initializeManifest();
                 initializePartitions();
             }
 
@@ -1070,7 +1072,7 @@ namespace persistence
                 m_path(path),
                 m_header(path, headerBufferMemory)
             {
-                initializeManifest();
+                BaseType::initializeManifest();
                 initializePartitions();
             }
 
