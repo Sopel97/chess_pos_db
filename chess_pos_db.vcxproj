@@ -268,7 +268,6 @@
     <ClInclude Include="MoveGeneratorTest.h" />
     <ClInclude Include="Pgn.h" />
     <ClInclude Include="Position.h" />
-    <ClInclude Include="PositionSignature.h" />
     <ClInclude Include="Query.h" />
     <ClInclude Include="San.h" />
     <ClInclude Include="StorageHeader.h" />

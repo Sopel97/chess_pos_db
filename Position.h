@@ -9,6 +9,8 @@
 #include <iterator>
 #include <string>
 
+#include "lib/xxhash//xxhash_cpp.h"
+
 enum struct CastlingRights : std::uint8_t
 {
     None = 0x0,
@@ -1163,6 +1165,15 @@ struct Position : public Board
         //ASSERT(cpy.beforeMove(move, pc) == *this); // this assert would result in infinite recursion
 
         return cpy;
+    }
+
+    [[nodiscard]] auto hash() const
+    {
+        std::array<std::uint32_t, 4> arrh;
+        auto h = xxhash::XXH3_128bits(piecesRaw(), 64);
+        std::memcpy(arrh.data(), &h, sizeof(std::uint32_t) * 4);
+        arrh[0] ^= ordinal(m_sideToMove);
+        return arrh;
     }
 
 private:

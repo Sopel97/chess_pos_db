@@ -7,7 +7,6 @@
 #include "GameClassification.h"
 #include "MemoryAmount.h"
 #include "Pgn.h"
-#include "PositionSignature.h"
 #include "Query.h"
 #include "StorageHeader.h"
 #include "Unsort.h"
@@ -55,19 +54,111 @@ namespace persistence
             // Have ranges of mixed values be at most this long
             static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["db_alpha"]["index_granularity"].get<std::size_t>();
 
+            struct Key
+            {
+                using StorageType = std::array<std::uint32_t, 4>;
+
+                Key() = default;
+
+                Key(const Position& pos, const ReverseMove& reverseMove = ReverseMove{}) :
+                    m_hash(pos.hash())
+                {
+                    auto packedReverseMove = PackedReverseMove(reverseMove);
+                    // m_hash[0] is the most significant quad, m_hash[3] is the least significant
+                    // We want entries ordered with reverse move to also be ordered by just hash
+                    // so we have to modify the lowest bits.
+                    m_hash[3] = (m_hash[3] & ~PackedReverseMove::mask) | packedReverseMove.packed();
+                }
+
+                Key(const Key&) = default;
+                Key(Key&&) = default;
+                Key& operator=(const Key&) = default;
+                Key& operator=(Key&&) = default;
+
+                [[nodiscard]] const StorageType& hash() const
+                {
+                    return m_hash;
+                }
+
+                struct CompareLessWithReverseMove
+                {
+                    [[nodiscard]] bool operator()(const Key& lhs, const Key& rhs) noexcept
+                    {
+                        if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
+                        else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
+
+                        if (lhs.m_hash[1] < rhs.m_hash[1]) return true;
+                        else if (lhs.m_hash[1] > rhs.m_hash[1]) return false;
+
+                        if (lhs.m_hash[2] < rhs.m_hash[2]) return true;
+                        else if (lhs.m_hash[2] > rhs.m_hash[2]) return false;
+
+                        return (lhs.m_hash[3] < rhs.m_hash[3]);
+                    }
+                };
+
+                struct CompareLessWithoutReverseMove
+                {
+                    [[nodiscard]] bool operator()(const Key& lhs, const Key& rhs) noexcept
+                    {
+                        if (lhs.m_hash[0] < rhs.m_hash[0]) return true;
+                        else if (lhs.m_hash[0] > rhs.m_hash[0]) return false;
+
+                        if (lhs.m_hash[1] < rhs.m_hash[1]) return true;
+                        else if (lhs.m_hash[1] > rhs.m_hash[1]) return false;
+
+                        if (lhs.m_hash[2] < rhs.m_hash[2]) return true;
+                        else if (lhs.m_hash[2] > rhs.m_hash[2]) return false;
+
+                        return ((lhs.m_hash[3] & ~PackedReverseMove::mask) < (rhs.m_hash[3] & ~PackedReverseMove::mask));
+                    }
+                };
+
+                struct CompareEqualWithReverseMove
+                {
+                    [[nodiscard]] bool operator()(const Key& lhs, const Key& rhs) const noexcept
+                    {
+                        return
+                            lhs.m_hash[0] == rhs.m_hash[0]
+                            && lhs.m_hash[1] == rhs.m_hash[1]
+                            && lhs.m_hash[2] == rhs.m_hash[2]
+                            && lhs.m_hash[3] == rhs.m_hash[3];
+                    }
+                };
+
+                struct CompareEqualWithoutReverseMove
+                {
+                    [[nodiscard]] bool operator()(const Key& lhs, const Key& rhs) const noexcept
+                    {
+                        return
+                            lhs.m_hash[0] == rhs.m_hash[0]
+                            && lhs.m_hash[1] == rhs.m_hash[1]
+                            && lhs.m_hash[2] == rhs.m_hash[2]
+                            && (lhs.m_hash[3] & ~PackedReverseMove::mask) == (rhs.m_hash[3] & ~PackedReverseMove::mask);
+                    }
+                };
+
+            private:
+                // All bits of the hash are created equal, so we can specify some ordering.
+                // Elements ordered from least significant to most significant are [3][2][1][0]
+                StorageType m_hash;
+            };
+
+            static_assert(sizeof(Key) == 16);
+
             struct Entry
             {
                 Entry() = default;
 
                 Entry(const Position& pos, const ReverseMove& reverseMove, std::uint32_t gameIdx) :
-                    m_positionSignature(pos, reverseMove),
+                    m_key(pos, reverseMove),
                     m_gameIdx(gameIdx)
                 {
                 }
 
                 // TODO: eventually remove this overload?
                 Entry(const Position& pos, std::uint32_t gameIdx) :
-                    m_positionSignature(pos),
+                    m_key(pos),
                     m_gameIdx(gameIdx)
                 {
                 }
@@ -81,22 +172,22 @@ namespace persistence
                 {
                     [[nodiscard]] bool operator()(const Entry& lhs, const Entry& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithoutReverseMove{}(lhs.m_positionSignature, rhs.m_positionSignature);
+                        return Key::CompareLessWithoutReverseMove{}(lhs.m_key, rhs.m_key);
                     }
 
-                    [[nodiscard]] bool operator()(const Entry& lhs, const PositionSignatureWithReverseMove& rhs) const noexcept
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Key& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithoutReverseMove{}(lhs.m_positionSignature, rhs);
+                        return Key::CompareLessWithoutReverseMove{}(lhs.m_key, rhs);
                     }
 
-                    [[nodiscard]] bool operator()(const PositionSignatureWithReverseMove& lhs, const Entry& rhs) const noexcept
+                    [[nodiscard]] bool operator()(const Key& lhs, const Entry& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithoutReverseMove{}(lhs, rhs.m_positionSignature);
+                        return Key::CompareLessWithoutReverseMove{}(lhs, rhs.m_key);
                     }
 
-                    [[nodiscard]] bool operator()(const PositionSignatureWithReverseMove& lhs, const PositionSignatureWithReverseMove& rhs) const noexcept
+                    [[nodiscard]] bool operator()(const Key& lhs, const Key& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithoutReverseMove{}(lhs, rhs);
+                        return Key::CompareLessWithoutReverseMove{}(lhs, rhs);
                     }
                 };
 
@@ -105,28 +196,28 @@ namespace persistence
                 {
                     [[nodiscard]] bool operator()(const Entry& lhs, const Entry& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithReverseMove{}(lhs.m_positionSignature, rhs.m_positionSignature);
+                        return Key::CompareLessWithReverseMove{}(lhs.m_key, rhs.m_key);
                     }
 
-                    [[nodiscard]] bool operator()(const Entry& lhs, const PositionSignatureWithReverseMove& rhs) const noexcept
+                    [[nodiscard]] bool operator()(const Entry& lhs, const Key& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithReverseMove{}(lhs.m_positionSignature, rhs);
+                        return Key::CompareLessWithReverseMove{}(lhs.m_key, rhs);
                     }
 
-                    [[nodiscard]] bool operator()(const PositionSignatureWithReverseMove& lhs, const Entry& rhs) const noexcept
+                    [[nodiscard]] bool operator()(const Key& lhs, const Entry& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithReverseMove{}(lhs, rhs.m_positionSignature);
+                        return Key::CompareLessWithReverseMove{}(lhs, rhs.m_key);
                     }
 
-                    [[nodiscard]] bool operator()(const PositionSignatureWithReverseMove& lhs, const PositionSignatureWithReverseMove& rhs) const noexcept
+                    [[nodiscard]] bool operator()(const Key& lhs, const Key& rhs) const noexcept
                     {
-                        return PositionSignatureWithReverseMove::CompareLessWithReverseMove{}(lhs, rhs);
+                        return Key::CompareLessWithReverseMove{}(lhs, rhs);
                     }
                 };
 
-                [[nodiscard]] const PositionSignatureWithReverseMove& positionSignature() const
+                [[nodiscard]] const Key& key() const
                 {
-                    return m_positionSignature;
+                    return m_key;
                 }
 
                 [[nodiscard]] std::uint32_t gameIdx() const
@@ -135,15 +226,15 @@ namespace persistence
                 }
 
             private:
-                PositionSignatureWithReverseMove m_positionSignature;
+                Key m_key;
                 std::uint32_t m_gameIdx;
             };
 
             static_assert(sizeof(Entry) == 20);
             static_assert(std::is_trivially_copyable_v<Entry>);
 
-            using IndexWithoutReverseMove = ext::RangeIndex<PositionSignatureWithReverseMove, Entry::CompareLessWithoutReverseMove>;
-            using IndexWithReverseMove = ext::RangeIndex<PositionSignatureWithReverseMove, Entry::CompareLessWithReverseMove>;
+            using IndexWithoutReverseMove = ext::RangeIndex<Key, Entry::CompareLessWithoutReverseMove>;
+            using IndexWithReverseMove = ext::RangeIndex<Key, Entry::CompareLessWithReverseMove>;
 
             using Indexes = std::pair<IndexWithoutReverseMove, IndexWithReverseMove>;
 
@@ -196,10 +287,10 @@ namespace persistence
             }
 
             auto extractEntryKey = [](const Entry& entry) {
-                return entry.positionSignature();
+                return entry.key();
             };
 
-            auto entryKeyToArithmetic = [](const PositionSignatureWithReverseMove& sig) {
+            auto entryKeyToArithmetic = [](const Key& sig) {
                 static InfInt base(std::numeric_limits<std::uint32_t>::max());
 
                 InfInt value = sig.hash()[0];
@@ -212,7 +303,7 @@ namespace persistence
                 return value;
             };
 
-            auto entryKeyToArithmeticWithoutReverseMove = [](const PositionSignatureWithReverseMove& sig) {
+            auto entryKeyToArithmeticWithoutReverseMove = [](const Key& sig) {
                 static InfInt base(std::numeric_limits<std::uint32_t>::max());
 
                 InfInt value = sig.hash()[0];
@@ -318,13 +409,13 @@ namespace persistence
 
                 template <query::Select SelectV>
                 void executeQuery(
-                    const std::vector<PositionSignatureWithReverseMove>& keys,
+                    const std::vector<Key>& keys,
                     std::vector<PositionStats>& stats,
                     GameLevel level,
                     GameResult result);
 
                 void executeQueryContinuations(
-                    const std::vector<PositionSignatureWithReverseMove>& keys,
+                    const std::vector<Key>& keys,
                     std::vector<PositionStats>& stats,
                     GameLevel level,
                     GameResult result)
@@ -333,7 +424,7 @@ namespace persistence
                 }
 
                 void executeQueryAll(
-                    const std::vector<PositionSignatureWithReverseMove>& keys,
+                    const std::vector<Key>& keys,
                     std::vector<PositionStats>& stats,
                     GameLevel level,
                     GameResult result)
@@ -391,7 +482,7 @@ namespace persistence
 
             template <query::Select SelectV>
             void File::executeQuery(
-                const std::vector<PositionSignatureWithReverseMove>& keys,
+                const std::vector<Key>& keys,
                 std::vector<PositionStats>& stats,
                 GameLevel level,
                 GameResult result)
@@ -711,7 +802,7 @@ namespace persistence
                 }
 
                 void executeQueryContinuations(
-                    const std::vector<PositionSignatureWithReverseMove>& keys,
+                    const std::vector<Key>& keys,
                     std::vector<PositionStats>& stats,
                     GameLevel level,
                     GameResult result)
@@ -723,7 +814,7 @@ namespace persistence
                 }
 
                 void executeQueryAll(
-                    const std::vector<PositionSignatureWithReverseMove>& keys,
+                    const std::vector<Key>& keys,
                     std::vector<PositionStats>& stats,
                     GameLevel level,
                     GameResult result)
@@ -1108,7 +1199,7 @@ namespace persistence
             {
                 disableUnsupportedQueryFeatures(query);
 
-                using KeyType = PositionSignatureWithReverseMove;
+                using KeyType = detail::Key;
 
                 const query::SelectMask mask = query::selectMask(query);
                 const query::SelectMask fetchChildrenMask = query::fetchChildrenSelectMask(query);
@@ -1376,9 +1467,9 @@ namespace persistence
                 }
             }
 
-            [[nodiscard]] std::vector<PositionSignatureWithReverseMove> getKeys(const query::PositionQueries& queries)
+            [[nodiscard]] std::vector<detail::Key> getKeys(const query::PositionQueries& queries)
             {
-                std::vector<PositionSignatureWithReverseMove> keys;
+                std::vector<detail::Key> keys;
                 keys.reserve(queries.size());
                 for (auto&& q : queries)
                 {

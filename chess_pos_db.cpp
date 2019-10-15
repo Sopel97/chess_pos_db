@@ -19,7 +19,6 @@
 #include "MoveGenerator.h"
 #include "Pgn.h"
 #include "Position.h"
-#include "PositionSignature.h"
 #include "Query.h"
 #include "San.h"
 #include "Unsort.h"
