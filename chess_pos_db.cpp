@@ -266,24 +266,11 @@ namespace app
         return std::make_unique<DbType>(path);
     }
 
-    void query(persistence::Database& db, std::string fen)
+    void query(persistence::Database& db, std::string fen, bool json = false)
     {
-        /*
-        auto agg = queryAggregate(db, pos, true, true, true, false);
-
-        printAggregatedResult(agg.main);
-        std::cout << "\n";
-        for (auto&& [move, res] : agg.continuations)
-        {
-            std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check | san::SanSpec::Compact>(pos, move) << " ";
-            printAggregatedResult(res);
-        }
-        */
-
         query::Request query;
         query.token = "toktok";
         query.positions = { { std::move(fen), std::nullopt } };
-        //query.positions = { { "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" , "e5"} };
         query.fetchingOptions[query::Select::Continuations].fetchFirstGame = true;
         query.fetchingOptions[query::Select::Continuations].fetchLastGame = false;
         query.fetchingOptions[query::Select::Continuations].fetchFirstGameForEachChild = true;
@@ -296,7 +283,16 @@ namespace app
         query.fetchingOptions[query::Select::Transpositions].fetchChildren = true;
         query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
         query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
-        printAggregatedResults(db.executeQuery(query));
+
+        auto result = db.executeQuery(query);
+        if (json)
+        {
+            std::cout << nlohmann::json(result).dump(4) << '\n';
+        }
+        else
+        {
+            printAggregatedResults(result);
+        }
     }
 
     void merge(persistence::Database& db, const std::filesystem::path& destination)
@@ -508,18 +504,23 @@ namespace app
         {
             assertDatabaseOpened();
 
-            if (args.size() != 1)
+            if (args.size() > 2 || args.size() < 1)
             {
                 invalidArguments();
             }
 
-            std::optional<Position> position = Position::tryFromFen(args[0]);
+            if (args.size() == 2 && args[0] != "json")
+            {
+                invalidArguments();
+            }
+
+            std::optional<Position> position = Position::tryFromFen(args.back());
             if (!position.has_value())
             {
                 throw InvalidCommand("Invalid fen.");
             }
 
-            app::query(*m_database, args[0]);
+            app::query(*m_database, args.back(), args.size() == 2);
         }
 
         void info(const Args& args)
