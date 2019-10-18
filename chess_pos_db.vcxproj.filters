@@ -215,5 +215,8 @@
     <ClCompile Include="test\coding\CodingTest.cpp">
       <Filter>Source Files\test\coding</Filter>
     </ClCompile>
+    <ClCompile Include="src\chess\Bitboard.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

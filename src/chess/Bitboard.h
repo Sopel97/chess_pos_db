@@ -527,317 +527,50 @@ namespace bb
             offsets[West]
         };
 
-        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Pawn()
-        {
-            // pseudo attacks don't make sense for pawns
-            return {};
-        }
+        [[nodiscard]] EnumMap<Square, Bitboard> generatePseudoAttacks_Pawn();
+        [[nodiscard]] EnumMap<Square, Bitboard> generatePseudoAttacks_Knight();
 
-        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Knight()
-        {
-            EnumMap<Square, Bitboard> bbs{};
+        [[nodiscard]] Bitboard generateSliderPseudoAttacks(const std::array<Offset, 4> & offsets, Square fromSq);
+        [[nodiscard]] EnumMap<Square, Bitboard> generatePseudoAttacks_Bishop();
+        [[nodiscard]] EnumMap<Square, Bitboard> generatePseudoAttacks_Rook();
+        [[nodiscard]] EnumMap<Square, Bitboard> generatePseudoAttacks_Queen();
+        [[nodiscard]] EnumMap<Square, Bitboard> generatePseudoAttacks_King();
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
-            {
-                Bitboard bb{};
+        [[nodiscard]] EnumMap2<PieceType, Square, Bitboard> generatePseudoAttacks();
 
-                for (auto&& offset : knightOffsets)
-                {
-                    const SquareCoords toSq = fromSq.coords() + offset;
-                    if (toSq.isOk())
-                    {
-                        bb |= Square(toSq);
-                    }
-                }
+        extern const EnumMap2<PieceType, Square, Bitboard> pseudoAttacks;
 
-                bbs[fromSq] = bb;
-            }
-
-            return bbs;
-        }
-
-        [[nodiscard]] static inline Bitboard generateSliderPseudoAttacks(const std::array<Offset, 4>& offsets, Square fromSq)
-        {
-            ASSERT(fromSq.isOk());
-
-            Bitboard bb{};
-
-            for (auto&& offset : offsets)
-            {
-                SquareCoords fromSqC = fromSq.coords();
-
-                for (;;)
-                {
-                    fromSqC += offset;
-
-                    if (!fromSqC.isOk())
-                    {
-                        break;
-                    }
-
-                    bb |= Square(fromSqC);
-                }
-            }
-
-            return bb;
-        }
-
-        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Bishop()
-        {
-            EnumMap<Square, Bitboard> bbs{};
-
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
-            {
-                bbs[fromSq] = generateSliderPseudoAttacks(bishopOffsets, fromSq);
-            }
-
-            return bbs;
-        }
-
-        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Rook()
-        {
-            EnumMap<Square, Bitboard> bbs{};
-
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
-            {
-                bbs[fromSq] = generateSliderPseudoAttacks(rookOffsets, fromSq);
-            }
-
-            return bbs;
-        }
-
-        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Queen()
-        {
-            EnumMap<Square, Bitboard> bbs{};
-
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
-            {
-                bbs[fromSq] =
-                    generateSliderPseudoAttacks(bishopOffsets, fromSq)
-                    | generateSliderPseudoAttacks(rookOffsets, fromSq);
-            }
-
-            return bbs;
-        }
-
-        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_King()
-        {
-            EnumMap<Square, Bitboard> bbs{};
-
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
-            {
-                Bitboard bb{};
-
-                for (auto&& offset : kingOffsets)
-                {
-                    const SquareCoords toSq = fromSq.coords() + offset;
-                    if (toSq.isOk())
-                    {
-                        bb |= Square(toSq);
-                    }
-                }
-
-                bbs[fromSq] = bb;
-            }
-
-            return bbs;
-        }
-
-        [[nodiscard]] static inline auto generatePseudoAttacks()
-        {
-            return EnumMap2<PieceType, Square, Bitboard>{
-                generatePseudoAttacks_Pawn(),
-                generatePseudoAttacks_Knight(),
-                generatePseudoAttacks_Bishop(),
-                generatePseudoAttacks_Rook(),
-                generatePseudoAttacks_Queen(),
-                generatePseudoAttacks_King()
-            };
-        }
-
-        static inline auto pseudoAttacks = generatePseudoAttacks();
-
-        [[nodiscard]] static inline Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
-        {
-            ASSERT(fromSq.isOk());
-
-            Bitboard bb{};
-
-            const auto offset = offsets[dir];
-            SquareCoords fromSqC = fromSq.coords();
-            for (;;)
-            {
-                fromSqC += offset;
-
-                if (!fromSqC.isOk())
-                {
-                    break;
-                }
-
-                bb |= Square(fromSqC);
-            }
-
-            return bb;
-        }
+        [[nodiscard]] Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq);
 
         // classical slider move generation approach https://www.chessprogramming.org/Classical_Approach
 
-        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePositiveRayAttacks(Direction dir)
-        {
-            EnumMap<Square, Bitboard> bbs{};
+        [[nodiscard]] EnumMap<Square, Bitboard> generatePositiveRayAttacks(Direction dir);
+        
+        [[nodiscard]] std::array<EnumMap<Square, Bitboard>, 8> generatePositiveRayAttacks();
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
-            {
-                bbs[fromSq] = generatePositiveRayAttacks(dir, fromSq);
-            }
-
-            return bbs;
-        }
-
-        [[nodiscard]] static inline auto generatePositiveRayAttacks()
-        {
-            std::array<EnumMap<Square, Bitboard>, 8> bbs{};
-
-            bbs[North] = generatePositiveRayAttacks(North);
-            bbs[NorthEast] = generatePositiveRayAttacks(NorthEast);
-            bbs[East] = generatePositiveRayAttacks(East);
-            bbs[SouthEast] = generatePositiveRayAttacks(SouthEast);
-            bbs[South] = generatePositiveRayAttacks(South);
-            bbs[SouthWest] = generatePositiveRayAttacks(SouthWest);
-            bbs[West] = generatePositiveRayAttacks(West);
-            bbs[NorthWest] = generatePositiveRayAttacks(NorthWest);
-
-            return bbs;
-        }
-
-        static inline auto positiveRayAttacks = generatePositiveRayAttacks();
+        extern const std::array<EnumMap<Square, Bitboard>, 8> positiveRayAttacks;
 
         template <Direction DirV>
-        [[nodiscard]] inline Bitboard slidingAttacks(Square sq, Bitboard occupied)
-        {
-            ASSERT(sq.isOk());
-
-            Bitboard attacks = detail::positiveRayAttacks[DirV][sq];
-
-            if constexpr (DirV == NorthWest || DirV == North || DirV == NorthEast || DirV == East)
-            {
-                Bitboard blocker = (attacks & occupied) | H8; // set highest bit (H8) so msb never fails
-                return attacks ^ positiveRayAttacks[DirV][blocker.first()];
-            }
-            else
-            {
-                Bitboard blocker = (attacks & occupied) | A1;
-                return attacks ^ positiveRayAttacks[DirV][blocker.last()];
-            }
-        }
+        [[nodiscard]] Bitboard slidingAttacks(Square sq, Bitboard occupied);
     }
 
     template <PieceType PieceTypeV>
-    [[nodiscard]] inline Bitboard pseudoAttacks(Square sq)
-    {
-        static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
+    [[nodiscard]] Bitboard pseudoAttacks(Square sq);
 
-        ASSERT(sq.isOk());
-
-        return detail::pseudoAttacks[PieceTypeV][sq];
-    }
-
-    [[nodiscard]] inline Bitboard pseudoAttacks(PieceType pt, Square sq)
-    {
-        ASSERT(sq.isOk());
-
-        return detail::pseudoAttacks[pt][sq];
-    }
+    [[nodiscard]] Bitboard pseudoAttacks(PieceType pt, Square sq);
 
     template <PieceType PieceTypeV>
-    [[nodiscard]] inline Bitboard attacks(Square sq, Bitboard occupied)
-    {
-        static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
+    [[nodiscard]] Bitboard attacks(Square sq, Bitboard occupied);
 
-        ASSERT(sq.isOk());
+    [[nodiscard]] Bitboard attacks(PieceType pt, Square sq, Bitboard occupied);
 
-        if constexpr (PieceTypeV == PieceType::Bishop)
-        {
-            return
-                detail::slidingAttacks<detail::NorthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
-                | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
-        }
-        else if constexpr (PieceTypeV == PieceType::Rook)
-        {
-            return
-                detail::slidingAttacks<detail::North>(sq, occupied)
-                | detail::slidingAttacks<detail::East>(sq, occupied)
-                | detail::slidingAttacks<detail::South>(sq, occupied)
-                | detail::slidingAttacks<detail::West>(sq, occupied);
-        }
-        else if constexpr (PieceTypeV == PieceType::Queen)
-        {
-            return
-                detail::slidingAttacks<detail::North>(sq, occupied)
-                | detail::slidingAttacks<detail::NorthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::East>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::South>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
-                | detail::slidingAttacks<detail::West>(sq, occupied)
-                | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
-        }
-        else
-        {
-            return pseudoAttacks<PieceTypeV>(sq);
-        }
-    }
+    [[nodiscard]] Bitboard pawnAttacks(Bitboard pawns, Color color);
 
-    [[nodiscard]] inline Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
-    {
-        ASSERT(sq.isOk());
-
-        switch (pt)
-        {
-        case PieceType::Bishop:
-            return attacks<PieceType::Bishop>(sq, occupied);
-        case PieceType::Rook:
-            return attacks<PieceType::Rook>(sq, occupied);
-        case PieceType::Queen:
-            return attacks<PieceType::Queen>(sq, occupied);
-        default:
-            return pseudoAttacks(pt, sq);
-        }
-    }
-
-    [[nodiscard]] inline Bitboard pawnAttacks(Bitboard pawns, Color color)
-    {
-        if (color == Color::White)
-        {
-            pawns |= (pawns + Offset{ 1, 1 }) | (pawns + Offset{ -1, 1 });
-        }
-        else
-        {
-            pawns |= (pawns + Offset{ 1, -1 }) | (pawns + Offset{ -1, -1 });
-        }
-
-        return pawns;
-    }
-
-    [[nodiscard]] inline bool isAttackedBySlider(
-        Square sq, 
-        Bitboard bishops, 
-        Bitboard rooks, 
-        Bitboard queens, 
+    [[nodiscard]] bool isAttackedBySlider(
+        Square sq,
+        Bitboard bishops,
+        Bitboard rooks,
+        Bitboard queens,
         Bitboard occupied
-    )
-    {
-        const Bitboard opponentBishopLikePieces = (bishops | queens);
-        const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(sq, occupied);
-        if ((bishopAttacks & opponentBishopLikePieces).any())
-        {
-            return true;
-        }
-
-        const Bitboard opponentRookLikePieces = (rooks | queens);
-        const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(sq, occupied);
-        return (rookAttacks & opponentRookLikePieces).any();
-    }
+    );
 }
