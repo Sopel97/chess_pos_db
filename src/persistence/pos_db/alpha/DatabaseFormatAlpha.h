@@ -39,7 +39,7 @@ namespace persistence
             static constexpr bool useIndex = true;
 
             // Have ranges of mixed values be at most this long
-            static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["db_alpha"]["index_granularity"].get<std::size_t>();
+            extern const std::size_t indexGranularity;
 
             struct Key
             {
@@ -47,25 +47,14 @@ namespace persistence
 
                 Key() = default;
 
-                Key(const Position& pos, const ReverseMove& reverseMove = ReverseMove{}) :
-                    m_hash(pos.hash())
-                {
-                    auto packedReverseMove = PackedReverseMove(reverseMove);
-                    // m_hash[0] is the most significant quad, m_hash[3] is the least significant
-                    // We want entries ordered with reverse move to also be ordered by just hash
-                    // so we have to modify the lowest bits.
-                    m_hash[3] = (m_hash[3] & ~PackedReverseMove::mask) | packedReverseMove.packed();
-                }
+                Key(const Position& pos, const ReverseMove& reverseMove = ReverseMove{});
 
                 Key(const Key&) = default;
                 Key(Key&&) = default;
                 Key& operator=(const Key&) = default;
                 Key& operator=(Key&&) = default;
 
-                [[nodiscard]] const StorageType& hash() const
-                {
-                    return m_hash;
-                }
+                [[nodiscard]] const StorageType& hash() const;
 
                 struct CompareLessWithReverseMove
                 {
@@ -137,18 +126,10 @@ namespace persistence
             {
                 Entry() = default;
 
-                Entry(const Position& pos, const ReverseMove& reverseMove, std::uint32_t gameIdx) :
-                    m_key(pos, reverseMove),
-                    m_gameIdx(gameIdx)
-                {
-                }
+                Entry(const Position& pos, const ReverseMove& reverseMove, std::uint32_t gameIdx);
 
                 // TODO: eventually remove this overload?
-                Entry(const Position& pos, std::uint32_t gameIdx) :
-                    m_key(pos),
-                    m_gameIdx(gameIdx)
-                {
-                }
+                Entry(const Position& pos, std::uint32_t gameIdx);
 
                 Entry(const Entry&) = default;
                 Entry(Entry&&) = default;
@@ -202,15 +183,9 @@ namespace persistence
                     }
                 };
 
-                [[nodiscard]] const Key& key() const
-                {
-                    return m_key;
-                }
+                [[nodiscard]] const Key& key() const;
 
-                [[nodiscard]] std::uint32_t gameIdx() const
-                {
-                    return m_gameIdx;
-                }
+                [[nodiscard]] std::uint32_t gameIdx() const;
 
             private:
                 Key m_key;
@@ -266,10 +241,7 @@ namespace persistence
 
                 File(ext::ImmutableSpan<Entry>&& entries, Indexes&& index);
 
-                [[nodiscard]] friend bool operator<(const File& lhs, const File& rhs) noexcept
-                {
-                    return lhs.m_id < rhs.m_id;
-                }
+                [[nodiscard]] friend bool operator<(const File& lhs, const File& rhs) noexcept;
 
                 [[nodiscard]] std::uint32_t id() const;
 
@@ -309,10 +281,7 @@ namespace persistence
             {
                 FutureFile(std::future<Indexes>&& future, std::filesystem::path path);
 
-                [[nodiscard]] friend bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept
-                {
-                    return lhs.m_id < rhs.m_id;
-                }
+                [[nodiscard]] friend bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept;
 
                 [[nodiscard]] std::uint32_t id() const;
 
@@ -376,7 +345,7 @@ namespace persistence
 
             struct Partition
             {
-                static inline const std::size_t mergeMemory = cfg::g_config["persistence"]["db_alpha"]["max_merge_buffer_size"].get<MemoryAmount>();
+                static const std::size_t mergeMemory;
 
                 Partition() = default;
 
@@ -478,7 +447,7 @@ namespace persistence
                 cardinality<GameLevel>()
                 * cardinality<GameResult>();
 
-            static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["db_alpha"]["pgn_parser_memory"].get<MemoryAmount>();
+            static const std::size_t m_pgnParserMemory;
 
         public:
             Database(std::filesystem::path path);

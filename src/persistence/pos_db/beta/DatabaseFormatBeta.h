@@ -38,7 +38,7 @@ namespace persistence
             static constexpr bool usePacked = true;
 
             // Have ranges of mixed values be at most this long
-            static inline const std::size_t indexGranularity = cfg::g_config["persistence"]["db_beta"]["index_granularity"].get<std::size_t>();
+            extern const std::size_t indexGranularity;
 
             static constexpr std::uint64_t invalidGameOffset = std::numeric_limits<std::uint64_t>::max();
 
@@ -444,10 +444,7 @@ namespace persistence
 
                 File(ext::ImmutableSpan<Entry>&& entries, Index&& index);
 
-                [[nodiscard]] friend bool operator<(const File& lhs, const File& rhs) noexcept
-                {
-                    return lhs.m_id < rhs.m_id;
-                }
+                [[nodiscard]] friend bool operator<(const File& lhs, const File& rhs) noexcept;
 
                 [[nodiscard]] std::uint32_t id() const;
 
@@ -480,10 +477,7 @@ namespace persistence
             {
                 FutureFile(std::future<Index>&& future, std::filesystem::path path);
 
-                [[nodiscard]] friend bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept
-                {
-                    return lhs.m_id < rhs.m_id;
-                }
+                [[nodiscard]] friend bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept;
 
                 [[nodiscard]] std::uint32_t id() const;
 
@@ -554,7 +548,7 @@ namespace persistence
 
             struct Partition
             {
-                static inline const std::size_t mergeMemory = cfg::g_config["persistence"]["db_beta"]["max_merge_buffer_size"].get<MemoryAmount>();
+                static const std::size_t mergeMemory;
 
                 Partition() = default;
 
@@ -634,7 +628,7 @@ namespace persistence
                 "_server"
             };
 
-            static inline const std::size_t m_pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
+            static const std::size_t m_pgnParserMemory;
 
         public:
             Database(std::filesystem::path path);

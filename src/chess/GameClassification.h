@@ -41,7 +41,7 @@ struct EnumTraits<GameResult>
         return static_cast<EnumType>(id);
     }
 
-    [[nodiscard]] static std::string_view toString(GameResultWordFormat, GameResult result)
+    [[nodiscard]] static constexpr std::string_view toString(GameResultWordFormat, GameResult result)
     {
         using namespace std::literals;
 
@@ -58,7 +58,7 @@ struct EnumTraits<GameResult>
         return ""sv;
     }
 
-    [[nodiscard]] static std::string_view toString(GameResultPgnFormat, GameResult result)
+    [[nodiscard]] static constexpr std::string_view toString(GameResultPgnFormat, GameResult result)
     {
         using namespace std::literals;
 
@@ -75,7 +75,7 @@ struct EnumTraits<GameResult>
         return ""sv;
     }
 
-    [[nodiscard]] static std::optional<GameResult> fromString(GameResultWordFormat, std::string_view sv)
+    [[nodiscard]] static constexpr std::optional<GameResult> fromString(GameResultWordFormat, std::string_view sv)
     {
         using namespace std::literals;
 
@@ -86,7 +86,7 @@ struct EnumTraits<GameResult>
         return std::nullopt;
     }
 
-    [[nodiscard]] static std::optional<GameResult> fromString(GameResultPgnFormat, std::string_view sv)
+    [[nodiscard]] static constexpr std::optional<GameResult> fromString(GameResultPgnFormat, std::string_view sv)
     {
         using namespace std::literals;
 
@@ -130,7 +130,7 @@ struct EnumTraits<GameLevel>
         return static_cast<EnumType>(id);
     }
 
-    [[nodiscard]] static std::string_view toString(GameLevel level)
+    [[nodiscard]] static constexpr std::string_view toString(GameLevel level)
     {
         using namespace std::literals;
 
@@ -147,7 +147,7 @@ struct EnumTraits<GameLevel>
         return ""sv;
     }
 
-    [[nodiscard]] static std::optional<GameLevel> fromString(std::string_view sv)
+    [[nodiscard]] static constexpr std::optional<GameLevel> fromString(std::string_view sv)
     {
         using namespace std::literals;
 

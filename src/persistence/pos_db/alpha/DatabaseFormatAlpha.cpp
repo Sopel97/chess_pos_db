@@ -36,6 +36,46 @@ namespace persistence
     {
         namespace detail
         {
+            const std::size_t indexGranularity = cfg::g_config["persistence"]["db_alpha"]["index_granularity"].get<std::size_t>();
+
+            Key::Key(const Position& pos, const ReverseMove& reverseMove) :
+                m_hash(pos.hash())
+            {
+                auto packedReverseMove = PackedReverseMove(reverseMove);
+                // m_hash[0] is the most significant quad, m_hash[3] is the least significant
+                // We want entries ordered with reverse move to also be ordered by just hash
+                // so we have to modify the lowest bits.
+                m_hash[3] = (m_hash[3] & ~PackedReverseMove::mask) | packedReverseMove.packed();
+            }
+
+            [[nodiscard]] const Key::StorageType& Key::hash() const
+            {
+                return m_hash;
+            }
+
+            Entry::Entry(const Position& pos, const ReverseMove& reverseMove, std::uint32_t gameIdx) :
+                m_key(pos, reverseMove),
+                m_gameIdx(gameIdx)
+            {
+            }
+
+            // TODO: eventually remove this overload?
+            Entry::Entry(const Position& pos, std::uint32_t gameIdx) :
+                m_key(pos),
+                m_gameIdx(gameIdx)
+            {
+            }
+
+            [[nodiscard]] const Key& Entry::key() const
+            {
+                return m_key;
+            }
+
+            [[nodiscard]] std::uint32_t Entry::gameIdx() const
+            {
+                return m_gameIdx;
+            }
+
             template <typename IndexTagT>
             [[nodiscard]] static std::filesystem::path pathForIndex(const std::filesystem::path& path)
             {
@@ -144,6 +184,11 @@ namespace persistence
             [[nodiscard]] std::uint32_t File::id() const
             {
                 return m_id;
+            }
+
+            [[nodiscard]] bool operator<(const File& lhs, const File& rhs) noexcept
+            {
+                return lhs.m_id < rhs.m_id;
             }
 
             [[nodiscard]] const std::filesystem::path& File::path() const
@@ -308,6 +353,11 @@ namespace persistence
                 m_path(std::move(path)),
                 m_id(std::stoi(m_path.filename().string()))
             {
+            }
+
+            [[nodiscard]] bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept
+            {
+                return lhs.m_id < rhs.m_id;
             }
 
             [[nodiscard]] std::uint32_t FutureFile::id() const
@@ -494,6 +544,8 @@ namespace persistence
                     m_bufferQueueNotEmpty.notify_one();
                 }
             }
+
+            const std::size_t Partition::mergeMemory = cfg::g_config["persistence"]["db_alpha"]["max_merge_buffer_size"].get<MemoryAmount>();
 
             Partition::Partition(std::filesystem::path path)
             {
@@ -822,6 +874,8 @@ namespace persistence
                 f(data[result], result);
             }
         }
+
+        const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_alpha"]["pgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
             m_path(path),

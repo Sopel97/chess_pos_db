@@ -382,6 +382,16 @@ namespace pgn
         return *this;
     }
 
+    [[nodiscard]] bool operator==(const UnparsedGamePositions::UnparsedPositionsIterator& lhs, UnparsedGamePositions::UnparsedPositionsIterator::Sentinel rhs) noexcept
+    {
+        return lhs.m_moveSection.empty();
+    }
+
+    [[nodiscard]] bool operator!=(const UnparsedGamePositions::UnparsedPositionsIterator& lhs, UnparsedGamePositions::UnparsedPositionsIterator::Sentinel rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     [[nodiscard]] const Position& UnparsedGamePositions::UnparsedPositionsIterator::operator*() const
     {
         return m_position;
@@ -429,6 +439,16 @@ namespace pgn
         return *this;
     }
 
+    [[nodiscard]] bool operator==(const UnparsedGameMoves::UnparsedMovesIterator& lhs, UnparsedGameMoves::UnparsedMovesIterator::Sentinel rhs) noexcept
+    {
+        return lhs.m_moveSection.empty();
+    }
+
+    [[nodiscard]] bool operator!=(const UnparsedGameMoves::UnparsedMovesIterator& lhs, UnparsedGameMoves::UnparsedMovesIterator::Sentinel rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     [[nodiscard]] const std::string_view& UnparsedGameMoves::UnparsedMovesIterator::operator*() const
     {
         return m_san;
@@ -472,6 +492,16 @@ namespace pgn
         m_tag = detail::extractTagAdvance(m_tagSection);
 
         return *this;
+    }
+
+    [[nodiscard]] bool operator==(const UnparsedGameTags::UnparsedTagsIterator& lhs, UnparsedGameTags::UnparsedTagsIterator::Sentinel rhs) noexcept
+    {
+        return lhs.m_tagSection.empty();
+    }
+
+    [[nodiscard]] bool operator!=(const UnparsedGameTags::UnparsedTagsIterator& lhs, UnparsedGameTags::UnparsedTagsIterator::Sentinel rhs) noexcept
+    {
+        return !(lhs == rhs);
     }
 
     [[nodiscard]] const TagView& UnparsedGameTags::UnparsedTagsIterator::operator*() const
@@ -702,6 +732,16 @@ namespace pgn
     {
         moveToNextGame();
         return *this;
+    }
+
+    [[nodiscard]] bool operator==(const LazyPgnFileReader::LazyPgnFileReaderIterator& lhs, LazyPgnFileReader::LazyPgnFileReaderIterator::Sentinel rhs) noexcept
+    {
+        return lhs.isEnd();
+    }
+
+    [[nodiscard]] bool operator!=(const LazyPgnFileReader::LazyPgnFileReaderIterator& lhs, LazyPgnFileReader::LazyPgnFileReaderIterator::Sentinel rhs) noexcept
+    {
+        return !(lhs == rhs);
     }
 
     [[nodiscard]] const UnparsedGame& LazyPgnFileReader::LazyPgnFileReaderIterator::operator*() const

@@ -33,8 +33,6 @@ namespace pgn
 
     struct UnparsedGamePositions
     {
-    private:
-
         struct UnparsedPositionsIterator
         {
             struct Sentinel {};
@@ -49,15 +47,9 @@ namespace pgn
 
             const UnparsedPositionsIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
-            {
-                return lhs.m_moveSection.empty();
-            }
+            [[nodiscard]] bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept
-            {
-                return !(lhs == rhs);
-            }
+            [[nodiscard]] bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const Position& operator*() const;
 
@@ -67,8 +59,6 @@ namespace pgn
             Position m_position;
             std::string_view m_moveSection;
         };
-
-    public:
 
         using iterator = UnparsedPositionsIterator;
         using const_iterator = UnparsedPositionsIterator;
@@ -85,8 +75,6 @@ namespace pgn
 
     struct UnparsedGameMoves
     {
-    private:
-
         struct UnparsedMovesIterator
         {
             struct Sentinel {};
@@ -101,15 +89,9 @@ namespace pgn
 
             const UnparsedMovesIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept
-            {
-                return lhs.m_moveSection.empty();
-            }
+            [[nodiscard]] bool friend operator==(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept
-            {
-                return !(lhs == rhs);
-            }
+            [[nodiscard]] bool friend operator!=(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const std::string_view& operator*() const;
 
@@ -119,8 +101,6 @@ namespace pgn
             std::string_view m_san;
             std::string_view m_moveSection;
         };
-
-    public:
 
         using iterator = UnparsedMovesIterator;
         using const_iterator = UnparsedMovesIterator;
@@ -137,8 +117,6 @@ namespace pgn
 
     struct UnparsedGameTags
     {
-    private:
-
         struct UnparsedTagsIterator
         {
             struct Sentinel {};
@@ -153,15 +131,9 @@ namespace pgn
 
             const UnparsedTagsIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept
-            {
-                return lhs.m_tagSection.empty();
-            }
+            [[nodiscard]] bool friend operator==(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept
-            {
-                return !(lhs == rhs);
-            }
+            [[nodiscard]] bool friend operator!=(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const TagView& operator*() const;
 
@@ -171,8 +143,6 @@ namespace pgn
             std::string_view m_tagSection;
             TagView m_tag;
         };
-
-    public:
 
         using iterator = UnparsedTagsIterator;
         using const_iterator = UnparsedTagsIterator;
@@ -248,6 +218,7 @@ namespace pgn
         // TODO: resize buffer when didn't process anything
         static constexpr std::size_t m_minBufferSize = 128ull * 1024ull;
 
+    public:
         struct LazyPgnFileReaderIterator
         {
             struct Sentinel {};
@@ -262,15 +233,9 @@ namespace pgn
 
             const LazyPgnFileReaderIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept
-            {
-                return lhs.isEnd();
-            }
+            [[nodiscard]] bool friend operator==(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept
-            {
-                return !(lhs == rhs);
-            }
+            [[nodiscard]] bool friend operator!=(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const UnparsedGame& operator*() const;
 
@@ -292,8 +257,6 @@ namespace pgn
 
             NOINLINE void refillBuffer();
         };
-
-    public:
 
         using iterator = LazyPgnFileReaderIterator;
         using const_iterator = LazyPgnFileReaderIterator;

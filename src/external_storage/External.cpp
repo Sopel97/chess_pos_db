@@ -113,6 +113,8 @@ namespace ext
             return _fseeki64_nolock(fh, offset, origin);
         }
 
+        const std::size_t PooledFile::FilePool::numMaxConcurrentOpenFiles = cfg::g_config["ext"]["max_concurrent_open_pooled_files"].get<std::size_t>();
+
         [[nodiscard]] PooledFile::FilePoolEntryIter PooledFile::FilePool::noneEntry()
         {
             return m_files.end();
@@ -232,6 +234,11 @@ namespace ext
             pool().close(*this);
         }
 
+        [[nodiscard]] bool operator==(const PooledFile& lhs, const PooledFile& rhs) noexcept
+        {
+            return &lhs == &rhs;
+        }
+
         [[nodiscard]] const std::filesystem::path& PooledFile::path() const
         {
             return m_path;
@@ -306,6 +313,8 @@ namespace ext
             }
         }
 
+        inline const std::size_t File::maxUnpooledOpenFiles = cfg::g_config["ext"]["max_concurrent_open_unpooled_files"].get<std::size_t>();
+
         File::File(std::filesystem::path path, std::string openmode) :
             m_path(std::move(path)),
             m_openmode(std::move(openmode))
@@ -316,6 +325,11 @@ namespace ext
         File::~File()
         {
             close();
+        }
+
+        [[nodiscard]] bool operator==(const File& lhs, const File& rhs) noexcept
+        {
+            return &lhs == &rhs;
         }
 
         [[nodiscard]] const std::filesystem::path& File::path() const
@@ -612,6 +626,26 @@ namespace ext
     {
     }
 
+    [[nodiscard]] bool operator==(const ImmutableBinaryFile& lhs, const ImmutableBinaryFile& rhs) noexcept
+    {
+        return lhs.m_file == rhs.m_file;
+    }
+
+    [[nodiscard]] bool ImmutableBinaryFile::isOpen() const
+    {
+        return m_file->isOpen();
+    }
+
+    [[nodiscard]] const std::filesystem::path& ImmutableBinaryFile::path() const
+    {
+        return m_file->path();
+    }
+
+    [[nodiscard]] std::string ImmutableBinaryFile::openmode() const
+    {
+        return m_openmode;
+    }
+
     [[nodiscard]] std::size_t ImmutableBinaryFile::read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
     {
         return m_file->read(destination, offset, elementSize, count);
@@ -642,6 +676,21 @@ namespace ext
     BinaryOutputFile::~BinaryOutputFile()
     {
 
+    }
+
+    [[nodiscard]] bool BinaryOutputFile::isOpen() const
+    {
+        return m_file->isOpen();
+    }
+
+    [[nodiscard]] const std::filesystem::path& BinaryOutputFile::path() const
+    {
+        return m_file->path();
+    }
+
+    [[nodiscard]] std::string BinaryOutputFile::openmode() const
+    {
+        return m_file->openmode();
     }
 
     [[nodiscard]] std::size_t BinaryOutputFile::append(const std::byte* source, std::size_t elementSize, std::size_t count) const
@@ -714,6 +763,26 @@ namespace ext
     {
     }
 
+    [[nodiscard]] bool operator==(const BinaryInputOutputFile& lhs, const BinaryInputOutputFile& rhs) noexcept
+    {
+        return &lhs == &rhs;
+    }
+
+    [[nodiscard]] bool BinaryInputOutputFile::isOpen() const
+    {
+        return m_file->isOpen();
+    }
+
+    [[nodiscard]] const std::filesystem::path& BinaryInputOutputFile::path() const
+    {
+        return m_file->path();
+    }
+
+    [[nodiscard]] std::string BinaryInputOutputFile::openmode() const
+    {
+        return m_file->openmode();
+    }
+
     [[nodiscard]] std::size_t BinaryInputOutputFile::read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
     {
         return m_file->read(destination, offset, elementSize, count);
@@ -779,6 +848,9 @@ namespace ext
 
     namespace detail::merge
     {
+        const std::size_t maxOutputBufferSizeMultiplier = cfg::g_config["ext"]["merge"]["max_output_buffer_size_multiplier"].get<std::size_t>();
+        const std::size_t maxNumMergedInputs = cfg::g_config["ext"]["merge"]["max_batch_size"].get<std::size_t>();
+
         [[nodiscard]] std::size_t merge_assess_work(
             std::vector<std::size_t>::const_iterator inSizesBegin,
             std::vector<std::size_t>::const_iterator inSizesEnd
@@ -817,6 +889,8 @@ namespace ext
 
     namespace detail::equal_range
     {
+        const std::size_t maxSeqReadSize = cfg::g_config["ext"]["equal_range"]["max_random_read_size"].get<MemoryAmount>();
+
         [[nodiscard]] std::pair<std::size_t, std::size_t> neighbourhood(
             std::size_t begin,
             std::size_t end,
@@ -856,4 +930,6 @@ namespace ext
             return { begin, end };
         }
     }
+
+    const std::size_t defaultIndexBuilderMemoryAmount = cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>();
 }

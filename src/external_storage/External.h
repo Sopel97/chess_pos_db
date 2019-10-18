@@ -145,7 +145,7 @@ namespace ext
 
             struct FilePool
             {
-                static inline const std::size_t numMaxConcurrentOpenFiles = cfg::g_config["ext"]["max_concurrent_open_pooled_files"].get<std::size_t>();
+                static const std::size_t numMaxConcurrentOpenFiles;
 
                 FilePool() = default;
 
@@ -196,10 +196,7 @@ namespace ext
 
             ~PooledFile() override;
 
-            [[nodiscard]] friend bool operator==(const PooledFile& lhs, const PooledFile& rhs) noexcept
-            {
-                return &lhs == &rhs;
-            }
+            [[nodiscard]] friend bool operator==(const PooledFile& lhs, const PooledFile& rhs) noexcept;
 
             [[nodiscard]] const std::filesystem::path& path() const override;
 
@@ -236,7 +233,7 @@ namespace ext
             using NativeFileHandle = std::FILE*;
 
         public:
-            static inline const std::size_t maxUnpooledOpenFiles = cfg::g_config["ext"]["max_concurrent_open_unpooled_files"].get<std::size_t>();
+            static const std::size_t maxUnpooledOpenFiles;
 
             File(std::filesystem::path path, std::string openmode);
 
@@ -247,10 +244,7 @@ namespace ext
 
             ~File() override;
 
-            [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept
-            {
-                return &lhs == &rhs;
-            }
+            [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept;
 
             [[nodiscard]] const std::filesystem::path& path() const override;
 
@@ -362,25 +356,13 @@ namespace ext
         ImmutableBinaryFile& operator=(const ImmutableBinaryFile&) = default;
         ImmutableBinaryFile& operator=(ImmutableBinaryFile&&) = default;
 
-        [[nodiscard]] friend bool operator==(const ImmutableBinaryFile& lhs, const ImmutableBinaryFile& rhs) noexcept
-        {
-            return lhs.m_file == rhs.m_file;
-        }
+        [[nodiscard]] friend bool operator==(const ImmutableBinaryFile& lhs, const ImmutableBinaryFile& rhs) noexcept;
 
-        [[nodiscard]] decltype(auto) isOpen() const
-        {
-            return m_file->isOpen();
-        }
+        [[nodiscard]] bool isOpen() const;
 
-        [[nodiscard]] decltype(auto) path() const
-        {
-            return m_file->path();
-        }
+        [[nodiscard]] const std::filesystem::path& path() const;
 
-        [[nodiscard]] decltype(auto) openmode() const
-        {
-            return m_openmode;
-        }
+        [[nodiscard]] std::string openmode() const;
 
         [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
@@ -414,20 +396,11 @@ namespace ext
 
         virtual ~BinaryOutputFile();
 
-        [[nodiscard]] decltype(auto) isOpen() const
-        {
-            return m_file->isOpen();
-        }
+        [[nodiscard]] bool isOpen() const;
 
-        [[nodiscard]] decltype(auto) path() const
-        {
-            return m_file->path();
-        }
+        [[nodiscard]] const std::filesystem::path& path() const;
 
-        [[nodiscard]] decltype(auto) openmode() const
-        {
-            return m_file->openmode();
-        }
+        [[nodiscard]] std::string openmode() const;
 
         [[nodiscard]] virtual std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const;
 
@@ -478,25 +451,13 @@ namespace ext
         BinaryInputOutputFile& operator=(const BinaryInputOutputFile&) = delete;
         BinaryInputOutputFile& operator=(BinaryInputOutputFile&&) = default;
 
-        [[nodiscard]] friend bool operator==(const BinaryInputOutputFile& lhs, const BinaryInputOutputFile& rhs) noexcept
-        {
-            return &lhs == &rhs;
-        }
+        [[nodiscard]] friend bool operator==(const BinaryInputOutputFile& lhs, const BinaryInputOutputFile& rhs) noexcept;
 
-        [[nodiscard]] decltype(auto) isOpen() const
-        {
-            return m_file->isOpen();
-        }
+        [[nodiscard]] bool isOpen() const;
 
-        [[nodiscard]] decltype(auto) path() const
-        {
-            return m_file->path();
-        }
+        [[nodiscard]] const std::filesystem::path& path() const;
 
-        [[nodiscard]] decltype(auto) openmode() const
-        {
-            return m_file->openmode();
-        }
+        [[nodiscard]] std::string openmode() const;
 
         [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
@@ -1772,8 +1733,8 @@ namespace ext
 
     namespace detail::merge
     {
-        static inline const std::size_t maxOutputBufferSizeMultiplier = cfg::g_config["ext"]["merge"]["max_output_buffer_size_multiplier"].get<std::size_t>();
-        static inline const std::size_t maxNumMergedInputs = cfg::g_config["ext"]["merge"]["max_batch_size"].get<std::size_t>();
+        extern const std::size_t maxOutputBufferSizeMultiplier;
+        extern const std::size_t maxNumMergedInputs;
         
         static constexpr std::size_t priorityQueueMergeThreshold = 32;
 
@@ -2807,6 +2768,8 @@ namespace ext
         template <typename KeyType>
         using Range = std::vector<std::pair<IterValuePair<std::size_t, KeyType>, IterValuePair<std::size_t, KeyType>>>;
 
+        extern const std::size_t maxSeqReadSize;
+
         // EntryType must be convertible to KeyType - values of type KeyType are stored for further reference
         template <
             typename CrossT,
@@ -2827,8 +2790,6 @@ namespace ext
             )
         {
             // 32KiB should be about how much we can read using 'constant' time.
-            static const std::size_t maxSeqReadSize = cfg::g_config["ext"]["equal_range"]["max_random_read_size"].get<MemoryAmount>();
-
             const std::size_t maxNumSeqReadElements = std::max(static_cast<std::size_t>(3), maxSeqReadSize / sizeof(EntryType));
             ASSERT(maxNumSeqReadElements >= 3);
 
@@ -3626,7 +3587,7 @@ namespace ext
         return detail::makeIndexImpl(values.begin(), values.end(), maxNumEntriesInRange, cmp, key);
     }
 
-    static inline const std::size_t defaultIndexBuilderMemoryAmount = cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>();
+    extern const std::size_t defaultIndexBuilderMemoryAmount;
 
     template <
         typename EntryType,

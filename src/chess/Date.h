@@ -15,17 +15,7 @@ struct Date
 
     Date(std::uint16_t year, std::uint8_t month, std::uint8_t day);
 
-    [[nodiscard]] friend bool operator<(const Date& lhs, const Date& rhs) noexcept
-    {
-        if (lhs.m_year < rhs.m_year) return true;
-        else if (lhs.m_year > rhs.m_year) return false;
-
-        if (lhs.m_month < rhs.m_month) return true;
-        else if (lhs.m_month > rhs.m_month) return false;
-
-        if (lhs.m_day < rhs.m_day) return true;
-        else return false;
-    }
+    [[nodiscard]] friend bool operator<(const Date& lhs, const Date& rhs) noexcept;
 
     [[nodiscard]] std::string toString() const;
 

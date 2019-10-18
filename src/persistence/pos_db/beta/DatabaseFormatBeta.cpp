@@ -35,6 +35,8 @@ namespace persistence
     {
         namespace detail
         {
+            const std::size_t indexGranularity = cfg::g_config["persistence"]["db_beta"]["index_granularity"].get<std::size_t>();
+
             Key::Key(const Position& pos, const ReverseMove& reverseMove) :
                 m_hash(pos.hash())
             {
@@ -341,6 +343,11 @@ namespace persistence
             {
             }
 
+            [[nodiscard]] bool operator<(const File& lhs, const File& rhs) noexcept
+            {
+                return lhs.m_id < rhs.m_id;
+            }
+
             [[nodiscard]] std::uint32_t File::id() const
             {
                 return m_id;
@@ -423,6 +430,11 @@ namespace persistence
                 m_path(std::move(path)),
                 m_id(std::stoi(m_path.filename().string()))
             {
+            }
+
+            [[nodiscard]] bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept
+            {
+                return lhs.m_id < rhs.m_id;
             }
 
             [[nodiscard]] std::uint32_t FutureFile::id() const
@@ -627,6 +639,8 @@ namespace persistence
                 sort(buffer);
                 combine(buffer);
             }
+
+            const std::size_t Partition::mergeMemory = cfg::g_config["persistence"]["db_beta"]["max_merge_buffer_size"].get<MemoryAmount>();
 
             Partition::Partition(std::filesystem::path path)
             {
@@ -903,6 +917,8 @@ namespace persistence
                 return buffers;
             }
         }
+
+        const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
             m_path(path),
