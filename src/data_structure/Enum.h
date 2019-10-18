@@ -2,6 +2,8 @@
 
 #include <array>
 
+#include "util/Assert.h"
+
 template <typename EnumT>
 struct EnumTraits;
 

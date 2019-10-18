@@ -85,6 +85,15 @@
     <Filter Include="Source Files\src\persistence\pos_db\beta">
       <UniqueIdentifier>{0372b924-af2b-467b-bc44-f9340288f398}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\test">
+      <UniqueIdentifier>{a6f92209-6fe8-4447-bd88-3fad5b02ea03}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\test\chess">
+      <UniqueIdentifier>{74355b08-e9bb-4ccd-98af-281edf62036b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\test\coding">
+      <UniqueIdentifier>{00c28d99-15b6-4a46-9543-0a806a49bfc1}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\algorithm\Unsort.h">
@@ -184,6 +193,21 @@
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
       <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="test\chess\SanTest.cpp">
+      <Filter>Source Files\test\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="test\chess\PositionTest.cpp">
+      <Filter>Source Files\test\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="test\chess\BitboardTest.cpp">
+      <Filter>Source Files\test\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="test\chess\MoveGeneratorTest.cpp">
+      <Filter>Source Files\test\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="test\coding\CodingTest.cpp">
+      <Filter>Source Files\test\coding</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
