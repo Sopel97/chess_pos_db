@@ -1,13 +1,15 @@
 #include "San.h"
 
-#include <string_view>
-#include <optional>
+#include "detail/ParserBits.h"
 
-#include "chess/detail/ParserBits.h"
+#include "Chess.h"
+#include "Bitboard.h"
+#include "Position.h"
 
 #include "util/Assert.h"
-#include "Chess.h"
-#include "Position.h"
+
+#include <optional>
+#include <string_view>
 
 namespace san
 {

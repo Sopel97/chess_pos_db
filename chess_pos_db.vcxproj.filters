@@ -254,5 +254,8 @@
     <ClCompile Include="src\persistence\pos_db\Query.cpp">
       <Filter>Source Files\src\persistence\pos_db</Filter>
     </ClCompile>
+    <ClCompile Include="src\util\MemoryAmount.cpp">
+      <Filter>Source Files\src\util</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

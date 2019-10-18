@@ -1,11 +1,14 @@
 #include "StorageHeader.h"
 
+#include "algorithm/Unsort.h"
+
+#include "chess/detail/ParserBits.h"
+
 #include "chess/Date.h"
 #include "chess/Eco.h"
-#include "external_storage/External.h"
 #include "chess/Pgn.h"
-#include "algorithm/Unsort.h"
-#include "chess/detail/ParserBits.h"
+
+#include "external_storage/External.h"
 
 #include <cstdint>
 #include <filesystem>

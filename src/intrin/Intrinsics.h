@@ -1,12 +1,12 @@
 #pragma once
 
+#include "util/Assert.h"
+
 #include <cassert>
 #include <cstdint>
 #include <immintrin.h>
-#include <nmmintrin.h>
 #include <intrin.h>
-
-#include "util/Assert.h"
+#include <nmmintrin.h>
 
 #if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
 

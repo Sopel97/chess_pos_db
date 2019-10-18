@@ -1,12 +1,13 @@
 #pragma once
 
+#include "data_structure/FixedVector.h"
+
+#include "util/ArithmeticUtility.h"
+#include "util/Assert.h"
+
 #include <cstdint>
 #include <cstring>
 #include <vector>
-
-#include "util/Assert.h"
-#include "util/ArithmeticUtility.h"
-#include "data_structure/FixedVector.h"
 
 namespace bit
 {

@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cstdint>
+#include "BitStream.h"
 
 #include "util/ArithmeticUtility.h"
-#include "BitStream.h"
 #include "util/TypeUtility.h"
+
+#include <cstdint>
 
 namespace bit
 {

@@ -2,14 +2,14 @@
 
 #include <array>
 #include <chrono>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <fstream>
-#include <optional>
-#include <filesystem>
-#include <ctime>
-#include <iomanip>
 
 // member functions should not be called directly
 // use LOG_* macros

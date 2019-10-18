@@ -1,16 +1,17 @@
 #include "Position.h"
 
-#include "chess/detail/ParserBits.h"
+#include "detail/ParserBits.h"
 
-#include "util/Assert.h"
 #include "Bitboard.h"
-#include "data_structure/EnumMap.h"
 #include "Chess.h"
 
-#include <iostream>
+#include "data_structure/EnumMap.h"
+
+#include "util/Assert.h"
+
 #include <iterator>
-#include <string>
 #include <optional>
+#include <string>
 
 #include "xxhash/xxhash_cpp.h"
 

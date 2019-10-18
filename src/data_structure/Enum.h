@@ -1,8 +1,8 @@
 #pragma once
 
-#include <array>
-
 #include "util/Assert.h"
+
+#include <array>
 
 template <typename EnumT>
 struct EnumTraits;

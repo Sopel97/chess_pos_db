@@ -1,19 +1,19 @@
 #pragma once
 
-#include "util/Assert.h"
-#include "data_structure/Enum.h"
-#include "chess/GameClassification.h"
-#include "chess/MoveGenerator.h"
-#include "chess/Position.h"
 #include "StorageHeader.h"
 
-#include "json/json.hpp"
+#include "chess/GameClassification.h"
+#include "chess/Position.h"
+
+#include "data_structure/Enum.h"
 
 #include <map>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "json/json.hpp"
 
 namespace query
 {

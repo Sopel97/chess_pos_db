@@ -1,10 +1,11 @@
 #pragma once
 
-#include <array>
-#include <type_traits>
-#include <limits>
-
 #include "intrin/Intrinsics.h"
+
+#include <array>
+#include <cstdint>
+#include <limits>
+#include <type_traits>
 
 template <typename IntT>
 [[nodiscard]] constexpr IntT mulSaturate(IntT lhs, IntT rhs)

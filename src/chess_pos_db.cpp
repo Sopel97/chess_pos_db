@@ -2,27 +2,40 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <map>
 #include <memory>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include "chess/Bitboard.h"
-#include "Configuration.h"
-#include "data_structure/Enum.h"
-#include "data_structure/EnumMap.h"
-#include "external_storage/External.h"
-#include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
-#include "persistence/pos_db/beta/DatabaseFormatBeta.h"
-#include "Logger.h"
+
+#include "algorithm/Unsort.h"
+
+#include "chess/Bitboard.h"
 #include "chess/MoveGenerator.h"
 #include "chess/Pgn.h"
 #include "chess/Position.h"
-#include "persistence/pos_db/Query.h"
 #include "chess/San.h"
-#include "algorithm/Unsort.h"
+
+#include "data_structure/Enum.h"
+#include "data_structure/EnumMap.h"
+
+#include "external_storage/External.h"
+
+#include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
+#include "persistence/pos_db/beta/DatabaseFormatBeta.h"
+
+#include "persistence/pos_db/Query.h"
+
+#include "Configuration.h"
+#include "Logger.h"
 
 #include "json/json.hpp"
+
+using namespace std::literals;
 
 namespace app
 {

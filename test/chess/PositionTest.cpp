@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
 
+#include "chess/Chess.h"
+#include "chess/Bitboard.h"
 #include "chess/Position.h"
 
 TEST(PositionTest, GeneralPositionTest) {
@@ -79,5 +81,4 @@ TEST(PositionTest, GeneralPositionTest) {
     ASSERT_TRUE((!Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(H1, Move{ E5, D6, MoveType::EnPassant }, Color::Black)));
 
     ASSERT_TRUE((!Position::fromFen("rnb2k1r/pp1Pbppp/2p5/q7/2B5/8/PPPQNnPP/RNB1K2R w KQ - 0 1").createsAttackOnOwnKing(Move{ E1, H1, MoveType::Castle })));
-
 }

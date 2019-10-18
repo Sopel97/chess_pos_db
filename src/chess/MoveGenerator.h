@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Bitboard.h"
 #include "Chess.h"
 #include "Position.h"
 

@@ -1,13 +1,11 @@
 #pragma once
 
+#include "Query.h"
+
 #include <execution>
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <vector>
-
-#include "util/Endian.h"
-#include "Query.h"
 
 namespace persistence
 {

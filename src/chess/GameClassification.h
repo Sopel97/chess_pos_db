@@ -1,10 +1,11 @@
 #pragma once
 
+#include "data_structure/Enum.h"
 #include "data_structure/EnumMap.h"
 
 #include <cstdint>
-#include <string_view>
 #include <optional>
+#include <string_view>
 
 enum struct GameResult : std::uint8_t
 {

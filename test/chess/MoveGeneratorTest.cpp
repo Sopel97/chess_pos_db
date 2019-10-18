@@ -1,6 +1,8 @@
 #include "gtest/gtest.h"
 
+#include "chess/Chess.h"
 #include "chess/MoveGenerator.h"
+#include "chess/Position.h"
 
 static std::size_t perft(const Position& pos, int depth)
 {

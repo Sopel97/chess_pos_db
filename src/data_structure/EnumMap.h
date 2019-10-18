@@ -1,12 +1,11 @@
 #pragma once
 
-#include <cstdint>
-#include <iterator>
-
-#include "util/Assert.h"
 #include "Enum.h"
 
-// assumes the indices are from 0 to n
+#include "util/Assert.h"
+
+#include <cstdint>
+#include <iterator>
 
 template <typename EnumT, typename ValueT, std::size_t SizeV = cardinality<EnumT>()>
 struct EnumMap

@@ -1,9 +1,9 @@
 #pragma once
 
+#include "util/Assert.h"
+
 #include <iterator>
 #include <type_traits>
-
-#include "util/Assert.h"
 
 template <typename T, std::size_t CapacityV>
 struct FixedVector

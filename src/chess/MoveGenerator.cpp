@@ -1,5 +1,8 @@
 #include "MoveGenerator.h"
 
+#include "Chess.h"
+#include "Position.h"
+
 #include <vector>
 
 namespace movegen

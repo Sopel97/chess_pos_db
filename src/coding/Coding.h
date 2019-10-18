@@ -1,13 +1,14 @@
 #pragma once
 
+#include "Compression.h"
+
+#include "util/Assert.h"
+#include "util/ArithmeticUtility.h"
+
 #include <array>
 #include <cstdint>
 #include <type_traits>
 #include <vector>
-
-#include "util/ArithmeticUtility.h"
-#include "util/Assert.h"
-#include "Compression.h"
 
 namespace bit
 {

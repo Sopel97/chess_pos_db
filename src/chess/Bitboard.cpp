@@ -1,10 +1,13 @@
 #include "Bitboard.h"
 
-#include "util/Assert.h"
 #include "Chess.h"
+
 #include "data_structure/Enum.h"
 #include "data_structure/EnumMap.h"
+
 #include "intrin/Intrinsics.h"
+
+#include "util/Assert.h"
 
 namespace bb
 {

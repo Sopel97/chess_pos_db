@@ -1,7 +1,8 @@
 #include "Eco.h"
 
-#include "util/Assert.h"
 #include "detail/ParserBits.h"
+
+#include "util/Assert.h"
 
 #include <cstdint>
 #include <string>

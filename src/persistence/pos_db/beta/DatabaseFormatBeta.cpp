@@ -1,17 +1,24 @@
 #include "DatabaseFormatBeta.h"
 
-#include "Configuration.h"
-#include "persistence/pos_db/Database.h"
-#include "data_structure/EnumMap.h"
-#include "external_storage/External.h"
+#include "algorithm/Unsort.h"
+
 #include "chess/GameClassification.h"
-#include "util/MemoryAmount.h"
-#include "Logger.h"
 #include "chess/Pgn.h"
 #include "chess/Position.h"
+#include "chess/San.h"
+
+#include "data_structure/EnumMap.h"
+
+#include "external_storage/External.h"
+
+#include "persistence/pos_db/Database.h"
 #include "persistence/pos_db/Query.h"
 #include "persistence/pos_db/StorageHeader.h"
-#include "algorithm/Unsort.h"
+
+#include "util/MemoryAmount.h"
+
+#include "Configuration.h"
+#include "Logger.h"
 
 #include <algorithm>
 #include <array>

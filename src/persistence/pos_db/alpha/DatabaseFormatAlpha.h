@@ -1,18 +1,17 @@
 #pragma once
 
-#include "Configuration.h"
 #include "persistence/pos_db/Database.h"
-#include "data_structure/EnumMap.h"
-#include "external_storage/External.h"
-#include "chess/GameClassification.h"
-#include "util/MemoryAmount.h"
-#include "Logger.h"
-#include "chess/Pgn.h"
 #include "persistence/pos_db/Query.h"
 #include "persistence/pos_db/StorageHeader.h"
-#include "algorithm/Unsort.h"
 
-#include <algorithm>
+#include "chess/GameClassification.h"
+
+#include "data_structure/EnumMap.h"
+
+#include "external_storage/External.h"
+
+#include "util/MemoryAmount.h"
+
 #include <array>
 #include <atomic>
 #include <condition_variable>
@@ -28,7 +27,9 @@
 #include <utility>
 #include <vector>
 
-#include "infint/InfInt.h"
+struct Position;
+struct ReverseMove;
+struct Move;
 
 namespace persistence
 {

@@ -1,16 +1,24 @@
 #include "DatabaseFormatAlpha.h"
 
-#include "Configuration.h"
-#include "persistence/pos_db/Database.h"
-#include "data_structure/EnumMap.h"
-#include "external_storage/External.h"
+#include "algorithm/Unsort.h"
+
 #include "chess/GameClassification.h"
-#include "util/MemoryAmount.h"
-#include "Logger.h"
+#include "chess/Position.h"
 #include "chess/Pgn.h"
+#include "chess/San.h"
+
+#include "data_structure/EnumMap.h"
+
+#include "external_storage/External.h"
+
+#include "persistence/pos_db/Database.h"
 #include "persistence/pos_db/Query.h"
 #include "persistence/pos_db/StorageHeader.h"
-#include "algorithm/Unsort.h"
+
+#include "util/MemoryAmount.h"
+
+#include "Configuration.h"
+#include "Logger.h"
 
 #include <algorithm>
 #include <array>
@@ -1100,9 +1108,9 @@ namespace persistence
 
             auto pathsByLevel = detail::partitionPathsByLevel(pgns);
 
-            const std::size_t numBuffers = cardinality<GameResult>();
+            const constexpr std::size_t numBuffers = cardinality<GameResult>();
 
-            const std::size_t numAdditionalBuffers = numBuffers * 2;
+            const constexpr std::size_t numAdditionalBuffers = numBuffers * 2;
 
             const std::size_t bucketSize =
                 ext::numObjectsPerBufferUnit<detail::Entry>(

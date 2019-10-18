@@ -1,10 +1,12 @@
 #include "Date.h"
 
+#include "detail/ParserBits.h"
+
+#include "util/Assert.h"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
-
-#include "detail/ParserBits.h"
 
 Date::Date() :
     m_year(0),

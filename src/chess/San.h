@@ -1,13 +1,14 @@
 #pragma once
 
-#include <string_view>
-#include <optional>
-
-#include "chess/detail/ParserBits.h"
+#include "detail/ParserBits.h"
 
 #include "util/Assert.h"
-#include "Chess.h"
-#include "Position.h"
+
+#include <optional>
+#include <string_view>
+
+struct Move;
+struct Position;
 
 namespace san
 {

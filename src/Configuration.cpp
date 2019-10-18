@@ -1,14 +1,15 @@
 #include "Configuration.h"
 
+#include "util/MemoryAmount.h"
+
+#include "Logger.h"
+
 #include <fstream>
 #include <cstdint>
 #include <string>
 #include <iostream>
 
 #include "json/json.hpp"
-
-#include "util/MemoryAmount.h"
-#include "Logger.h"
 
 namespace cfg
 {

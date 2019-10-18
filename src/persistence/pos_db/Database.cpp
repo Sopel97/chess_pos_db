@@ -1,13 +1,14 @@
 #include "Database.h"
 
+#include "Query.h"
+
+#include "util/Endian.h"
+
 #include <execution>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
-
-#include "util/Endian.h"
-#include "Query.h"
 
 namespace persistence
 {

@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
 
+#include "chess/Chess.h"
+#include "chess/Position.h"
 #include "chess/San.h"
 
 TEST(SanTest, GeneralSanTest) {

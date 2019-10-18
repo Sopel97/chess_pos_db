@@ -1,14 +1,9 @@
 #pragma once
 
-#include <fstream>
-#include <cstdint>
+#include <iosfwd>
 #include <string>
-#include <iostream>
 
 #include "json/json.hpp"
-
-#include "util/MemoryAmount.h"
-#include "Logger.h"
 
 namespace cfg
 {

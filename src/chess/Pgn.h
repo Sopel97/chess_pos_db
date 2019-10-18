@@ -1,22 +1,19 @@
 #pragma once
 
-#include <vector>
-#include <memory>
-#include <optional>
-#include <cstdio>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <string_view>
-#include <future>
-
-#include "util/Assert.h"
 #include "Date.h"
 #include "Eco.h"
-#include "chess/GameClassification.h"
-#include "detail/ParserBits.h"
+#include "GameClassification.h"
 #include "Position.h"
-#include "San.h"
+
+#include "util/Assert.h"
+
+#include <cstdint>
+#include <filesystem>
+#include <future>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <vector>
 
 namespace pgn
 {

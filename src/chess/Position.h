@@ -1,18 +1,16 @@
 #pragma once
 
-#include "chess/detail/ParserBits.h"
+#include "detail/ParserBits.h"
 
-#include "util/Assert.h"
 #include "Bitboard.h"
-#include "data_structure/EnumMap.h"
 #include "Chess.h"
 
-#include <iostream>
-#include <iterator>
-#include <string>
-#include <optional>
+#include "data_structure/EnumMap.h"
 
-#include "xxhash/xxhash_cpp.h"
+#include "util/Assert.h"
+
+#include <optional>
+#include <string_view>
 
 struct Board
 {

@@ -1,12 +1,14 @@
 #pragma once
 
-#include <string>
-#include <string_view>
-#include <optional>
+#include "chess/Chess.h"
+
+#include "intrin/Intrinsics.h"
 
 #include "util/Assert.h"
-#include "chess/Chess.h"
-#include "intrin/Intrinsics.h"
+
+#include <optional>
+#include <string>
+#include <string_view>
 
 namespace parser_bits
 {
