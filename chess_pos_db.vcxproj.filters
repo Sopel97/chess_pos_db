@@ -239,5 +239,17 @@
     <ClCompile Include="src\Configuration.cpp">
       <Filter>Source Files\src</Filter>
     </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp">
+      <Filter>Source Files\src\persistence\pos_db</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.cpp">
+      <Filter>Source Files\src\persistence\pos_db\alpha</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBeta.cpp">
+      <Filter>Source Files\src\persistence\pos_db\beta</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\Database.cpp">
+      <Filter>Source Files\src\persistence\pos_db</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

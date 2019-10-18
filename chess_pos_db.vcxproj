@@ -86,6 +86,10 @@
     <ClCompile Include="src\chess_pos_db.cpp" />
     <ClCompile Include="src\Configuration.cpp" />
     <ClCompile Include="src\external_storage\External.cpp" />
+    <ClCompile Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.cpp" />
+    <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBeta.cpp" />
+    <ClCompile Include="src\persistence\pos_db\Database.cpp" />
+    <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp" />
     <ClCompile Include="test\chess\BitboardTest.cpp">
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
       </DeploymentContent>

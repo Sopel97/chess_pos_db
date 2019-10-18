@@ -628,7 +628,7 @@ namespace query
             || mask == SelectMask::AllCombined;
     }
 
-    [[nodiscard]] SelectMask selectMask(const Request& query)
+    [[nodiscard]] inline SelectMask selectMask(const Request& query)
     {
         SelectMask mask = SelectMask::None;
         for (auto&& [select, fetch] : query.fetchingOptions)
@@ -638,7 +638,7 @@ namespace query
         return mask;
     }
 
-    [[nodiscard]] SelectMask fetchChildrenSelectMask(const Request& query)
+    [[nodiscard]] inline SelectMask fetchChildrenSelectMask(const Request& query)
     {
         SelectMask mask = SelectMask::None;
         for (auto&& [select, fetch] : query.fetchingOptions)
@@ -668,7 +668,7 @@ namespace query
 
     using PositionQueries = std::vector<PositionQuery>;
 
-    [[nodiscard]] PositionQueries gatherPositionQueries(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
+    [[nodiscard]] inline PositionQueries gatherPositionQueries(const std::vector<RootPosition>& rootPositions, bool fetchChildren)
     {
         PositionQueries queries;
         for (std::size_t i = 0; i < rootPositions.size(); ++i)
@@ -696,7 +696,7 @@ namespace query
         return queries;
     }
 
-    [[nodiscard]] PositionQueries gatherPositionQueries(const Request& query)
+    [[nodiscard]] inline PositionQueries gatherPositionQueries(const Request& query)
     {
         const bool fetchChildren = std::any_of(
             query.fetchingOptions.begin(), 
@@ -710,7 +710,7 @@ namespace query
     // It is flatter, allows easier in memory manipulation.
     using PositionQueryResults = std::vector<EnumMap<Select, SegregatedEntries>>;
 
-    [[nodiscard]] std::vector<ResultForRoot> unflatten(PositionQueryResults&& raw, const Request& query, const PositionQueries& individialQueries)
+    [[nodiscard]] inline std::vector<ResultForRoot> unflatten(PositionQueryResults&& raw, const Request& query, const PositionQueries& individialQueries)
     {
         std::vector<ResultForRoot> results;
         for (auto&& rootPosition : query.positions)
@@ -768,7 +768,7 @@ namespace query
         HeaderMemberPtr headerPtr;
     };
 
-    void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers)
+    inline void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers)
     {
         ASSERT(destinations.size() == headers.size());
 
@@ -782,7 +782,7 @@ namespace query
         }
     }
 
-    void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, const std::vector<persistence::PackedGameHeader>& headers)
+    inline void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, const std::vector<persistence::PackedGameHeader>& headers)
     {
         ASSERT(destinations.size() == headers.size());
 
@@ -804,7 +804,7 @@ namespace query
 
     using FetchLookups = EnumMap2<PositionQueryOrigin, Select, GameFetchSettings>;
 
-    [[nodiscard]] FetchLookups buildGameHeaderFetchLookup(const Request& query)
+    [[nodiscard]] inline FetchLookups buildGameHeaderFetchLookup(const Request& query)
     {
         FetchLookups lookup{};
 
