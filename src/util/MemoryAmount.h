@@ -71,7 +71,7 @@ struct MemoryAmount
     friend void from_json(const nlohmann::json& j, MemoryAmount& v);
 
 private:
-    static const std::map<std::string_view, std::size_t> m_units;
+    static const std::map<std::string_view, std::size_t>& units();
 
     constexpr MemoryAmount(std::size_t volume) :
         m_bytes(volume)

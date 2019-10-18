@@ -19,7 +19,7 @@ MemoryAmount::MemoryAmount(const std::string& s)
     {
         while (*end == ' ') ++end;
         std::string_view unit(end, actualEnd - end);
-        m_bytes *= m_units.at(unit);
+        m_bytes *= units().at(unit);
     }
 }
 
@@ -41,14 +41,19 @@ void from_json(const nlohmann::json& j, MemoryAmount& v)
     }
 }
 
-const std::map<std::string_view, std::size_t> MemoryAmount::m_units = {
-    { "B"sv, 1 },
-    { "kB"sv, 1000 },
-    { "MB"sv, 1000 * 1000 },
-    { "GB"sv, 1000 * 1000 * 1000 },
-    { "TB"sv, 1000ull * 1000ull * 1000ull * 1000ull },
-    { "KiB"sv, 1024 },
-    { "MiB"sv, 1024 * 1024 },
-    { "GiB"sv, 1024 * 1024 * 1024 },
-    { "TiB"sv, 1024ull * 1024ull * 1024ull * 1024ull }
-};
+const std::map<std::string_view, std::size_t>& MemoryAmount::units()
+{
+    static const std::map<std::string_view, std::size_t> s_units = {
+        { "B"sv, 1 },
+        { "kB"sv, 1000 },
+        { "MB"sv, 1000 * 1000 },
+        { "GB"sv, 1000 * 1000 * 1000 },
+        { "TB"sv, 1000ull * 1000ull * 1000ull * 1000ull },
+        { "KiB"sv, 1024 },
+        { "MiB"sv, 1024 * 1024 },
+        { "GiB"sv, 1024 * 1024 * 1024 },
+        { "TiB"sv, 1024ull * 1024ull * 1024ull * 1024ull }
+    };
+
+    return s_units;
+}
