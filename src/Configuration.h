@@ -21,7 +21,7 @@ namespace cfg
             Multi
         };
 
-        std::string stripComments(const std::string& str)
+        static inline std::string stripComments(const std::string& str)
         {
             /*
             MIT License

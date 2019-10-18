@@ -233,5 +233,8 @@
     <ClCompile Include="src\chess\Position.cpp">
       <Filter>Source Files\src\chess</Filter>
     </ClCompile>
+    <ClCompile Include="src\external_storage\External.cpp">
+      <Filter>Source Files\src\external_storage</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

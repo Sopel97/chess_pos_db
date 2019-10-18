@@ -38,57 +38,16 @@ namespace ext
 
     namespace detail::except
     {
-        [[noreturn]] void throwAppendException(const std::filesystem::path& path, std::size_t requested, std::size_t written)
-        {
-            throw Exception(
-                "Cannot append to file " + path.string()
-                + ". Written " + std::to_string(written) + " out of " + std::to_string(requested) + " elements."
-            );
-        }
+        [[noreturn]] void throwAppendException(const std::filesystem::path& path, std::size_t requested, std::size_t written);
 
-        [[noreturn]] void throwReadException(const std::filesystem::path& path, std::size_t offset, std::size_t requested, std::size_t read)
-        {
-            throw Exception(
-                "Cannot read from file " + path.string()
-                + ". Read " + std::to_string(read) + " out of " + std::to_string(requested) + " elements at offset " + std::to_string(offset) + "."
-            );
-        }
+        [[noreturn]] void throwReadException(const std::filesystem::path& path, std::size_t offset, std::size_t requested, std::size_t read);
 
-        [[noreturn]] void throwOpenException(const std::filesystem::path& path, const std::string& openmode)
-        {
-            throw Exception(
-                "Cannot open file " + path.string()
-                + " with openmode + " + openmode
-            );
-        }
+        [[noreturn]] void throwOpenException(const std::filesystem::path& path, const std::string& openmode);
     }
 
-    [[nodiscard]] std::filesystem::path uniquePath()
-    {
-        constexpr int length = 16;
+    [[nodiscard]] std::filesystem::path uniquePath();
 
-        static const char allowedChars[] =
-            "0123456789"
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            "abcdefghijklmnopqrstuvwxyz";
-
-        static const std::uniform_int_distribution<unsigned short> dChar(0, sizeof(allowedChars) - 2u);
-
-        static thread_local std::minstd_rand rng;
-
-        std::string s;
-        for (int i = 0; i < length; ++i)
-        {
-            s += allowedChars[dChar(rng)];
-        }
-
-        return s;
-    }
-
-    [[nodiscard]] std::filesystem::path uniquePath(const std::filesystem::path& dir)
-    {
-        return dir / uniquePath();
-    }
+    [[nodiscard]] std::filesystem::path uniquePath(const std::filesystem::path& dir);
 
     [[nodiscard]] constexpr std::size_t ceilToMultiple(std::size_t value, std::size_t multiple)
     {
@@ -121,10 +80,7 @@ namespace ext
 
     struct FileDeleter
     {
-        void operator()(std::FILE* ptr) const noexcept
-        {
-            std::fclose(ptr);
-        }
+        void operator()(std::FILE* ptr) const noexcept;
     };
 
     namespace detail
@@ -132,31 +88,13 @@ namespace ext
         using NativeFileHandle = std::FILE*;
         using FileHandle = std::unique_ptr<std::FILE, FileDeleter>;
 
-        [[nodiscard]] auto openFile(const std::filesystem::path& path, const std::string& openmode)
-        {
-            std::string pathStr = path.string();
-            auto h = FileHandle(std::fopen(pathStr.c_str(), openmode.c_str()));
-            if (h == nullptr)
-            {
-                except::throwOpenException(path, openmode);
-            }
-            return h;
-        }
+        [[nodiscard]] auto openFile(const std::filesystem::path& path, const std::string& openmode);
 
-        [[nodiscard]] auto fileTell(NativeFileHandle fh)
-        {
-            return _ftelli64_nolock(fh);
-        }
+        [[nodiscard]] auto fileTell(NativeFileHandle fh);
 
-        auto fileSeek(NativeFileHandle fh, std::int64_t offset)
-        {
-            return _fseeki64_nolock(fh, offset, SEEK_SET);
-        }
+        auto fileSeek(NativeFileHandle fh, std::int64_t offset);
 
-        auto fileSeek(NativeFileHandle fh, std::int64_t offset, int origin)
-        {
-            return _fseeki64_nolock(fh, offset, origin);
-        }
+        auto fileSeek(NativeFileHandle fh, std::int64_t offset, int origin);
 
         struct FileBase
         {
@@ -224,215 +162,62 @@ namespace ext
                     return std::forward<FuncT>(func)(getHandle(file));
                 }
 
-                [[nodiscard]] FilePoolEntryIter noneEntry()
-                {
-                    return m_files.end();
-                }
+                [[nodiscard]] FilePoolEntryIter noneEntry();
 
-                void close(PooledFile& file)
-                {
-                    std::unique_lock<std::mutex> lock(m_mutex);
-
-                    closeNoLock(file);
-                }
+                void close(PooledFile& file);
 
             private:
                 FilePoolEntries m_files;
                 std::mutex m_mutex;
 
-                void closeNoLock(PooledFile& file)
-                {
-                    if (file.m_poolEntry != noneEntry())
-                    {
-                        std::unique_lock<std::mutex> lock(file.m_mutex);
+                void closeNoLock(PooledFile& file);
 
-                        m_files.erase(file.m_poolEntry);
-                        file.m_poolEntry = noneEntry();
-                    }
-                }
+                [[nodiscard]] FileHandle reopen(const PooledFile& file);
 
-                [[nodiscard]] FileHandle reopen(const PooledFile& file)
-                {
-                    ASSERT(file.m_timesOpened > 0u);
+                [[nodiscard]] FileHandle open(const PooledFile& file);
 
-                    // in particular change 'w' to 'a' so we don't truncate the file
-                    std::string openmode = file.m_openmode;
-                    for (auto& c : openmode)
-                    {
-                        if (c == 'w') c = 'a';
-                    }
-                    return openFile(file.m_path, openmode);
-                }
+                void closeLastFile();
 
-                [[nodiscard]] FileHandle open(const PooledFile& file)
-                {
-                    ASSERT(file.m_timesOpened == 0u);
+                [[nodiscard]] NativeFileHandle getHandle(const PooledFile& file);
 
-                    return openFile(file.m_path, file.m_openmode);
-                }
-
-                void closeLastFile()
-                {
-                    ASSERT(!m_files.empty());
-
-                    const PooledFile& file = *(m_files.front().second);
-
-                    std::unique_lock<std::mutex> lock(file.m_mutex);
-
-                    file.m_poolEntry = noneEntry();
-                    m_files.pop_front();
-                }
-
-                [[nodiscard]] NativeFileHandle getHandle(const PooledFile& file)
-                {
-                    std::unique_lock<std::mutex> lock(m_mutex);
-
-                    if (file.m_poolEntry != noneEntry())
-                    {
-                        ASSERT(file.m_timesOpened > 0);
-                        // the file is already open
-                        // we only have to move it to the back
-                        updateEntry(file.m_poolEntry);
-                        return file.m_poolEntry->first.get();
-                    }
-
-                    // we have to open the file
-
-                    // if the pool is full then make some space
-                    if (m_files.size() == numMaxConcurrentOpenFiles)
-                    {
-                        closeLastFile();
-                    }
-
-                    // TODO: we may want to unlock the mutex for opening the files
-                    // if we open for the first time we may want to truncate, we don't want that later
-                    FileHandle handle{};
-                    if (file.m_timesOpened > 0u)
-                    {
-                        handle = reopen(file);
-                    }
-                    else
-                    {
-                        handle = open(file);
-                    }
-
-                    m_files.emplace_back(std::move(handle), &file);
-                    file.m_poolEntry = std::prev(m_files.end());
-                    file.m_timesOpened += 1;
-                    return file.m_poolEntry->first.get();
-                }
-
-                void updateEntry(const FilePoolEntryIter& it)
-                {
-                    // Move the entry to the end (back)
-                    m_files.splice(m_files.end(), m_files, it);
-                }
+                void updateEntry(const FilePoolEntryIter& it);
             };
 
-            static FilePool& pool()
-            {
-                static FilePool s_pool;
-                return s_pool;
-            }
+            static FilePool& pool();
 
         public:
 
-            PooledFile(std::filesystem::path path, std::string openmode) :
-                m_path(std::move(path)),
-                m_openmode(std::move(openmode)),
-                m_poolEntry(pool().noneEntry()),
-                m_timesOpened(0)
-            {
-            }
+            PooledFile(std::filesystem::path path, std::string openmode);
 
             PooledFile(const PooledFile&) = delete;
             PooledFile(PooledFile&&) = delete;
             PooledFile& operator=(const PooledFile&) = delete;
             PooledFile& operator=(PooledFile&&) = delete;
 
-            ~PooledFile() override
-            {
-                pool().close(*this);
-            }
+            ~PooledFile() override;
 
             [[nodiscard]] friend bool operator==(const PooledFile& lhs, const PooledFile& rhs) noexcept
             {
                 return &lhs == &rhs;
             }
 
-            [[nodiscard]] const std::filesystem::path& path() const override
-            {
-                return m_path;
-            }
+            [[nodiscard]] const std::filesystem::path& path() const override;
 
-            [[nodiscard]] const std::string& openmode() const override
-            {
-                return m_openmode;
-            }
+            [[nodiscard]] const std::string& openmode() const override;
 
-            [[nodiscard]] bool isOpen() const override
-            {
-                return m_poolEntry != pool().noneEntry();
-            }
+            [[nodiscard]] bool isOpen() const override;
 
-            [[nodiscard]] std::size_t size() const override
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    const auto originalPos = fileTell(handle);
-                    fileSeek(handle, 0, SEEK_END);
-                    const std::size_t s = fileTell(handle);
-                    fileSeek(handle, originalPos, SEEK_SET);
-                    return s;
-                    });
-            }
+            [[nodiscard]] std::size_t size() const override;
 
-            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    fileSeek(handle, offset, SEEK_SET);
-                    return std::fread(static_cast<void*>(destination), elementSize, count, handle);
-                    });
-            }
+            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override;
 
-            [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) override
-            {
-                return withHandle([&](NativeFileHandle handle) {
-                    fileSeek(handle, 0, SEEK_END);
-                    return std::fwrite(static_cast<const void*>(source), elementSize, count, handle);
-                    });
-            }
+            [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) override;
 
-            void flush() override
-            {
-                withHandle([&](NativeFileHandle handle) {
-                    std::fflush(handle);
-                    });
-            }
+            void flush() override;
 
-            [[nodiscard]] bool isPooled() const override
-            {
-                return true;
-            }
+            [[nodiscard]] bool isPooled() const override;
 
-            void truncate() override
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
-
-                // We have to close the file but we cannot use pool's method
-                // because it would try to lock the file again.
-                // This is pretty much the only way we can ensure atomicity here.
-                if (m_poolEntry != pool().noneEntry())
-                {
-                    std::fclose(m_poolEntry->first.get());
-                    std::filesystem::resize_file(m_path, 0);
-                    // We don't care about openmode here because we truncate anyway
-                    m_poolEntry->first = detail::openFile(m_path, m_openmode);
-                }
-                else
-                {
-                    std::filesystem::resize_file(m_path, 0);
-                }
-            }
+            void truncate() override;
 
         private:
             std::filesystem::path m_path;
@@ -453,117 +238,41 @@ namespace ext
         public:
             static inline const std::size_t maxUnpooledOpenFiles = cfg::g_config["ext"]["max_concurrent_open_unpooled_files"].get<std::size_t>();
 
-            File(std::filesystem::path path, std::string openmode) :
-                m_path(std::move(path)),
-                m_openmode(std::move(openmode))
-            {
-                open();
-            }
+            File(std::filesystem::path path, std::string openmode);
 
             File(const File&) = delete;
             File(File&&) = delete;
             File& operator=(const File&) = delete;
             File& operator=(File&&) = delete;
 
-            ~File() override
-            {
-                close();
-            }
+            ~File() override;
 
             [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept
             {
                 return &lhs == &rhs;
             }
 
-            [[nodiscard]] const std::filesystem::path& path() const override
-            {
-                return m_path;
-            }
+            [[nodiscard]] const std::filesystem::path& path() const override;
 
-            [[nodiscard]] const std::string& openmode() const override
-            {
-                return m_openmode;
-            }
+            [[nodiscard]] const std::string& openmode() const override;
 
-            void close()
-            {
-                m_handle.reset();
-                m_numOpenFiles -= 1;
-            }
+            void close();
 
-            void open()
-            {
-                // This is not designed to be a hard limits.
-                // It it prone to data races.
-                // We only want to reasonably restrict the number of
-                // unpooled files open at once so that
-                // we don't fail to open a PooledFile
-                if (m_numOpenFiles.load() >= maxUnpooledOpenFiles)
-                {
-                    except::throwOpenException(m_path, m_openmode);
-                }
+            void open();
 
-                m_handle = openFile(m_path, m_openmode);
-                m_numOpenFiles += 1;
-            }
+            [[nodiscard]] bool isOpen() const override;
 
-            [[nodiscard]] bool isOpen() const override
-            {
-                return m_handle != nullptr;
-            }
+            [[nodiscard]] std::size_t size() const override;
 
-            [[nodiscard]] std::size_t size() const override
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
+            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override;
 
-                ASSERT(m_handle.get() != nullptr);
-                const auto originalPos = fileTell(m_handle.get());
-                fileSeek(m_handle.get(), 0, SEEK_END);
-                const auto s = fileTell(m_handle.get());
-                fileSeek(m_handle.get(), originalPos, SEEK_SET);
-                return s;
-            }
+            [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) override;
 
-            [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
+            void flush() override;
 
-                ASSERT(m_handle.get() != nullptr);
-                fileSeek(m_handle.get(), offset, SEEK_SET);
-                return std::fread(static_cast<void*>(destination), elementSize, count, m_handle.get());
-            }
+            [[nodiscard]] bool isPooled() const override;
 
-            [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) override
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
-
-                ASSERT(m_handle.get() != nullptr);
-                fileSeek(m_handle.get(), 0, SEEK_END);
-                return std::fwrite(static_cast<const void*>(source), elementSize, count, m_handle.get());
-            }
-
-            void flush() override
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
-
-                ASSERT(m_handle.get() != nullptr);
-                std::fflush(m_handle.get());
-            }
-
-            [[nodiscard]] bool isPooled() const override
-            {
-                return false;
-            }
-
-            void truncate() override
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
-
-                ASSERT(m_handle.get() != nullptr);
-                close();
-                std::filesystem::resize_file(m_path, 0);
-                open();
-            }
+            void truncate() override;
 
         private:
             std::filesystem::path m_path;
@@ -602,128 +311,22 @@ namespace ext
                 std::vector<std::filesystem::path> paths;
             };
 
-            static const std::vector<ThreadPoolSpec>& specs()
-            {
-                static const std::vector<ThreadPoolSpec> s_specs = []() {
-                    std::vector<ThreadPoolSpec> s_paths;
+            static const std::vector<ThreadPoolSpec>& specs();
 
-                    for (auto&& specJson : cfg::g_config["ext"]["thread_pools"])
-                    {
-                        auto& spec = s_paths.emplace_back();
-                        specJson["threads"].get_to(spec.numThreads);
-                        for (auto&& path : specJson["paths"])
-                        {
-                            spec.paths.emplace_back(path.get<std::string>());
-                        }
-                    }
+            static ThreadPool& instance();
 
-                    return s_paths;
-                }();
-
-                return s_specs;
-            }
-
-            static ThreadPool& instance()
-            {
-                static ThreadPool s_instance(cfg::g_config["ext"]["default_thread_pool"]["threads"].get<std::size_t>());
-                return s_instance;
-            }
-
-            static ThreadPool& instance(const std::filesystem::path& path)
-            {
-                static std::vector<std::unique_ptr<ThreadPool>> s_instances = []() {
-                    std::vector<std::unique_ptr<ThreadPool>> s_instances;
-
-                    for (auto&& spec : specs())
-                    {
-                        Logger::instance().logInfo(": Creating thread pool for paths: ");
-                        for (auto&& path : spec.paths)
-                        {
-                            Logger::instance().logInfo(":     ", path);
-                        }
-                        s_instances.emplace_back(new ThreadPool(spec.numThreads));
-                    }
-
-                    return s_instances;
-                }();
-
-                const std::size_t i = poolIndexForPath(path);
-                if (i == -1)
-                {
-                    return instance();
-                }
-
-                return *s_instances[i];
-            }
+            static ThreadPool& instance(const std::filesystem::path& path);
 
             ThreadPool(const ThreadPool&) = delete;
             ThreadPool(ThreadPool&&) = delete;
             ThreadPool& operator=(const ThreadPool&) = delete;
             ThreadPool& operator=(ThreadPool&&) = delete;
 
-            [[nodiscard]] std::future<std::size_t> scheduleRead(std::shared_ptr<FileBase> file, std::byte* buffer, std::size_t offset, std::size_t elementSize, std::size_t count)
-            {
-                Job job{
-                    JobType::Read,
-                    std::move(file),
-                    buffer,
-                    {},
-                    offset,
-                    elementSize,
-                    count
-                };
-                std::future<std::size_t> future = job.promise.get_future();
+            [[nodiscard]] std::future<std::size_t> scheduleRead(std::shared_ptr<FileBase> file, std::byte* buffer, std::size_t offset, std::size_t elementSize, std::size_t count);
 
-                std::unique_lock<std::mutex> lock(m_mutex);
+            [[nodiscard]] std::future<std::size_t> scheduleAppend(std::shared_ptr<FileBase> file, const std::byte* buffer, std::size_t elementSize, std::size_t count);
 
-                m_jobQueue.emplace(std::move(job));
-                if (m_jobQueue.size() == 1)
-                {
-                    lock.unlock();
-                    m_jobQueueNotEmpty.notify_one();
-                }
-
-                return future;
-            }
-
-            [[nodiscard]] std::future<std::size_t> scheduleAppend(std::shared_ptr<FileBase> file, const std::byte* buffer, std::size_t elementSize, std::size_t count)
-            {
-                Job job{
-                    JobType::Append,
-                    std::move(file),
-                    const_cast<std::byte*>(buffer),
-                    {},
-                    {},
-                    elementSize,
-                    count
-                };
-                std::future<std::size_t> future = job.promise.get_future();
-
-                std::unique_lock<std::mutex> lock(m_mutex);
-
-                m_jobQueue.emplace(std::move(job));
-                if (m_jobQueue.size() == 1)
-                {
-                    lock.unlock();
-                    m_jobQueueNotEmpty.notify_one();
-                }
-
-                return future;
-            }
-
-            ~ThreadPool()
-            {
-                m_done.store(true);
-                m_jobQueueNotEmpty.notify_one();
-
-                for (auto& thread : m_threads)
-                {
-                    if (thread.joinable())
-                    {
-                        thread.join();
-                    }
-                }
-            }
+            ~ThreadPool();
 
         private:
             std::vector<std::thread> m_threads;
@@ -735,76 +338,11 @@ namespace ext
 
             std::atomic<bool> m_done;
 
-            ThreadPool(std::size_t numThreads = defaultNumThreads) :
-                m_done(false)
-            {
-                Logger::instance().logInfo(": Creating thread pool with ", numThreads, " threads.");
-                m_threads.reserve(numThreads);
-                for (std::size_t i = 0; i < numThreads; ++i)
-                {
-                    m_threads.emplace_back([this]() { worker(); });
-                }
-            }
+            ThreadPool(std::size_t numThreads = defaultNumThreads);
 
-            static std::size_t poolIndexForPath(const std::filesystem::path& path)
-            {
-                auto absolute = std::filesystem::canonical(path);
-                const auto& poolSpecs = specs();
-                for (std::size_t i = 0; i < poolSpecs.size(); ++i)
-                {
-                    auto&& spec = poolSpecs[i];
-                    for (const auto& path : spec.paths)
-                    {
-                        auto originalPath = absolute;
-                        for (;;)
-                        {
-                            if (path == originalPath)
-                            {
-                                return i;
-                            }
+            static std::size_t poolIndexForPath(const std::filesystem::path& path);
 
-                            auto parent = originalPath.parent_path();
-                            if (parent == originalPath)
-                            {
-                                break;
-                            }
-                            originalPath = std::move(parent);
-                        }
-                    }
-                }
-
-                return -1;
-            }
-
-            void worker()
-            {
-                for (;;)
-                {
-                    std::unique_lock<std::mutex> lock(m_mutex);
-                    m_jobQueueNotEmpty.wait(lock, [this]() { return !m_jobQueue.empty() || m_done.load(); });
-                    if (m_jobQueue.empty())
-                    {
-                        lock.unlock();
-                        m_jobQueueNotEmpty.notify_one();
-                        return;
-                    }
-
-                    Job job = std::move(m_jobQueue.front());
-                    m_jobQueue.pop();
-                    lock.unlock();
-
-                    if (job.type == JobType::Read)
-                    {
-                        const std::size_t r = job.file->read(job.buffer, job.offset, job.elementSize, job.count);
-                        job.promise.set_value(r);
-                    }
-                    else // job.type == JobType::Append
-                    {
-                        const std::size_t r = job.file->append(job.buffer, job.elementSize, job.count);
-                        job.promise.set_value(r);
-                    }
-                }
-            }
+            void worker();
         };
     }
 
@@ -815,19 +353,9 @@ namespace ext
     // NOTE: It is also assumed that the file is not changed by any means while being open.
     struct ImmutableBinaryFile
     {
-        ImmutableBinaryFile(std::filesystem::path path) :
-            m_file(std::make_shared<detail::File>(std::move(path), m_openmode)),
-            m_threadPool(&detail::ThreadPool::instance(m_file->path())),
-            m_size(m_file->size())
-        {
-        }
+        ImmutableBinaryFile(std::filesystem::path path);
 
-        ImmutableBinaryFile(Pooled, std::filesystem::path path) :
-            m_file(std::make_shared<detail::PooledFile>(std::move(path), m_openmode)),
-            m_threadPool(&detail::ThreadPool::instance(m_file->path())),
-            m_size(m_file->size())
-        {
-        }
+        ImmutableBinaryFile(Pooled, std::filesystem::path path);
 
         ImmutableBinaryFile(const ImmutableBinaryFile&) = default;
         ImmutableBinaryFile(ImmutableBinaryFile&&) = default;
@@ -854,21 +382,11 @@ namespace ext
             return m_openmode;
         }
 
-        [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
-        {
-            return m_file->read(destination, offset, elementSize, count);
-        }
+        [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
-        [[nodiscard]] std::future<std::size_t> read(Async, std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
-        {
-            return m_threadPool->scheduleRead(m_file, destination, offset, elementSize, count);
-        }
+        [[nodiscard]] std::future<std::size_t> read(Async, std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
-        [[nodiscard]] std::size_t size() const
-        {
-            return m_size;
-        }
-
+        [[nodiscard]] std::size_t size() const;
     private:
         static inline const std::string m_openmode = "rb";
 
@@ -885,27 +403,16 @@ namespace ext
 
     struct BinaryOutputFile
     {
-        BinaryOutputFile(std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
-            m_file(std::make_shared<detail::File>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
-            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
-        {
-        }
+        BinaryOutputFile(std::filesystem::path path, OutputMode mode = OutputMode::Truncate);
 
-        BinaryOutputFile(Pooled, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
-            m_file(std::make_shared<detail::PooledFile>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
-            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
-        {
-        }
+        BinaryOutputFile(Pooled, std::filesystem::path path, OutputMode mode = OutputMode::Truncate);
 
         BinaryOutputFile(const BinaryOutputFile&) = delete;
         BinaryOutputFile(BinaryOutputFile&&) = default;
         BinaryOutputFile& operator=(const BinaryOutputFile&) = delete;
         BinaryOutputFile& operator=(BinaryOutputFile&&) = default;
 
-        virtual ~BinaryOutputFile()
-        {
-
-        }
+        virtual ~BinaryOutputFile();
 
         [[nodiscard]] decltype(auto) isOpen() const
         {
@@ -922,39 +429,14 @@ namespace ext
             return m_file->openmode();
         }
 
-        [[nodiscard]] virtual std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const
-        {
-            return m_file->append(source, elementSize, count);
-        }
+        [[nodiscard]] virtual std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const;
 
-        [[nodiscard]] virtual std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const
-        {
-            return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
-        }
+        [[nodiscard]] virtual std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const;
 
         // reopens the file in readonly mode
-        [[nodiscard]] ImmutableBinaryFile seal()
-        {
-            flush();
+        [[nodiscard]] ImmutableBinaryFile seal();
 
-            if (m_file->isPooled())
-            {
-                ImmutableBinaryFile f(Pooled{}, m_file->path());
-                m_file.reset();
-                return f;
-            }
-            else
-            {
-                ImmutableBinaryFile f(m_file->path());
-                m_file.reset();
-                return f;
-            }
-        }
-
-        void flush()
-        {
-            m_file->flush();
-        }
+        void flush();
 
     private:
         static inline const std::string m_openmodeTruncate = "wb";
@@ -968,34 +450,18 @@ namespace ext
     {
         using CallbackType = std::function<void(const std::byte*, std::size_t, std::size_t)>;
 
-        ObservableBinaryOutputFile(CallbackType callback, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
-            BinaryOutputFile(std::move(path), mode),
-            m_callback(std::move(callback))
-        {
-        }
+        ObservableBinaryOutputFile(CallbackType callback, std::filesystem::path path, OutputMode mode = OutputMode::Truncate);
 
-        ObservableBinaryOutputFile(Pooled, CallbackType callback, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
-            BinaryOutputFile(std::move(path), mode),
-            m_callback(std::move(callback))
-        {
-        }
+        ObservableBinaryOutputFile(Pooled, CallbackType callback, std::filesystem::path path, OutputMode mode = OutputMode::Truncate);
 
         ObservableBinaryOutputFile(const ObservableBinaryOutputFile&) = delete;
         ObservableBinaryOutputFile(ObservableBinaryOutputFile&&) = default;
         ObservableBinaryOutputFile& operator=(const ObservableBinaryOutputFile&) = delete;
         ObservableBinaryOutputFile& operator=(ObservableBinaryOutputFile&&) = default;
 
-        [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const override
-        {
-            m_callback(source, elementSize, count);
-            return BinaryOutputFile::append(source, elementSize, count);
-        }
+        [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const override;
 
-        [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* source, std::size_t elementSize, std::size_t count) const override
-        {
-            m_callback(source, elementSize, count);
-            return BinaryOutputFile::append(Async{}, source, elementSize, count);
-        }
+        [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* source, std::size_t elementSize, std::size_t count) const override;
 
     private:
         CallbackType m_callback;
@@ -1003,17 +469,9 @@ namespace ext
 
     struct BinaryInputOutputFile
     {
-        BinaryInputOutputFile(std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
-            m_file(std::make_shared<detail::File>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
-            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
-        {
-        }
+        BinaryInputOutputFile(std::filesystem::path path, OutputMode mode = OutputMode::Truncate);
 
-        BinaryInputOutputFile(Pooled, std::filesystem::path path, OutputMode mode = OutputMode::Truncate) :
-            m_file(std::make_shared<detail::PooledFile>(std::move(path), mode == OutputMode::Append ? m_openmodeAppend : m_openmodeTruncate)),
-            m_threadPool(&detail::ThreadPool::instance(m_file->path()))
-        {
-        }
+        BinaryInputOutputFile(Pooled, std::filesystem::path path, OutputMode mode = OutputMode::Truncate);
 
         BinaryInputOutputFile(const BinaryInputOutputFile&) = delete;
         BinaryInputOutputFile(BinaryInputOutputFile&&) = default;
@@ -1040,49 +498,22 @@ namespace ext
             return m_file->openmode();
         }
 
-        [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
-        {
-            return m_file->read(destination, offset, elementSize, count);
-        }
+        [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
-        [[nodiscard]] std::future<std::size_t> read(Async, std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
-        {
-            return m_threadPool->scheduleRead(m_file, destination, offset, elementSize, count);
-        }
+        [[nodiscard]] std::future<std::size_t> read(Async, std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
-        [[nodiscard]] std::size_t size() const
-        {
-            return m_file->size();
-        }
+        [[nodiscard]] std::size_t size() const;
 
-        [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const
-        {
-            return m_file->append(source, elementSize, count);
-        }
+        [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const;
 
-        [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const
-        {
-            return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
-        }
+        [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const;
 
-        void truncate()
-        {
-            m_file->truncate();
-        }
+        void truncate();
 
         // reopens the file in readonly mode
-        [[nodiscard]] ImmutableBinaryFile seal()
-        {
-            flush();
-            ImmutableBinaryFile f(m_file->path());
-            m_file.reset();
-            return f;
-        }
+        [[nodiscard]] ImmutableBinaryFile seal();
 
-        void flush()
-        {
-            m_file->flush();
-        }
+        void flush();
 
     private:
         static inline const std::string m_openmodeTruncate = "wb+";
@@ -1748,7 +1179,7 @@ namespace ext
             }
         }
 
-        [[nodiscard]] decltype(auto) path() const
+        [[nodiscard]] const std::filesystem::path& path() const
         {
             ASSERT(m_live);
 
@@ -2204,24 +1635,11 @@ namespace ext
     // the directory is not deleted afterwards as we cannot know when it can be safely deleted
     struct TemporaryPaths
     {
-        TemporaryPaths(std::filesystem::path dir = "") :
-            m_dir(std::move(dir))
-        {
-            std::filesystem::create_directories(m_dir);
-        }
+        TemporaryPaths(std::filesystem::path dir = "");
 
-        [[nodiscard]] std::filesystem::path& next()
-        {
-            return m_paths.emplace_back(uniquePath(m_dir));
-        }
+        [[nodiscard]] std::filesystem::path& next();
 
-        ~TemporaryPaths()
-        {
-            for (auto& path : m_paths)
-            {
-                std::filesystem::remove(path);
-            }
-        }
+        ~TemporaryPaths();
 
     private:
         std::filesystem::path m_dir;
@@ -2249,7 +1667,9 @@ namespace ext
     {
         struct NoProgressCallback
         {
-            void operator()(ProgressReport) const noexcept {};
+            constexpr NoProgressCallback() = default;
+
+            inline void operator()(ProgressReport) const noexcept {};
         };
 
         template <typename T>
@@ -2301,7 +1721,7 @@ namespace ext
             CallbackT& m_callback;
         };
 
-        [[nodiscard]] auto noProgressCallback()
+        [[nodiscard]] inline auto noProgressCallback()
         {
             static NoProgressCallback callback;
             return Progress(callback);
@@ -2360,37 +1780,7 @@ namespace ext
         [[nodiscard]] std::size_t merge_assess_work(
             std::vector<std::size_t>::const_iterator inSizesBegin,
             std::vector<std::size_t>::const_iterator inSizesEnd
-        )
-        {
-            const std::size_t numInputs = std::distance(inSizesBegin, inSizesEnd);
-
-            if (numInputs <= maxNumMergedInputs)
-            {
-                return std::accumulate(inSizesBegin, inSizesEnd, static_cast<std::size_t>(0));
-            }
-
-            // prepare at most maxNumMergedInputs parts
-            const std::size_t numInputsPerPart = maxNumMergedInputs;
-            std::size_t writes = 0;
-            std::size_t offset = 0;
-            std::size_t parts = 0;
-            for (; offset + numInputsPerPart < numInputs; offset += numInputsPerPart)
-            {
-                writes += merge_assess_work(std::next(inSizesBegin, offset), std::next(inSizesBegin, offset + numInputsPerPart));
-                parts += 1;
-            }
-
-            // we may have some inputs left if numInputs % numInputsPerPart != 0
-            if (offset < numInputs)
-            {
-                if (parts + (numInputs - offset) > maxNumMergedInputs)
-                {
-                    writes += merge_assess_work(std::next(inSizesBegin, offset), inSizesEnd);
-                }
-            }
-
-            return writes + std::accumulate(inSizesBegin, inSizesEnd, static_cast<std::size_t>(0));
-        }
+        );
 
         template <typename T, typename ContainerT>
         [[nodiscard]] std::size_t merge_assess_work(ContainerIterRange<ContainerT> in)
@@ -3337,39 +2727,7 @@ namespace ext
             std::size_t end,
             std::size_t mid,
             std::size_t size
-        )
-        {
-            const std::size_t leftSize = static_cast<std::size_t>(mid - begin);
-            const std::size_t rightSize = static_cast<std::size_t>(end - mid);
-            const std::size_t count = rightSize + leftSize;
-            if (count <= size)
-            {
-                return { begin, end };
-            }
-
-            const std::size_t radius = size / 2u;
-
-            // here count > size so only we know there is enough space for radius elements
-            // at least on one side
-            if (leftSize < radius)
-            {
-                // align to left and span the rest
-                end = begin + size;
-            }
-            else if (rightSize < radius)
-            {
-                // align to right and span the rest
-                begin = end - size;
-            }
-            else
-            {
-                // both sides are big enough
-                begin = mid - radius;
-                end = mid + radius;
-            }
-
-            return { begin, end };
-        }
+        );
 
         struct Identity
         {
