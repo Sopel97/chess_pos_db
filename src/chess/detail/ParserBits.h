@@ -38,7 +38,7 @@ namespace parser_bits
 
     [[nodiscard]] constexpr bool isSquare(const char* s)
     {
-        return isRank(s[0]) && isFile(s[1]);
+        return isFile(s[0]) && isRank(s[1]);
     }
 
     [[nodiscard]] constexpr Square parseSquare(const char* s)
