@@ -47,6 +47,7 @@
     <ClInclude Include="src\chess\Bitboard.h" />
     <ClInclude Include="src\chess\Chess.h" />
     <ClInclude Include="src\chess\Date.h" />
+    <ClInclude Include="src\chess\detail\ParserBits.h" />
     <ClInclude Include="src\chess\Eco.h" />
     <ClInclude Include="src\chess\GameClassification.h" />
     <ClInclude Include="src\chess\MoveGenerator.h" />

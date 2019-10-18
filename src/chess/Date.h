@@ -56,16 +56,21 @@ struct Date
     {
         ASSERT(sv.size() >= 4);
 
-        m_year = detail::parseUInt16(sv.substr(0, 4));
+        m_year = 0;
         m_month = 0;
         m_day = 0;
 
-        if (sv.size() >= 7)
+        if (sv.substr(0, 4) != std::string_view("????"))
+        {
+            m_year = detail::parseUInt16(sv.substr(0, 4));
+        }
+
+        if (sv.size() >= 7 && sv.substr(5, 2) != std::string_view("??"))
         {
             m_month = (sv[5] - '0') * 10 + (sv[6] - '0');
         }
 
-        if (sv.size() >= 10)
+        if (sv.size() >= 10 && sv.substr(8, 2) != std::string_view("??"))
         {
             m_day = (sv[8] - '0') * 10 + (sv[9] - '0');
         }

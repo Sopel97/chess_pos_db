@@ -3,6 +3,8 @@
 #include <string_view>
 #include <optional>
 
+#include "chess/detail/ParserBits.h"
+
 #include "util/Assert.h"
 #include "Chess.h"
 #include "Position.h"
@@ -40,58 +42,6 @@ namespace san
             const char* end = san + length;
             while (san != end)* out++ = *san++;
             *out = '\0';
-        }
-
-        [[nodiscard]] FORCEINLINE constexpr bool isFile(char c)
-        {
-            return c >= 'a' && c <= 'h';
-        }
-
-        [[nodiscard]] FORCEINLINE constexpr bool isRank(char c)
-        {
-            return c >= '1' && c <= '8';
-        }
-
-        [[nodiscard]] FORCEINLINE constexpr Rank parseRank(char c)
-        {
-            ASSERT(isRank(c));
-
-            return fromOrdinal<Rank>(c - '1');
-        }
-
-        [[nodiscard]] FORCEINLINE constexpr File parseFile(char c)
-        {
-            ASSERT(isFile(c));
-
-            return fromOrdinal<File>(c - 'a');
-        }
-
-        [[nodiscard]] FORCEINLINE constexpr bool isSquare(const char* s)
-        {
-            return isFile(s[0]) && isRank(s[1]);
-        }
-
-        [[nodiscard]] FORCEINLINE constexpr Square parseSquare(const char* s)
-        {
-            const File file = parseFile(s[0]);
-            const Rank rank = parseRank(s[1]);
-            return Square(file, rank);
-        }
-
-        FORCEINLINE inline void appendSquareToString(Square sq, std::string& str)
-        {
-            str += static_cast<char>('a' + ordinal(sq.file()));
-            str += static_cast<char>('1' + ordinal(sq.rank()));
-        }
-
-        FORCEINLINE inline void appendRankToString(Rank r, std::string& str)
-        {
-            str += static_cast<char>('1' + ordinal(r));
-        }
-
-        FORCEINLINE inline void appendFileToString(File f, std::string& str)
-        {
-            str += static_cast<char>('a' + ordinal(f));
         }
 
         [[nodiscard]] FORCEINLINE constexpr bool contains(std::string_view s, char c)
@@ -248,7 +198,7 @@ namespace san
                 // a1
                 // a1=Q
 
-                move.to = parseSquare(san);
+                move.to = parser_bits::parseSquare(san);
 
                 if (color == Color::White)
                 {
@@ -290,9 +240,9 @@ namespace san
                 // aa1
                 // aa1=Q
 
-                const File fromFile = parseFile(san[0]);
-                const File toFile = parseFile(san[1]);
-                const Rank toRank = parseRank(san[2]);
+                const File fromFile = parser_bits::parseFile(san[0]);
+                const File toFile = parser_bits::parseFile(san[1]);
+                const Rank toRank = parser_bits::parseRank(san[2]);
 
                 move.to = Square(toFile, toRank);
                 if (pos.pieceAt(move.to) == Piece::none())
@@ -345,12 +295,12 @@ namespace san
 
             ASSERT(sanLen >= 3 && sanLen <= 5);
 
-            const Square toSq = parseSquare(san + (sanLen - 2u));
+            const Square toSq = parser_bits::parseSquare(san + (sanLen - 2u));
 
             if (sanLen == 5)
             {
                 // we have everything we need already in the san
-                const Square fromSq = parseSquare(san + 1);
+                const Square fromSq = parser_bits::parseSquare(san + 1);
 
                 ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
 
@@ -376,14 +326,14 @@ namespace san
                 // aa1
                 // 1a1
 
-                if (isFile(san[1]))
+                if (parser_bits::isFile(san[1]))
                 {
-                    const File fromFile = parseFile(san[1]);
+                    const File fromFile = parser_bits::parseFile(san[1]);
                     candidates &= bb::file(fromFile);
                 }
                 else // if (isRank(san[0]))
                 {
-                    const Rank fromRank = parseRank(san[1]);
+                    const Rank fromRank = parser_bits::parseRank(san[1]);
                     candidates &= bb::rank(fromRank);
                 }
 
@@ -438,7 +388,7 @@ namespace san
             // Ka1
 
             const Square fromSq = pos.kingSquare(pos.sideToMove());
-            const Square toSq = parseSquare(san + 1);
+            const Square toSq = parser_bits::parseSquare(san + 1);
 
             ASSERT(pos.pieceAt(fromSq).type() == PieceType::King);
 
@@ -484,8 +434,8 @@ namespace san
                 // a1
                 // a1=Q
 
-                if (!isSquare(san)) return {};
-                move.to = parseSquare(san);
+                if (!parser_bits::isSquare(san)) return {};
+                move.to = parser_bits::parseSquare(san);
 
                 if (color == Color::White)
                 {
@@ -533,12 +483,12 @@ namespace san
                 // aa1
                 // aa1=Q
 
-                if (!isFile(san[0])) return {};
-                if (!isFile(san[1])) return {};
-                if (!isRank(san[2])) return {};
-                const File fromFile = parseFile(san[0]);
-                const File toFile = parseFile(san[1]);
-                const Rank toRank = parseRank(san[2]);
+                if (!parser_bits::isFile(san[0])) return {};
+                if (!parser_bits::isFile(san[1])) return {};
+                if (!parser_bits::isRank(san[2])) return {};
+                const File fromFile = parser_bits::parseFile(san[0]);
+                const File toFile = parser_bits::parseFile(san[1]);
+                const Rank toRank = parser_bits::parseRank(san[2]);
 
                 if (pos.sideToMove() == Color::White)
                 {
@@ -606,16 +556,16 @@ namespace san
             };
 
             if (sanLen < 3 || sanLen > 5) return {};
-            if (!isSquare(san + (sanLen - 2u))) return {};
+            if (!parser_bits::isSquare(san + (sanLen - 2u))) return {};
             
-            const Square toSq = parseSquare(san + (sanLen - 2u));
+            const Square toSq = parser_bits::parseSquare(san + (sanLen - 2u));
 
             if (sanLen == 5)
             {
                 // we have everything we need already in the san
-                if (!isSquare(san + 1)) return {};
+                if (!parser_bits::isSquare(san + 1)) return {};
 
-                const Square fromSq = parseSquare(san + 1);
+                const Square fromSq = parser_bits::parseSquare(san + 1);
 
                 const Move move{ fromSq, toSq };
                 if (!isValid(move)) return {};
@@ -641,14 +591,14 @@ namespace san
                 // aa1
                 // 1a1
 
-                if (isFile(san[1]))
+                if (parser_bits::isFile(san[1]))
                 {
-                    const File fromFile = parseFile(san[1]);
+                    const File fromFile = parser_bits::parseFile(san[1]);
                     candidates &= bb::file(fromFile);
                 }
-                else if (isRank(san[1]))
+                else if (parser_bits::isRank(san[1]))
                 {
-                    const Rank fromRank = parseRank(san[1]);
+                    const Rank fromRank = parser_bits::parseRank(san[1]);
                     candidates &= bb::rank(fromRank);
                 }
 
@@ -700,10 +650,10 @@ namespace san
             // Ka1
 
             if (length != 3) return {};
-            if (!isSquare(san + 1)) return {};
+            if (!parser_bits::isSquare(san + 1)) return {};
 
             const Square fromSq = pos.kingSquare(pos.sideToMove());
-            const Square toSq = parseSquare(san + 1);
+            const Square toSq = parser_bits::parseSquare(san + 1);
 
             const Move move{ fromSq, toSq };
             if (pos.createsAttackOnOwnKing(move)) return {};
@@ -866,7 +816,7 @@ namespace san
             {
                 if (isCapture)
                 {
-                    detail::appendFileToString(move.from.file(), san);
+                    parser_bits::appendFileToString(move.from.file(), san);
                     return;
                 }
                 return;
@@ -907,19 +857,19 @@ namespace san
             if ((candidates & bb::file(move.from.file())).exactlyOne())
             {
                 // Adding file disambiguates.
-                detail::appendFileToString(move.from.file(), san);
+                parser_bits::appendFileToString(move.from.file(), san);
                 return;
             }
 
             if ((candidates & bb::rank(move.from.rank())).exactlyOne())
             {
                 // Adding rank disambiguates.
-                detail::appendRankToString(move.from.rank(), san);
+                parser_bits::appendRankToString(move.from.rank(), san);
                 return;
             }
 
             // Full square is needed.
-            detail::appendSquareToString(move.from, san);
+            parser_bits::appendSquareToString(move.from, san);
         }
     }
 
@@ -965,7 +915,7 @@ namespace san
             }
             else
             {
-                detail::appendSquareToString(move.from, san);
+                parser_bits::appendSquareToString(move.from, san);
             }
 
             if constexpr (contains(SpecV, SanSpec::Capture))
@@ -980,7 +930,7 @@ namespace san
                 }
             }
 
-            detail::appendSquareToString(move.to, san);
+            parser_bits::appendSquareToString(move.to, san);
 
             if (move.promotedPiece != Piece::none())
             {

@@ -94,6 +94,9 @@
     <Filter Include="Source Files\test\coding">
       <UniqueIdentifier>{00c28d99-15b6-4a46-9543-0a806a49bfc1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\src\chess\detail">
+      <UniqueIdentifier>{cf75b40c-8695-42d2-9081-a0e6017fe5c0}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\algorithm\Unsort.h">
@@ -188,6 +191,9 @@
     </ClInclude>
     <ClInclude Include="src\external_storage\External.h">
       <Filter>Header Files\src\external_storage</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\detail\ParserBits.h">
+      <Filter>Header Files\src\chess\detail</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
