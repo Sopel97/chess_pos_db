@@ -236,5 +236,8 @@
     <ClCompile Include="src\external_storage\External.cpp">
       <Filter>Source Files\src\external_storage</Filter>
     </ClCompile>
+    <ClCompile Include="src\Configuration.cpp">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -84,6 +84,7 @@
     <ClCompile Include="src\chess\Position.cpp" />
     <ClCompile Include="src\chess\San.cpp" />
     <ClCompile Include="src\chess_pos_db.cpp" />
+    <ClCompile Include="src\Configuration.cpp" />
     <ClCompile Include="src\external_storage\External.cpp" />
     <ClCompile Include="test\chess\BitboardTest.cpp">
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
