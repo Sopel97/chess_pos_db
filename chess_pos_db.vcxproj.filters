@@ -13,116 +13,177 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\src">
+      <UniqueIdentifier>{872c38ba-153a-441b-8f99-8dd29ba0b2ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src">
+      <UniqueIdentifier>{a568303a-4222-4704-9b5d-a5228e5391b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\chess">
+      <UniqueIdentifier>{fc68107f-1d0e-4114-a025-19f2fd6c031b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\algorithm">
+      <UniqueIdentifier>{bb742d7e-9dee-4fdc-9b97-e5d5c71de84f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\coding">
+      <UniqueIdentifier>{faf890d1-729c-48a2-98b6-064298800d3b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\data_structure">
+      <UniqueIdentifier>{e7283e24-f4fd-47d6-9b37-a264fc30e064}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\external_storage">
+      <UniqueIdentifier>{67b18d2c-1327-4fe8-a083-c4563eb7b603}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\intrin">
+      <UniqueIdentifier>{b5d24490-8181-4236-b7e0-30af9ac41c59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\persistence">
+      <UniqueIdentifier>{2138d801-cc40-4787-84fe-53f21e1cae82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\util">
+      <UniqueIdentifier>{1d577c2a-9af2-4f6f-8b8b-49a4ecc8fee1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\persistence\pos_db">
+      <UniqueIdentifier>{6df9e82f-0fd1-4055-b5c7-74a3df84cc15}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\persistence\pos_db\alpha">
+      <UniqueIdentifier>{14bdba46-7748-4e19-910e-55d4d415b1c1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\src\persistence\pos_db\beta">
+      <UniqueIdentifier>{a083e92e-6c66-44a3-a13b-796b329bbc98}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\algorithm">
+      <UniqueIdentifier>{3dadee7c-60e9-4b30-bba5-88261dfb4c18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\chess">
+      <UniqueIdentifier>{fe625130-0897-4bb6-91a8-9bbf1fabbf6f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\coding">
+      <UniqueIdentifier>{28d1c73c-0fc4-476f-ab20-04f946f466e2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\data_structure">
+      <UniqueIdentifier>{9be22b4f-bfac-4bb5-b728-b7d2e0d1f31b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\external_storage">
+      <UniqueIdentifier>{d1622427-496e-4462-84e7-0a4ed4893a7d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\intrin">
+      <UniqueIdentifier>{e037ca32-2817-4b40-88fb-9fc674452c02}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\util">
+      <UniqueIdentifier>{2a05573a-9f60-45e9-a0e0-27035e665683}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\persistence">
+      <UniqueIdentifier>{6994e77b-93f7-4c87-9277-586aba8d6af8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\persistence\pos_db">
+      <UniqueIdentifier>{b6fbcfde-f708-453b-b1d5-09f30be3e406}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\persistence\pos_db\alpha">
+      <UniqueIdentifier>{7a24c6cc-5e26-41f0-8f1f-41e9f21ae1cc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\persistence\pos_db\beta">
+      <UniqueIdentifier>{0372b924-af2b-467b-bc44-f9340288f398}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="chess_pos_db.cpp">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="src\algorithm\Unsort.h">
+      <Filter>Header Files\src\algorithm</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\Bitboard.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\Chess.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\Date.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\Eco.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\GameClassification.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\MoveGenerator.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\Pgn.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\Position.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\San.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\coding\BitStream.h">
+      <Filter>Header Files\src\coding</Filter>
+    </ClInclude>
+    <ClInclude Include="src\coding\Coding.h">
+      <Filter>Header Files\src\coding</Filter>
+    </ClInclude>
+    <ClInclude Include="src\coding\Compression.h">
+      <Filter>Header Files\src\coding</Filter>
+    </ClInclude>
+    <ClInclude Include="src\data_structure\Enum.h">
+      <Filter>Header Files\src\data_structure</Filter>
+    </ClInclude>
+    <ClInclude Include="src\data_structure\EnumMap.h">
+      <Filter>Header Files\src\data_structure</Filter>
+    </ClInclude>
+    <ClInclude Include="src\data_structure\FixedVector.h">
+      <Filter>Header Files\src\data_structure</Filter>
+    </ClInclude>
+    <ClInclude Include="src\intrin\Intrinsics.h">
+      <Filter>Header Files\src\intrin</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\ArithmeticUtility.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\Assert.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\Endian.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\IntegerConversions.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\MemoryAmount.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\TypeUtility.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\Database.h">
+      <Filter>Header Files\src\persistence\pos_db</Filter>
+    </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\Query.h">
+      <Filter>Header Files\src\persistence\pos_db</Filter>
+    </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\StorageHeader.h">
+      <Filter>Header Files\src\persistence\pos_db</Filter>
+    </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.h">
+      <Filter>Header Files\src\persistence\pos_db\alpha</Filter>
+    </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\beta\DatabaseFormatBeta.h">
+      <Filter>Header Files\src\persistence\pos_db\beta</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Configuration.h">
+      <Filter>Header Files\src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Logger.h">
+      <Filter>Header Files\src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\external_storage\External.h">
+      <Filter>Header Files\src\external_storage</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\chess_pos_db.cpp">
+      <Filter>Source Files\src</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="Bitboard.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Chess.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Enum.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Intrinsics.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Pgn.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Position.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="San.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Assert.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ArithmeticUtility.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="BitStream.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Coding.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="CodingTest.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Compression.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FixedVector.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TypeUtility.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="External.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GameClassification.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="EnumMap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="StorageHeader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Eco.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Date.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MoveGenerator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MoveGeneratorTest.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Configuration.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MemoryAmount.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Query.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Unsort.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="IntegerConversions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Database.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Endian.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DatabaseFormatAlpha.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DatabaseFormatBeta.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Logger.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="info.txt">
-      <Filter>Header Files</Filter>
-    </Text>
   </ItemGroup>
 </Project>
