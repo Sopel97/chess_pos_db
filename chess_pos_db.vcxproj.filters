@@ -159,9 +159,6 @@
     <ClInclude Include="src\util\Endian.h">
       <Filter>Header Files\src\util</Filter>
     </ClInclude>
-    <ClInclude Include="src\util\IntegerConversions.h">
-      <Filter>Header Files\src\util</Filter>
-    </ClInclude>
     <ClInclude Include="src\util\MemoryAmount.h">
       <Filter>Header Files\src\util</Filter>
     </ClInclude>
@@ -216,6 +213,24 @@
       <Filter>Source Files\test\coding</Filter>
     </ClCompile>
     <ClCompile Include="src\chess\Bitboard.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\Date.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\Eco.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\MoveGenerator.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\Pgn.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\San.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\Position.cpp">
       <Filter>Source Files\src\chess</Filter>
     </ClCompile>
   </ItemGroup>

@@ -5,6 +5,7 @@
 #include "external_storage/External.h"
 #include "chess/Pgn.h"
 #include "algorithm/Unsort.h"
+#include "chess/detail/ParserBits.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -307,7 +308,7 @@ namespace persistence
 
             if (j.contains("ply_count"))
             {
-                auto plyCountOpt = detail::tryParseUInt16(j["ply_count"]);
+                auto plyCountOpt = parser_bits::tryParseUInt16(j["ply_count"]);
                 if (plyCountOpt.has_value())
                 {
                     data.m_plyCount = *plyCountOpt;
