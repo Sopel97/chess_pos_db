@@ -527,13 +527,13 @@ namespace bb
             offsets[West]
         };
 
-        [[nodiscard]] static constexpr EnumMap<Square, Bitboard> generatePseudoAttacks_Pawn()
+        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Pawn()
         {
             // pseudo attacks don't make sense for pawns
             return {};
         }
 
-        [[nodiscard]] static constexpr EnumMap<Square, Bitboard> generatePseudoAttacks_Knight()
+        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Knight()
         {
             EnumMap<Square, Bitboard> bbs{};
 
@@ -556,7 +556,7 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static constexpr Bitboard generateSliderPseudoAttacks(const std::array<Offset, 4>& offsets, Square fromSq)
+        [[nodiscard]] static inline Bitboard generateSliderPseudoAttacks(const std::array<Offset, 4>& offsets, Square fromSq)
         {
             ASSERT(fromSq.isOk());
 
@@ -582,7 +582,7 @@ namespace bb
             return bb;
         }
 
-        [[nodiscard]] static constexpr EnumMap<Square, Bitboard> generatePseudoAttacks_Bishop()
+        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Bishop()
         {
             EnumMap<Square, Bitboard> bbs{};
 
@@ -594,7 +594,7 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static constexpr EnumMap<Square, Bitboard> generatePseudoAttacks_Rook()
+        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Rook()
         {
             EnumMap<Square, Bitboard> bbs{};
 
@@ -606,7 +606,7 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static constexpr EnumMap<Square, Bitboard> generatePseudoAttacks_Queen()
+        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_Queen()
         {
             EnumMap<Square, Bitboard> bbs{};
 
@@ -620,7 +620,7 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static constexpr EnumMap<Square, Bitboard> generatePseudoAttacks_King()
+        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePseudoAttacks_King()
         {
             EnumMap<Square, Bitboard> bbs{};
 
@@ -643,7 +643,7 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static constexpr auto generatePseudoAttacks()
+        [[nodiscard]] static inline auto generatePseudoAttacks()
         {
             return EnumMap2<PieceType, Square, Bitboard>{
                 generatePseudoAttacks_Pawn(),
@@ -655,10 +655,9 @@ namespace bb
             };
         }
 
-        // NOTE: removing constexpr reduces compile times
-        static constexpr auto pseudoAttacks = generatePseudoAttacks();
+        static inline auto pseudoAttacks = generatePseudoAttacks();
 
-        [[nodiscard]] static constexpr Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
+        [[nodiscard]] static inline Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
         {
             ASSERT(fromSq.isOk());
 
@@ -683,7 +682,7 @@ namespace bb
 
         // classical slider move generation approach https://www.chessprogramming.org/Classical_Approach
 
-        [[nodiscard]] static constexpr EnumMap<Square, Bitboard> generatePositiveRayAttacks(Direction dir)
+        [[nodiscard]] static inline EnumMap<Square, Bitboard> generatePositiveRayAttacks(Direction dir)
         {
             EnumMap<Square, Bitboard> bbs{};
 
@@ -695,7 +694,7 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static constexpr auto generatePositiveRayAttacks()
+        [[nodiscard]] static inline auto generatePositiveRayAttacks()
         {
             std::array<EnumMap<Square, Bitboard>, 8> bbs{};
 
@@ -711,10 +710,10 @@ namespace bb
             return bbs;
         }
 
-        static constexpr auto positiveRayAttacks = generatePositiveRayAttacks();
+        static inline auto positiveRayAttacks = generatePositiveRayAttacks();
 
         template <Direction DirV>
-        [[nodiscard]] constexpr Bitboard slidingAttacks(Square sq, Bitboard occupied)
+        [[nodiscard]] inline Bitboard slidingAttacks(Square sq, Bitboard occupied)
         {
             ASSERT(sq.isOk());
 
@@ -734,7 +733,7 @@ namespace bb
     }
 
     template <PieceType PieceTypeV>
-    [[nodiscard]] constexpr Bitboard pseudoAttacks(Square sq)
+    [[nodiscard]] inline Bitboard pseudoAttacks(Square sq)
     {
         static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
 
@@ -743,7 +742,7 @@ namespace bb
         return detail::pseudoAttacks[PieceTypeV][sq];
     }
 
-    [[nodiscard]] constexpr Bitboard pseudoAttacks(PieceType pt, Square sq)
+    [[nodiscard]] inline Bitboard pseudoAttacks(PieceType pt, Square sq)
     {
         ASSERT(sq.isOk());
 
@@ -751,7 +750,7 @@ namespace bb
     }
 
     template <PieceType PieceTypeV>
-    [[nodiscard]] constexpr Bitboard attacks(Square sq, Bitboard occupied)
+    [[nodiscard]] inline Bitboard attacks(Square sq, Bitboard occupied)
     {
         static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
 
@@ -791,7 +790,7 @@ namespace bb
         }
     }
 
-    [[nodiscard]] constexpr Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
+    [[nodiscard]] inline Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
     {
         ASSERT(sq.isOk());
 
@@ -808,7 +807,7 @@ namespace bb
         }
     }
 
-    [[nodiscard]] constexpr Bitboard pawnAttacks(Bitboard pawns, Color color)
+    [[nodiscard]] inline Bitboard pawnAttacks(Bitboard pawns, Color color)
     {
         if (color == Color::White)
         {
@@ -822,7 +821,7 @@ namespace bb
         return pawns;
     }
 
-    [[nodiscard]] constexpr bool isAttackedBySlider(
+    [[nodiscard]] inline bool isAttackedBySlider(
         Square sq, 
         Bitboard bishops, 
         Bitboard rooks, 

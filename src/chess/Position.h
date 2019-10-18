@@ -674,7 +674,7 @@ public:
         }
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnOwnKing(Move move, Color color) const
+    [[nodiscard]] inline bool createsDiscoveredAttackOnOwnKing(Move move, Color color) const
     {
         // checks whether by doing a move we uncover our king to a check
         // doesn't verify castlings as it is supposed to only cover undiscovered checks
@@ -733,7 +733,7 @@ public:
         );
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor, Bitboard occupied, Bitboard captured) const
+    [[nodiscard]] inline bool isSquareAttacked(Square sq, Color attackerColor, Bitboard occupied, Bitboard captured) const
     {
         ASSERT(sq.isOk());
 
@@ -771,12 +771,12 @@ public:
         return pawnAttacks.isSet(sq);
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor) const
+    [[nodiscard]] inline bool isSquareAttacked(Square sq, Color attackerColor) const
     {
         return isSquareAttacked(sq, attackerColor, piecesBB(), Bitboard::none());
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
+    [[nodiscard]] inline bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
     {
         // TODO: See whether this can be done better.
         Board cpy(*this);
@@ -784,7 +784,7 @@ public:
         return cpy.isSquareAttacked(sq, attackerColor);
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isKingAttackedAfterMove(Move move, Color kingColor) const
+    [[nodiscard]] inline bool isKingAttackedAfterMove(Move move, Color kingColor) const
     {
         // TODO: See whether this can be done better.
         Board cpy(*this);
@@ -1041,8 +1041,6 @@ struct Position : public Board
         return pos;
     }
 
-    // TODO: if performance of setting special moves flags becomes 
-    //       a problem then make a separate function that doesn't set it
     constexpr ReverseMove doMove(const Move& move)
     {
         ASSERT(move.from.isOk() && move.to.isOk());
@@ -1116,34 +1114,34 @@ struct Position : public Board
         return m_sideToMove;
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool createsDiscoveredAttackOnOwnKing(Move move) const
+    [[nodiscard]] inline bool createsDiscoveredAttackOnOwnKing(Move move) const
     {
         return BaseType::createsDiscoveredAttackOnOwnKing(move, m_sideToMove);
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool createsAttackOnOwnKing(Move move) const
+    [[nodiscard]] inline bool createsAttackOnOwnKing(Move move) const
     {
         return BaseType::isKingAttackedAfterMove(move, m_sideToMove);
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
+    [[nodiscard]] inline bool isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
     {
         return BaseType::isSquareAttackedAfterMove(sq, move, attackerColor);
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isSquareAttacked(Square sq, Color attackerColor) const
+    [[nodiscard]] inline bool isSquareAttacked(Square sq, Color attackerColor) const
     {
         return BaseType::isSquareAttacked(sq, attackerColor);
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isLegal() const
+    [[nodiscard]] inline bool isLegal() const
     {
         return piecesBB(Piece(PieceType::King, Color::White)).count() == 1
             && piecesBB(Piece(PieceType::King, Color::Black)).count() == 1
             && !isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove);
     }
 
-    [[nodiscard]] INTRIN_CONSTEXPR bool isCheck(Move move) const
+    [[nodiscard]] inline bool isCheck(Move move) const
     {
         return BaseType::isSquareAttackedAfterMove(kingSquare(!m_sideToMove), move, m_sideToMove);
     }

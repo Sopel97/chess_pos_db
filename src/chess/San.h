@@ -106,7 +106,7 @@ namespace san
 
         // returns new length
         // requires that there is no decorations
-        FORCEINLINE constexpr std::size_t removeSanCapture(char* san, std::size_t length)
+        FORCEINLINE inline std::size_t removeSanCapture(char* san, std::size_t length)
         {
             // There is no valid san with length less than 4
             // that has a capture
@@ -153,7 +153,7 @@ namespace san
             }();
         }
 
-        FORCEINLINE constexpr std::size_t removeSanDecorations(char* san, std::size_t length)
+        FORCEINLINE inline std::size_t removeSanDecorations(char* san, std::size_t length)
         {
             // removes capture designation
             // removes instances of the following characters:
@@ -228,7 +228,7 @@ namespace san
             return '\0';
         }
 
-        [[nodiscard]] constexpr Move sanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] inline Move sanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
         {
             // since we remove capture information it's either
             // 012345 idx
@@ -328,7 +328,7 @@ namespace san
         }
 
         template <PieceType PieceTypeV>
-        [[nodiscard]] constexpr Move sanToMove(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] inline Move sanToMove(const Position& pos, const char* san, std::size_t sanLen)
         {
             static_assert(
                 PieceTypeV == PieceType::Knight
@@ -432,7 +432,7 @@ namespace san
             return Move::null();
         }
 
-        [[nodiscard]] INTRIN_CONSTEXPR Move sanToMove_King(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] inline Move sanToMove_King(const Position& pos, const char* san, std::size_t length)
         {
             // since we remove captures the only possible case is 
             // Ka1
@@ -445,7 +445,7 @@ namespace san
             return Move{ fromSq, toSq };
         }
 
-        [[nodiscard]] constexpr Move sanToMove_Castle(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] inline Move sanToMove_Castle(const Position& pos, const char* san, std::size_t length)
         {
             // either:
             // 012345 - idx
@@ -464,7 +464,7 @@ namespace san
         }
 
 
-        [[nodiscard]] constexpr std::optional<Move> trySanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] inline std::optional<Move> trySanToMove_Pawn(const Position& pos, const char* san, std::size_t sanLen)
         {
             // since we remove capture information it's either
             // 012345 idx
@@ -582,7 +582,7 @@ namespace san
         }
 
         template <PieceType PieceTypeV>
-        [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, const char* san, std::size_t sanLen)
+        [[nodiscard]] inline std::optional<Move> trySanToMove(const Position& pos, const char* san, std::size_t sanLen)
         {
             static_assert(
                 PieceTypeV == PieceType::Knight
@@ -694,7 +694,7 @@ namespace san
             return {};
         }
 
-        [[nodiscard]] INTRIN_CONSTEXPR std::optional<Move> trySanToMove_King(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] inline std::optional<Move> trySanToMove_King(const Position& pos, const char* san, std::size_t length)
         {
             // since we remove captures the only possible case is 
             // Ka1
@@ -711,7 +711,7 @@ namespace san
             return move;
         }
 
-        [[nodiscard]] constexpr std::optional<Move> trySanToMove_Castle(const Position& pos, const char* san, std::size_t length)
+        [[nodiscard]] inline std::optional<Move> trySanToMove_Castle(const Position& pos, const char* san, std::size_t length)
         {
             // either:
             // 012345 - idx
@@ -777,7 +777,7 @@ namespace san
         // assumes that the the san is correct and the move
         // described by it is legal
         // NOT const char* because it removes signs of capture
-        [[nodiscard]] constexpr Move sanToMove(const Position& pos, char* san, std::size_t length)
+        [[nodiscard]] inline Move sanToMove(const Position& pos, char* san, std::size_t length)
         {
             // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
             // *above regex contains all valid SAN strings
@@ -788,7 +788,7 @@ namespace san
             return lookup::sanToMove::funcs[static_cast<unsigned char>(san[0])](pos, san, length);
         }
 
-        [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, char* san, std::size_t length)
+        [[nodiscard]] inline std::optional<Move> trySanToMove(const Position& pos, char* san, std::size_t length)
         {
             // ?[NBRQK]?[a-h]?[1-8]?x[a-h][1-8]
             // *above regex contains all valid SAN strings
@@ -1027,7 +1027,7 @@ namespace san
         return validStart[static_cast<unsigned char>(c)];
     }
 
-    [[nodiscard]] constexpr Move sanToMove(const Position& pos, std::string_view san)
+    [[nodiscard]] inline Move sanToMove(const Position& pos, std::string_view san)
     {
         constexpr int maxSanLength = 15; // a very generous upper bound
 
@@ -1039,7 +1039,7 @@ namespace san
         return detail::sanToMove(pos, buffer, san.size());
     }
 
-    [[nodiscard]] constexpr std::optional<Move> trySanToMove(const Position& pos, std::string_view san)
+    [[nodiscard]] inline std::optional<Move> trySanToMove(const Position& pos, std::string_view san)
     {
         constexpr int maxSanLength = 15; // a very generous upper bound
 
