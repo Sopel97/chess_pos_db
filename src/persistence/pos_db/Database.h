@@ -4,6 +4,7 @@
 
 #include <execution>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,10 @@ namespace persistence
 
     struct Database
     {
+        [[nodiscard]] static std::filesystem::path manifestPath(const std::filesystem::path& dirPath);
+
+        [[nodiscard]] static std::optional<std::string> tryReadKey(const std::filesystem::path& dirPath);
+
         [[nodiscard]] virtual const DatabaseManifest& manifest() const = 0;
 
         virtual const std::filesystem::path & path() const = 0;
@@ -62,7 +67,7 @@ namespace persistence
 
         virtual void mergeAll() = 0;
 
-        virtual void replicateMergeAll(const std::filesystem::path& path) = 0;
+        virtual void replicateMergeAll(const std::filesystem::path& path);
 
         virtual ImportStats import(
             std::execution::parallel_unsequenced_policy,

@@ -195,6 +195,12 @@
     <ClInclude Include="src\ConsoleApp.h">
       <Filter>Header Files\src</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h">
+      <Filter>Header Files\src\persistence\pos_db</Filter>
+    </ClInclude>
+    <ClInclude Include="src\CommandLineTool.h">
+      <Filter>Header Files\src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -261,6 +267,12 @@
       <Filter>Source Files\src\util</Filter>
     </ClCompile>
     <ClCompile Include="src\ConsoleApp.cpp">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp">
+      <Filter>Source Files\src\persistence\pos_db</Filter>
+    </ClCompile>
+    <ClCompile Include="src\CommandLineTool.cpp">
       <Filter>Source Files\src</Filter>
     </ClCompile>
   </ItemGroup>

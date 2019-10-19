@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -57,6 +57,7 @@
     <ClInclude Include="src\coding\BitStream.h" />
     <ClInclude Include="src\coding\Coding.h" />
     <ClInclude Include="src\coding\Compression.h" />
+    <ClInclude Include="src\CommandLineTool.h" />
     <ClInclude Include="src\Configuration.h" />
     <ClInclude Include="src\ConsoleApp.h" />
     <ClInclude Include="src\data_structure\Enum.h" />
@@ -68,6 +69,7 @@
     <ClInclude Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.h" />
     <ClInclude Include="src\persistence\pos_db\beta\DatabaseFormatBeta.h" />
     <ClInclude Include="src\persistence\pos_db\Database.h" />
+    <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
     <ClInclude Include="src\persistence\pos_db\Query.h" />
     <ClInclude Include="src\persistence\pos_db\StorageHeader.h" />
     <ClInclude Include="src\util\ArithmeticUtility.h" />
@@ -85,12 +87,14 @@
     <ClCompile Include="src\chess\Position.cpp" />
     <ClCompile Include="src\chess\San.cpp" />
     <ClCompile Include="src\chess_pos_db.cpp" />
+    <ClCompile Include="src\CommandLineTool.cpp" />
     <ClCompile Include="src\Configuration.cpp" />
     <ClCompile Include="src\ConsoleApp.cpp" />
     <ClCompile Include="src\external_storage\External.cpp" />
     <ClCompile Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.cpp" />
     <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBeta.cpp" />
     <ClCompile Include="src\persistence\pos_db\Database.cpp" />
+    <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
     <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp" />
     <ClCompile Include="src\util\MemoryAmount.cpp" />

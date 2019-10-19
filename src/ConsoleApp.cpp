@@ -45,7 +45,7 @@ namespace console_app
 
     const std::size_t importMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
 
-    static persistence::ImportablePgnFiles parsePgnListFile(const std::filesystem::path& path)
+    [[nodiscard]] static persistence::ImportablePgnFiles parsePgnListFile(const std::filesystem::path& path)
     {
         persistence::ImportablePgnFiles pgns;
 
@@ -71,7 +71,7 @@ namespace console_app
         return pgns;
     }
 
-    static std::string resultsToString(const EnumMap<GameResult, std::pair<std::size_t, std::size_t>>& results)
+    [[nodiscard]] static std::string resultsToString(const EnumMap<GameResult, std::pair<std::size_t, std::size_t>>& results)
     {
         auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin].first);
         str += std::string("=") + std::to_string(results[GameResult::Draw].first);
@@ -204,12 +204,12 @@ namespace console_app
         }
     }
 
-    [[noreturn]] static void invalidCommand(const std::string& command)
+    static void invalidCommand(const std::string& command)
     {
         throw InvalidCommand("Invalid command: " + command);
     }
 
-    [[noreturn]] static void invalidArguments()
+    static void invalidArguments()
     {
         throw InvalidCommand("Invalid arguments. See help.");
     }
@@ -291,7 +291,7 @@ namespace console_app
 
     static void merge(persistence::Database& db, const std::filesystem::path& destination)
     {
-        assertDirectoryNotEmpty(destination);
+        assertDirectoryEmpty(destination);
 
         db.replicateMergeAll(destination);
     }

@@ -9,4 +9,9 @@ namespace persistence
 
         return it->second(path);
     }
+
+    [[nodiscard]] DatabaseFactory::SpecificDatabaseFactory DatabaseFactory::at(const std::string& key) const
+    {
+        return m_factories.at(key);
+    }
 }

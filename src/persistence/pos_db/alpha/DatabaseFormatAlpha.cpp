@@ -1013,6 +1013,8 @@ namespace persistence
 
             PerPartition<std::filesystem::path> partitionPaths = initializePartitionDirectories(path);
 
+            BaseType::replicateMergeAll(path);
+
             m_header.replicateTo(path);
 
             const std::size_t numPartitions = 9;

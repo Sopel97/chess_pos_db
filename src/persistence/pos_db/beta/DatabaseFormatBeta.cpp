@@ -1016,6 +1016,8 @@ namespace persistence
             }
             std::filesystem::create_directories(path / partitionDirectory);
 
+            BaseType::replicateMergeAll(path);
+
             for (auto& header : m_headers)
             {
                 header.replicateTo(path);

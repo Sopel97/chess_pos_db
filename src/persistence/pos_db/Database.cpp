@@ -42,6 +42,35 @@ namespace persistence
         return m_level;
     }
 
+    [[nodiscard]] std::filesystem::path Database::manifestPath(const std::filesystem::path& dirPath)
+    {
+        return dirPath / m_manifestFilename;
+    }
+
+    [[nodiscard]] std::optional<std::string> Database::tryReadKey(const std::filesystem::path& dirPath)
+    {
+        std::ifstream in(manifestPath(dirPath));
+
+        if (!in.is_open()) return std::nullopt;
+
+        std::vector<char> data(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>{});
+
+        if (data.size() == 0) return std::nullopt;
+
+        const std::size_t keyLength = static_cast<std::size_t>(data[0]);
+        if (data.size() < 1 + keyLength) return std::nullopt;
+
+        std::string key;
+        key.resize(keyLength);
+        std::memcpy(key.data(), data.data() + 1, keyLength);
+        return key;
+    }
+
+    void Database::replicateMergeAll(const std::filesystem::path& path)
+    {
+        std::filesystem::copy_file(manifestPath(this->path()), manifestPath(path));
+    }
+
     [[nodiscard]] ManifestValidationResult Database::createOrValidateManifest() const
     {
         if (std::filesystem::exists(manifestPath()))
