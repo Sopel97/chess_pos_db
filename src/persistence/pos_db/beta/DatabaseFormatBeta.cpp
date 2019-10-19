@@ -947,6 +947,11 @@ namespace persistence
             BaseType::initializeManifest();
         }
 
+        [[nodiscard]] const std::string& Database::key()
+        {
+            return m_manifest.key;
+        }
+
         [[nodiscard]] const DatabaseManifest& Database::manifest() const
         {
             return m_manifest;

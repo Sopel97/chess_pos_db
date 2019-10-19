@@ -637,6 +637,8 @@ namespace persistence
 
             Database(std::filesystem::path path, std::size_t headerBufferMemory);
 
+            [[nodiscard]] static const std::string& key();
+
             [[nodiscard]] const DatabaseManifest& manifest() const override;
 
             void clear() override;
