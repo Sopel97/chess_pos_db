@@ -17,25 +17,6 @@ namespace san
 
     namespace detail
     {
-        [[nodiscard]] static FORCEINLINE constexpr int strlen(const char* san)
-        {
-            ASSERT(san != nullptr);
-
-            // optimized for short strings
-            const char* cur = san;
-            while (*cur) ++cur;
-            return static_cast<int>(cur - san);
-        }
-
-        static FORCEINLINE constexpr void strcpy(char* out, const char* san)
-        {
-            ASSERT(out != nullptr);
-            ASSERT(san != nullptr);
-
-            while (*san)* out++ = *san++;
-            *out = '\0';
-        }
-
         static FORCEINLINE constexpr void strcpy(char* out, const char* san, std::size_t length)
         {
             ASSERT(out != nullptr);
@@ -212,8 +193,6 @@ namespace san
                     {
                         move.from = push1;
                     }
-                    // NOTE: if we leave else if here then msvc optimizer breaks the code by assuming
-                    //       that the first condition (above) is always true
                     else // if (pos.pieceAt(push2).type() == PieceType::Pawn)
                     {
                         move.from = push2;
@@ -970,7 +949,7 @@ namespace san
 
         ASSERT(san.size() <= maxSanLength);
 
-        char buffer[maxSanLength + 1] = { '\0' };
+        alignas(16) char buffer[maxSanLength + 1];
         detail::strcpy(buffer, san.data(), san.size());
 
         return detail::sanToMove(pos, buffer, san.size());
@@ -985,7 +964,7 @@ namespace san
             return {};
         }
 
-        char buffer[maxSanLength + 1] = { '\0' };
+        alignas(16) char buffer[maxSanLength + 1];
         detail::strcpy(buffer, san.data(), san.size());
 
         return detail::trySanToMove(pos, buffer, san.size());

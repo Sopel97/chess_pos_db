@@ -43,7 +43,7 @@
 // the following enables constexpr intrinsics, but they are slower
 // it's useful for running compile time tests
 // TODO: in C++20 replace with std::is_constant_evaluated()
-#define USE_CONSTEXPR_INTRINSICS
+//#define USE_CONSTEXPR_INTRINSICS
 
 #if defined (USE_CONSTEXPR_INTRINSICS)
 
@@ -55,11 +55,9 @@
 
 #endif
 
-
-#if defined (USE_CONSTEXPR_INTRINSICS)
 namespace intrin
 {
-    [[nodiscard]] constexpr int popcount(std::uint64_t value)
+    [[nodiscard]] constexpr int popcount_constexpr(std::uint64_t value)
     {
         int r = 0;
         while (value)
@@ -70,7 +68,7 @@ namespace intrin
         return r;
     }
 
-    [[nodiscard]] constexpr int lsb(std::uint64_t value)
+    [[nodiscard]] constexpr int lsb_constexpr(std::uint64_t value)
     {
         ASSERT(value != 0);
 
@@ -85,7 +83,7 @@ namespace intrin
         return c;
     }
 
-    [[nodiscard]] constexpr int msb(std::uint64_t value)
+    [[nodiscard]] constexpr int msb_constexpr(std::uint64_t value)
     {
         ASSERT(value != 0);
 
@@ -97,6 +95,25 @@ namespace intrin
         if ((value & 0xC000000000000000ull) == 0) { c -= 2; value <<= 2; }
         if ((value & 0x8000000000000000ull) == 0) { c -= 1; }
         return c;
+    }
+}
+
+#if defined (USE_CONSTEXPR_INTRINSICS)
+namespace intrin
+{
+    [[nodiscard]] constexpr int popcount(std::uint64_t value)
+    {
+        return popcount_constexpr(value);
+    }
+
+    [[nodiscard]] constexpr int lsb(std::uint64_t value)
+    {
+        return lsb_constexpr(value);
+    }
+
+    [[nodiscard]] constexpr int msb(std::uint64_t value)
+    {
+        return msb_constexpr(value);
     }
 }
 

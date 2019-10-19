@@ -28,7 +28,7 @@ public:
         m_piecesByColorBB.fill(Bitboard::none());
     }
 
-    [[nodiscard]] constexpr bool isValid() const
+    [[nodiscard]] INTRIN_CONSTEXPR bool isValid() const
     {
         if (piecesBB(whiteKing).count() != 1) return false;
         if (piecesBB(blackKing).count() != 1) return false;

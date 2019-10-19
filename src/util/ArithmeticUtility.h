@@ -60,9 +60,9 @@ template <typename IntT>
 }
 
 template <typename IntT>
-[[nodiscard]] INTRIN_CONSTEXPR IntT floorLog2(IntT value)
+[[nodiscard]] constexpr IntT floorLog2(IntT value)
 {
-    return intrin::msb(value);
+    return intrin::msb_constexpr(value);
 }
 
 template <typename IntT>
