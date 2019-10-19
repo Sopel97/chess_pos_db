@@ -158,7 +158,7 @@ namespace cfg
     }
 },
 
-"app" : {
+"console_app" : {
     "pgn_import_memory" : "2GiB"
 }
 })"_json;

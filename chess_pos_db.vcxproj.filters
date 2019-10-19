@@ -192,6 +192,9 @@
     <ClInclude Include="src\chess\detail\ParserBits.h">
       <Filter>Header Files\src\chess\detail</Filter>
     </ClInclude>
+    <ClInclude Include="src\ConsoleApp.h">
+      <Filter>Header Files\src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -256,6 +259,9 @@
     </ClCompile>
     <ClCompile Include="src\util\MemoryAmount.cpp">
       <Filter>Source Files\src\util</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ConsoleApp.cpp">
+      <Filter>Source Files\src</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
