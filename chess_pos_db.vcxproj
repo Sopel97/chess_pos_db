@@ -87,7 +87,9 @@
     <ClCompile Include="src\chess\Position.cpp" />
     <ClCompile Include="src\chess\San.cpp" />
     <ClCompile Include="src\chess_pos_db.cpp" />
-    <ClCompile Include="src\CommandLineTool.cpp" />
+    <ClCompile Include="src\CommandLineTool.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="src\Configuration.cpp" />
     <ClCompile Include="src\ConsoleApp.cpp" />
     <ClCompile Include="src\external_storage\External.cpp" />
@@ -173,6 +175,7 @@
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>false</UseOfMfc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Compiler-Profile|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -250,7 +253,7 @@
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LinkIncremental>true</LinkIncremental>
+    <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Compiler-Profile|x64'">
     <LinkIncremental>false</LinkIncremental>
@@ -407,6 +410,9 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <LinkTimeCodeGeneration>UseFastLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <AdditionalDependencies>Ws2_32.Lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreAllDefaultLibraries>
+      </IgnoreAllDefaultLibraries>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Compiler-Profile|x64'">

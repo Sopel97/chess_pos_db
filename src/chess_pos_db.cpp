@@ -2,6 +2,8 @@
 #include "CommandLineTool.h"
 
 #include <iostream>
+#include <vector>
+#include <string>
 
 [[nodiscard]] static std::vector<std::string> parseCommand(const std::string& cmd)
 {
