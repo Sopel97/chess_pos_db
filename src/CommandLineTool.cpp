@@ -240,20 +240,25 @@ namespace command_line_app
         std::size_t len
     )
     {
-        Logger::instance().logInfo("Received data: ", data);
+        std::cout << len << ' ' << std::strlen(data) << '\n';
+        auto datastr = std::string(data, len);
+        Logger::instance().logInfo("Received data: ", datastr);
 
         try
         {
-            auto json = nlohmann::json::parse(std::string(data, len));
+            auto json = nlohmann::json::parse(datastr);
             query::Request request = json;
             if (request.isValid())
             {
-                Logger::instance().logInfo("Handled valid request");
+                auto response = nlohmann::json(db.executeQuery(request)).dump();
+                session->send(response.c_str(), response.size());
+                Logger::instance().logInfo("Handled valid request. Response size: ", response.size());
                 return;
             }
         }
         catch (...)
         {
+            Logger::instance().logInfo("Error parsing request");
         }
 
         Logger::instance().logInfo("Invalid request");
@@ -293,23 +298,39 @@ namespace command_line_app
 
         EventLoop mainloop;
 
-        std::string msg = "somejsonpropably";
         auto client = TcpService::Create();
         client->startWorkerThread(1);
 
         auto connector = AsyncConnector::Create();
         connector->startWorkerThread();
 
-        auto enterCallback = [client, msg](TcpSocket::Ptr socket) {
+        auto enterCallback = [client](TcpSocket::Ptr socket) {
             socket->setNodelay();
 
-            auto enterCallback = [msg](const TcpConnection::Ptr& session) {
+            auto enterCallback = [](const TcpConnection::Ptr& session) {
                 session->setDataCallback([session](const char* buffer, size_t len) {
                     std::cerr << std::string(buffer, len) << '\n';
                     return len;
                     });
 
-                session->send(msg.c_str(), msg.size());
+                query::Request query;
+                query.token = "toktok";
+                query.positions = { { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", std::nullopt } };
+                query.fetchingOptions[query::Select::Continuations].fetchFirstGame = true;
+                query.fetchingOptions[query::Select::Continuations].fetchLastGame = false;
+                query.fetchingOptions[query::Select::Continuations].fetchFirstGameForEachChild = true;
+                query.fetchingOptions[query::Select::Continuations].fetchLastGameForEachChild = false;
+                query.fetchingOptions[query::Select::Continuations].fetchChildren = true;
+                query.fetchingOptions[query::Select::Transpositions].fetchFirstGame = true;
+                query.fetchingOptions[query::Select::Transpositions].fetchLastGame = false;
+                query.fetchingOptions[query::Select::Transpositions].fetchFirstGameForEachChild = true;
+                query.fetchingOptions[query::Select::Transpositions].fetchLastGameForEachChild = false;
+                query.fetchingOptions[query::Select::Transpositions].fetchChildren = true;
+                query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
+                query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
+
+                auto queryjson = nlohmann::json(query).dump();
+                session->send(queryjson.c_str(), queryjson.size());
             };
 
             client->addTcpConnection(std::move(socket),

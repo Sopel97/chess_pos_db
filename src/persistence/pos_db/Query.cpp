@@ -33,13 +33,13 @@ namespace query
     void from_json(const nlohmann::json& j, RootPosition& query)
     {
         j["fen"].get_to(query.fen);
-        if (j["move"].is_null())
+        if (j.contains("move"))
         {
-            query.move.reset();
+            query.move = j["move"].get<std::string>();
         }
         else
         {
-            query.move = j["move"].get<std::string>();
+            query.move.reset();
         }
     }
 
