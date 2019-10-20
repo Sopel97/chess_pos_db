@@ -13,6 +13,7 @@
 #include <brynet/net/EventLoop.h>
 #include <brynet/net/TCPService.h>
 #include <brynet/net/ListenThread.h>
+#include <brynet/net/Connector.h>
 #include <brynet/net/Socket.h>
 
 #include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
@@ -257,8 +258,9 @@ namespace command_line_app
 
         Logger::instance().logInfo("Invalid request");
 
-        auto errorJson = nlohmann::json::object({ "error", "InvalidRequest" });
-        //connection->send(errorJson.dump());
+        auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump();
+        auto packet = TcpConnection::makePacket(errorJson.c_str(), errorJson.size());
+        session->send(packet);
     }
 
     static void tcpImpl(const std::filesystem::path& path, std::uint16_t port)
@@ -266,7 +268,7 @@ namespace command_line_app
         auto db = loadDatabase(path);
 
         auto server = TcpService::Create();
-        auto listenThread = ListenThread::Create(false, "0.0.0.0", port, [&](TcpSocket::Ptr socket) {
+        auto listenThread = ListenThread::Create(false, "127.0.0.1", port, [&](TcpSocket::Ptr socket) {
             socket->setNodelay();
 
             auto enterCallback = [&db](const TcpConnection::Ptr& session) {
@@ -290,6 +292,42 @@ namespace command_line_app
         server->startWorkerThread(1);
 
         EventLoop mainloop;
+
+        std::string msg = "somejsonpropably";
+        auto client = TcpService::Create();
+        client->startWorkerThread(1);
+
+        auto connector = AsyncConnector::Create();
+        connector->startWorkerThread();
+
+        auto enterCallback = [client, msg](TcpSocket::Ptr socket) {
+            socket->setNodelay();
+
+            auto enterCallback = [msg](const TcpConnection::Ptr& session) {
+                session->setDataCallback([session](const char* buffer, size_t len) {
+                    std::cerr << std::string(buffer, len) << '\n';
+                    return len;
+                    });
+
+                session->send(msg.c_str(), msg.size());
+            };
+
+            client->addTcpConnection(std::move(socket),
+                brynet::net::TcpService::AddSocketOption::AddEnterCallback(enterCallback),
+                brynet::net::TcpService::AddSocketOption::WithMaxRecvBufferSize(1024 * 1024));
+        };
+
+        auto failedCallback = []() {
+            std::cout << "connect failed" << std::endl;
+        };
+
+        connector->asyncConnect({
+            AsyncConnector::ConnectOptions::WithAddr("127.0.0.1", port),
+            AsyncConnector::ConnectOptions::WithTimeout(std::chrono::seconds(10)),
+            AsyncConnector::ConnectOptions::WithCompletedCallback(enterCallback),
+            AsyncConnector::ConnectOptions::WithFailedCallback(failedCallback) 
+        });
+
         for (;;)
         {
             std::string line;
