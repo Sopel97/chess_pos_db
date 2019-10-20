@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 
+#include "Logger.h"
+
 [[nodiscard]] static std::vector<std::string> parseCommand(const std::string& cmd)
 {
     std::vector<std::string> parts;
@@ -39,6 +41,7 @@ int main(int argc, char* argv[])
     console_app.run();
     */
 
+    /*
     std::string cmdline;
     std::getline(std::cin, cmdline);
     auto args = parseCommand(cmdline);
@@ -48,20 +51,27 @@ int main(int argc, char* argv[])
     {
         c.emplace_back(arg.data());
     }
+    */
 
     try
     {
-        command_line_app::runCommand(args.size(), c.data());
+        //command_line_app::runCommand(args.size(), c.data());
+        command_line_app::runCommand(argc - 1, argv + 1);
     }
     catch (command_line_app::Exception& e)
     {
-        std::cerr << e.what();
+        Logger::instance().logError(e.what());
         return 1;
+    }
+    catch (std::runtime_error& e)
+    {
+        Logger::instance().logError(e.what());
+        return 2;
     }
     catch (...)
     {
-        std::cerr << "Unknown error.";
-        return 2;
+        Logger::instance().logError("Unknown error.");
+        return 3;
     }
 
     return 0;

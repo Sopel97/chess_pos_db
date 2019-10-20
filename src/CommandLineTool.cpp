@@ -298,6 +298,7 @@ namespace command_line_app
 
         EventLoop mainloop;
 
+        /*
         auto client = TcpService::Create();
         client->startWorkerThread(1);
 
@@ -348,6 +349,7 @@ namespace command_line_app
             AsyncConnector::ConnectOptions::WithCompletedCallback(enterCallback),
             AsyncConnector::ConnectOptions::WithFailedCallback(failedCallback) 
         });
+        */
 
         for (;;)
         {
