@@ -227,6 +227,13 @@ public:
         return current;
     }
 
+    static constexpr Board fromFen(const char* fen)
+    {
+        Board board;
+        board.set(fen);
+        return board;
+    }
+
     [[nodiscard]] constexpr friend bool operator==(const Board& lhs, const Board& rhs) noexcept
     {
         bool equal = true;
@@ -562,158 +569,28 @@ struct Position : public Board
     {
     }
 
-    constexpr void set(const char* fen)
+    constexpr Position(const Board& board, Color sideToMove, Square epSquare, CastlingRights castlingRights) :
+        Board(board),
+        m_sideToMove(sideToMove),
+        m_epSquare(epSquare),
+        m_castlingRights(castlingRights)
     {
-        const char* s = BaseType::set(fen);
-
-        s += 1;
-        m_sideToMove = (*s == 'w') ? Color::White : Color::Black;
-
-        s += 2;
-        m_castlingRights = parser_bits::readCastlingRights(s);
-
-        s += 1;
-        m_epSquare = (*s == '-') ? Square::none() : parser_bits::parseSquare(s);
     }
+
+    void set(const char* fen);
 
     // Returns false if the fen was not valid
     // If the returned value was false the position
     // is in unspecified state.
-    constexpr bool trySet(std::string_view fen)
-    {
-        // Lazily splits by ' '. Returns empty string views if at the end.
-        auto nextPart = [fen, start = std::size_t{ 0 }]() mutable {
-            std::size_t end = fen.find(' ', start);
-            if (end == std::string::npos)
-            {
-                std::string_view substr = fen.substr(start);
-                start = fen.size();
-                return substr;
-            }
-            else
-            {
-                std::string_view substr = fen.substr(start, end - start);
-                start = end + 1; // to skip whitespace
-                return substr;
-            }
-        };
+    [[nodiscard]] bool trySet(std::string_view fen);
 
-        if(!BaseType::trySet(nextPart())) return false;
+    [[nodiscard]] static Position fromFen(const char* fen);
 
-        {
-            const auto side = nextPart();
-            if (side == std::string_view("w")) m_sideToMove = Color::White;
-            else if (side == std::string_view("b")) m_sideToMove = Color::Black;
-            else return false;
+    [[nodiscard]] static std::optional<Position> tryFromFen(std::string_view fen);
 
-            if (isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove)) return false;
-        }
+    [[nodiscard]] static Position startPosition();
 
-        {
-            const auto castlingRights = nextPart();
-            auto castlingRightsOpt = parser_bits::tryParseCastlingRights(castlingRights);
-            if (!castlingRightsOpt.has_value())
-            {
-                return false;
-            }
-            else
-            {
-                m_castlingRights = *castlingRightsOpt;
-            }
-        }
-
-        {
-            const auto epSquare = nextPart();
-            auto epSquareOpt = parser_bits::tryParseEpSquare(epSquare);
-            if (!epSquareOpt.has_value())
-            {
-                return false;
-            }
-            else
-            {
-                m_epSquare = *epSquareOpt;
-            }
-        }
-
-        return true;
-    }
-
-    [[nodiscard]] static constexpr Position fromFen(const char* fen)
-    {
-        Position pos{};
-        pos.set(fen);
-        return pos;
-    }
-
-    [[nodiscard]] static constexpr std::optional<Position> tryFromFen(std::string_view fen)
-    {
-        Position pos{};
-        if (pos.trySet(fen)) return pos;
-        else return {};
-    }
-
-    [[nodiscard]] static constexpr Position startPosition()
-    {
-        constexpr Position pos = fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-        return pos;
-    }
-
-    constexpr ReverseMove doMove(const Move& move)
-    {
-        ASSERT(move.from.isOk() && move.to.isOk());
-
-        const PieceType movedPiece = pieceAt(move.from).type();
-        const Square oldEpSquare = m_epSquare;
-        const CastlingRights oldCastlingRights = m_castlingRights;
-
-        m_epSquare = Square::none();
-        switch (movedPiece)
-        {
-        case PieceType::Pawn:
-        {
-            const int d = move.to.rank() - move.from.rank();
-            if (d == -2 || d == 2)
-            {
-                const Square potentialEpSquare = Square(move.from.file(), move.from.rank() + d / 2);
-                const Bitboard pawnsAttackingEpSquare =
-                    bb::pawnAttacks(Bitboard::square(potentialEpSquare), m_sideToMove)
-                    & piecesBB(Piece(PieceType::Pawn, !m_sideToMove));
-
-                // only set m_epSquare when it matters, ie. when
-                // the opposite side can actually capture
-                for (Square sq : pawnsAttackingEpSquare)
-                {
-                    if (!BaseType::createsDiscoveredAttackOnOwnKing(Move{ sq, potentialEpSquare, MoveType::EnPassant }, !m_sideToMove))
-                    {
-                        m_epSquare = potentialEpSquare;
-                        break;
-                    }
-                }
-            }
-            break;
-        }
-        case PieceType::King:
-        {
-            if (move.from == E1) m_castlingRights &= ~CastlingRights::White;
-            else if (move.from == E8) m_castlingRights &= ~CastlingRights::Black;
-            break;
-        }
-        case PieceType::Rook:
-        {
-            if (move.from == H1) m_castlingRights &= ~CastlingRights::WhiteKingSide;
-            else if (move.from == A1) m_castlingRights &= ~CastlingRights::WhiteQueenSide;
-            else if (move.from == H8) m_castlingRights &= ~CastlingRights::BlackKingSide;
-            else if (move.from == A8) m_castlingRights &= ~CastlingRights::BlackQueenSide;
-            break;
-        }
-        default:
-            break;
-        }
-
-        const Piece captured = BaseType::doMove(move);
-        m_sideToMove = !m_sideToMove;
-        return { move, captured, oldEpSquare, oldCastlingRights };
-    }
+    ReverseMove doMove(const Move& move);
 
     constexpr void undoMove(const ReverseMove& reverseMove)
     {
@@ -769,16 +646,7 @@ struct Position : public Board
         return cpy;
     }
 
-    [[nodiscard]] constexpr Position afterMove(Move move) const
-    {
-        Position cpy(*this);
-        auto pc = cpy.doMove(move);
-
-        (void)pc;
-        //ASSERT(cpy.beforeMove(move, pc) == *this); // this assert would result in infinite recursion
-
-        return cpy;
-    }
+    [[nodiscard]] Position afterMove(Move move) const;
 
     [[nodiscard]] std::array<std::uint32_t, 4> hash() const;
 
@@ -791,6 +659,10 @@ private:
     Color m_sideToMove;
     Square m_epSquare;
     CastlingRights m_castlingRights;
+
+    [[nodiscard]] bool isEpPossible(Square epSquare, Color sideToMove) const;
+
+    void nullifyEpSquareIfNotPossible();
 };
 
 static_assert(sizeof(Position) == 192);
