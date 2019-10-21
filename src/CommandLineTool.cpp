@@ -616,6 +616,8 @@ namespace command_line_app
         auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump();
         auto packet = TcpConnection::makePacket(errorJson.c_str(), errorJson.size());
         session->send(packet);
+
+        return false;
     }
 
     static void tcpImpl(std::uint16_t port)
