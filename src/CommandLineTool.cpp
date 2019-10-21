@@ -427,6 +427,7 @@ namespace command_line_app
         std::filesystem::remove_all(temp);
 
         // We have to always sent some info that we finished
+        // TODO: also send stats
         sendProgressFinished(session);
     }
 
@@ -454,6 +455,7 @@ namespace command_line_app
         }
 
         // We have to always sent some info that we finished
+        // TODO: also send stats
         sendProgressFinished(session);
     }
 
@@ -544,6 +546,8 @@ namespace command_line_app
         const std::string dbPath = json["database_path"].get<std::string>();
 
         db = loadDatabase(dbPath);
+
+        sendProgressFinished(session);
     }
 
     static void handleTcpCommandClose(
@@ -553,6 +557,8 @@ namespace command_line_app
     )
     {
         db.reset();
+
+        sendProgressFinished(session);
     }
 
     static void handleTcpCommandQuery(
@@ -614,6 +620,9 @@ namespace command_line_app
 
     static void tcpImpl(std::uint16_t port)
     {
+        // TODO: Make it so only one connection is allowed.
+        //       Or better, have one db per session
+
         std::unique_ptr<persistence::Database> db = nullptr;
 
         std::promise<void> doExitPromise;
@@ -622,8 +631,6 @@ namespace command_line_app
         auto server = TcpService::Create();
         auto listenThread = ListenThread::Create(false, "127.0.0.1", port, [&](TcpSocket::Ptr socket) {
             socket->setNodelay();
-
-            // TODO: make it so only one connection is allowed
 
             auto enterCallback = [&db, &doExitPromise](const TcpConnection::Ptr& session) {
                 Logger::instance().logInfo("TCP connection from ", session->getIP());
