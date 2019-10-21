@@ -16,6 +16,10 @@
 #include <brynet/net/Connector.h>
 #include <brynet/net/Socket.h>
 
+#include "chess/GameClassification.h"
+
+#include "data_structure/EnumMap.h"
+
 #include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"
 #include "persistence/pos_db/Database.h"
@@ -45,6 +49,10 @@ namespace command_line_app
 
     using Args = std::vector<std::string>;
     using CommandHandler = void(*)(const Args&);
+    using TcpCommandHandler = void(*)(
+        std::unique_ptr<persistence::Database>&,
+        const TcpConnection::Ptr&,
+        const nlohmann::json&);
 
     const std::size_t importMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
 
@@ -69,6 +77,22 @@ namespace command_line_app
         if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path))
         {
             throw Exception("File " + path.string() + " does not exist.");
+        }
+    }
+
+    static void assertDatabaseOpen(const std::unique_ptr<persistence::Database>& db)
+    {
+        if (db == nullptr)
+        {
+            throw Exception("No database open.");
+        }
+    }
+
+    static void assertNoDatabaseOpen(const std::unique_ptr<persistence::Database>& db)
+    {
+        if (db != nullptr)
+        {
+            throw Exception("Database already open.");
         }
     }
 
@@ -362,6 +386,273 @@ namespace command_line_app
         }
     }
 
+    static void sendProgressFinished(const TcpConnection::Ptr& session)
+    {
+        nlohmann::json finishedResponse = nlohmann::json{
+            { "overall_progress", 1.0f },
+            { "finised", true }
+        };
+        std::string finisedResponseStr = finishedResponse.dump();
+        session->send(finisedResponseStr.c_str(), finisedResponseStr.size());
+    }
+
+    static void handleTcpCommandCreateImpl(
+        std::unique_ptr<persistence::Database>&,
+        const TcpConnection::Ptr& session,
+        const std::string& key,
+        const std::filesystem::path& destination,
+        const persistence::ImportablePgnFiles& pgns,
+        const std::filesystem::path& temp,
+        bool doMerge,
+        bool toReportProgress
+    )
+    {
+        assertDirectoryEmpty(destination);
+        assertDirectoryEmpty(temp);
+
+        if (doMerge)
+        {
+            auto db = instantiateDatabase(key, temp);
+            // TODO: progress reporting
+            db->import(pgns, importMemory);
+            db->replicateMergeAll(destination);
+        }
+        else
+        {
+            auto db = instantiateDatabase(key, destination);
+            // TODO: progress reporting
+            db->import(pgns, importMemory);
+        }
+
+        std::filesystem::remove_all(temp);
+
+        // We have to always sent some info that we finished
+        sendProgressFinished(session);
+    }
+
+    static void handleTcpCommandCreateImpl(
+        std::unique_ptr<persistence::Database>&,
+        const TcpConnection::Ptr& session,
+        const std::string& key,
+        const std::filesystem::path& destination,
+        const persistence::ImportablePgnFiles& pgns,
+        bool doMerge,
+        bool toReportProgress
+    )
+    {
+        assertDirectoryEmpty(destination);
+
+        {
+            auto db = instantiateDatabase(key, destination);
+            // TODO: progress reporting
+            db->import(pgns, importMemory);
+
+            if (doMerge)
+            {
+                db->mergeAll();
+            }
+        }
+
+        // We have to always sent some info that we finished
+        sendProgressFinished(session);
+    }
+
+    static void handleTcpCommandCreate(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        const std::string destination = json["destination_path"].get<std::string>();
+        const bool doMerge = json["merge"].get<bool>();
+        const bool doReportProgress = json["report_progress"].get<bool>();
+        
+        persistence::ImportablePgnFiles pgns;
+        for (auto& v : json["human_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Human);
+        for (auto& v : json["engine_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Engine);
+        for (auto& v : json["server_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Server);
+
+        const std::string databaseFormat = json["database_format"].get<std::string>();
+
+        if (json.contains("temporary_path"))
+        {
+            const std::string temp = json["temporary_path"].get<std::string>();
+            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temp, doMerge, doReportProgress);
+        }
+        else
+        {
+            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, doMerge, doReportProgress);
+        }
+    }
+
+    static void handleTcpCommandMergeImpl(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const std::filesystem::path& destination,
+        bool doReportProgress
+    )
+    {
+        assertDirectoryEmpty(destination);
+        assertDatabaseOpen(db);
+
+        db->replicateMergeAll(destination);
+
+        // We have to always sent some info that we finished
+        sendProgressFinished(session);
+    }
+
+    static void handleTcpCommandMergeImpl(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        bool doReportProgress
+    )
+    {
+        assertDatabaseOpen(db);
+
+        db->mergeAll();
+
+        // We have to always sent some info that we finished
+        sendProgressFinished(session);
+    }
+
+    static void handleTcpCommandMerge(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        const bool doReportProgress = json["report_progress"].get<bool>();
+        if (json.contains("destination_path"))
+        {
+            const std::string destination = json["destination_path"].get<std::string>();
+            handleTcpCommandMergeImpl(db, session, destination, doReportProgress);
+        }
+        else
+        {
+            handleTcpCommandMergeImpl(db, session, doReportProgress);
+        }
+    }
+
+    static void handleTcpCommandOpen(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        assertNoDatabaseOpen(db);
+
+        const std::string dbPath = json["database_path"].get<std::string>();
+
+        db = loadDatabase(dbPath);
+    }
+
+    static void handleTcpCommandClose(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        db.reset();
+    }
+
+    static void handleTcpCommandQuery(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        assertDatabaseOpen(db);
+
+        query::Request request = json["query"];
+        auto response = db->executeQuery(request);
+        auto responseStr = nlohmann::json(response).dump();
+
+        session->send(responseStr.c_str(), responseStr.size());
+    }
+
+    static bool handleTcpCommand(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const char* data,
+        std::size_t len
+    )
+    {
+        static std::map<std::string, TcpCommandHandler> s_handlers{
+            { "create", handleTcpCommandCreate },
+            { "merge", handleTcpCommandMerge },
+            { "open", handleTcpCommandOpen },
+            { "close", handleTcpCommandClose },
+            { "query", handleTcpCommandQuery }
+        };
+
+        std::cout << len << ' ' << std::strlen(data) << '\n';
+        auto datastr = std::string(data, len);
+        Logger::instance().logInfo("Received data: ", datastr);
+
+        try
+        {
+            nlohmann::json json = nlohmann::json::parse(datastr);
+
+            const std::string command = json["command"].get<std::string>();
+            if (command == "exit") return true;
+
+            s_handlers.at(command)(db, session, json);
+
+            return false;
+        }
+        catch (...)
+        {
+            Logger::instance().logInfo("Error parsing request");
+        }
+
+        Logger::instance().logInfo("Invalid request");
+
+        auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump();
+        auto packet = TcpConnection::makePacket(errorJson.c_str(), errorJson.size());
+        session->send(packet);
+    }
+
+    static void tcpImpl(std::uint16_t port)
+    {
+        std::unique_ptr<persistence::Database> db = nullptr;
+
+        std::promise<void> doExitPromise;
+        std::future<void> doExit = doExitPromise.get_future();
+
+        auto server = TcpService::Create();
+        auto listenThread = ListenThread::Create(false, "127.0.0.1", port, [&](TcpSocket::Ptr socket) {
+            socket->setNodelay();
+
+            // TODO: make it so only one connection is allowed
+
+            auto enterCallback = [&db, &doExitPromise](const TcpConnection::Ptr& session) {
+                Logger::instance().logInfo("TCP connection from ", session->getIP());
+
+                session->setDataCallback([&db, &doExitPromise, session](const char* buffer, size_t len) {
+                    if (handleTcpCommand(db, session, buffer, len))
+                    {
+                        doExitPromise.set_value();
+                    }
+                    return len;
+                    });
+
+                session->setDisConnectCallback([](const TcpConnection::Ptr& session) {
+                    });
+            };
+
+            server->addTcpConnection(std::move(socket),
+                brynet::net::TcpService::AddSocketOption::AddEnterCallback(enterCallback),
+                brynet::net::TcpService::AddSocketOption::WithMaxRecvBufferSize(1024 * 1024));
+            });
+
+        listenThread->startListen();
+        server->startWorkerThread(1);
+
+        EventLoop mainloop;
+
+        doExit.get();
+    }
+
     static void tcp(const Args& args)
     {
         if (args.size() == 3)
@@ -373,6 +664,16 @@ namespace command_line_app
             }
 
             tcpImpl(args[1], static_cast<std::uint16_t>(port));
+        }
+        else if (args.size() == 2)
+        {
+            const int port = std::stoi(args[1]);
+            if (port <= 0 || port > std::numeric_limits<std::uint64_t>::max())
+            {
+                throwInvalidArguments();
+            }
+
+            tcpImpl(static_cast<std::uint16_t>(port));
         }
         else
         {
