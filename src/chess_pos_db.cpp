@@ -36,42 +36,32 @@
 
 int main(int argc, char* argv[])
 {
-    /*
-    console_app::App console_app;
-    console_app.run();
-    */
-
-    /*
-    std::string cmdline;
-    std::getline(std::cin, cmdline);
-    auto args = parseCommand(cmdline);
-
-    std::vector<char*> c;
-    for (auto& arg : args)
+    if (argc == 1)
     {
-        c.emplace_back(arg.data());
+        console_app::App console_app;
+        console_app.run();
     }
-    */
-
-    try
+    else
     {
-        //command_line_app::runCommand(args.size(), c.data());
-        command_line_app::runCommand(argc - 1, argv + 1);
-    }
-    catch (command_line_app::Exception& e)
-    {
-        Logger::instance().logError(e.what());
-        return 1;
-    }
-    catch (std::runtime_error& e)
-    {
-        Logger::instance().logError(e.what());
-        return 2;
-    }
-    catch (...)
-    {
-        Logger::instance().logError("Unknown error.");
-        return 3;
+        try
+        {
+            command_line_app::runCommand(argc - 1, argv + 1);
+        }
+        catch (command_line_app::Exception& e)
+        {
+            Logger::instance().logError(e.what());
+            return 1;
+        }
+        catch (std::runtime_error& e)
+        {
+            Logger::instance().logError(e.what());
+            return 2;
+        }
+        catch (...)
+        {
+            Logger::instance().logError("Unknown error.");
+            return 3;
+        }
     }
 
     return 0;
