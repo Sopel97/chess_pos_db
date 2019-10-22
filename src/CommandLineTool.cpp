@@ -410,9 +410,11 @@ namespace command_line_app
         };
     }
 
-    static auto makeImportProgressReportHandler(const TcpConnection::Ptr& session)
+    static auto makeImportProgressReportHandler(const TcpConnection::Ptr& session, bool doReportProgress = true)
     {
-        return [session](const persistence::Database::ImportProgressReport& report) {
+        return [session, doReportProgress](const persistence::Database::ImportProgressReport& report) {
+            if (!doReportProgress) return;
+
             auto reportJson = nlohmann::json{
                 { "operation", "import" },
                 { "overall_progress", report.ratio() },
@@ -431,9 +433,11 @@ namespace command_line_app
         };
     }
 
-    static auto makeMergeProgressReportHandler(const TcpConnection::Ptr& session)
+    static auto makeMergeProgressReportHandler(const TcpConnection::Ptr& session, bool doReportProgress = true)
     {
-        return [session](const persistence::Database::MergeProgressReport& report) {
+        return [session, doReportProgress](const persistence::Database::MergeProgressReport& report) {
+            if (!doReportProgress) return;
+
             auto reportJson = nlohmann::json{
                 { "operation", "merge" },
                 { "overall_progress", report.ratio() },
@@ -454,7 +458,7 @@ namespace command_line_app
         const persistence::ImportablePgnFiles& pgns,
         const std::filesystem::path& temp,
         bool doMerge,
-        bool toReportProgress
+        bool doReportProgress
     )
     {
         assertDirectoryEmpty(destination);
@@ -464,17 +468,22 @@ namespace command_line_app
         {
             auto db = instantiateDatabase(key, temp);
 
-            auto callback = makeImportProgressReportHandler(session);
-            auto stats = db->import(pgns, importMemory, callback);
-            sendProgressFinished(session, "import", statsToJson(stats));
+            {
+                auto callback = makeImportProgressReportHandler(session, doReportProgress);
+                auto stats = db->import(pgns, importMemory, callback);
+                sendProgressFinished(session, "import", statsToJson(stats));
+            }
 
-            db->replicateMergeAll(destination);
+            {
+                auto callback = makeMergeProgressReportHandler(session, doReportProgress);
+                db->replicateMergeAll(destination, callback);
+            }
         }
         else
         {
             auto db = instantiateDatabase(key, destination);
 
-            auto callback = makeImportProgressReportHandler(session);
+            auto callback = makeImportProgressReportHandler(session, doReportProgress);
             auto stats = db->import(pgns, importMemory, callback);
             sendProgressFinished(session, "import", statsToJson(stats));
         }
@@ -492,7 +501,7 @@ namespace command_line_app
         const std::filesystem::path& destination,
         const persistence::ImportablePgnFiles& pgns,
         bool doMerge,
-        bool toReportProgress
+        bool doReportProgress
     )
     {
         assertDirectoryEmpty(destination);
@@ -500,13 +509,14 @@ namespace command_line_app
         {
             auto db = instantiateDatabase(key, destination);
 
-            auto callback = makeImportProgressReportHandler(session);
+            auto callback = makeImportProgressReportHandler(session, doReportProgress);
             auto stats = db->import(pgns, importMemory, callback);
             sendProgressFinished(session, "import", statsToJson(stats));
 
             if (doMerge)
             {
-                db->mergeAll();
+                auto callback = makeMergeProgressReportHandler(session, doReportProgress);
+                db->mergeAll(callback);
             }
         }
 
@@ -552,7 +562,7 @@ namespace command_line_app
         assertDirectoryEmpty(destination);
         assertDatabaseOpen(db);
 
-        auto callback = makeMergeProgressReportHandler(session);
+        auto callback = makeMergeProgressReportHandler(session, doReportProgress);
         db->replicateMergeAll(destination, callback);
 
         // We have to always sent some info that we finished
@@ -567,7 +577,7 @@ namespace command_line_app
     {
         assertDatabaseOpen(db);
 
-        auto callback = makeMergeProgressReportHandler(session);
+        auto callback = makeMergeProgressReportHandler(session, doReportProgress);
         db->mergeAll(callback);
 
         // We have to always sent some info that we finished
