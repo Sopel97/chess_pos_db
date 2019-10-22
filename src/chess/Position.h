@@ -230,7 +230,7 @@ public:
     static constexpr Board fromFen(const char* fen)
     {
         Board board;
-        board.set(fen);
+        (void)board.set(fen);
         return board;
     }
 

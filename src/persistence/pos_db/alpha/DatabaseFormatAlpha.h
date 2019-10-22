@@ -465,24 +465,30 @@ namespace persistence
 
             [[nodiscard]] query::Response executeQuery(query::Request query) override;
 
-            void mergeAll() override;
+            void mergeAll(MergeProgressCallback progressCallback = {}) override;
 
-            void replicateMergeAll(const std::filesystem::path& path) override;
+            void replicateMergeAll(const std::filesystem::path& path, MergeProgressCallback progressCallback = {}) override;
 
             ImportStats import(
                 std::execution::parallel_unsequenced_policy,
                 const ImportablePgnFiles& pgns,
                 std::size_t memory,
-                std::size_t numThreads = std::thread::hardware_concurrency()
+                std::size_t numThreads = std::thread::hardware_concurrency(),
+                ImportProgressCallback progressCallback = {}
                 ) override;
 
             ImportStats import(
                 std::execution::sequenced_policy,
                 const ImportablePgnFiles& pgns,
-                std::size_t memory
+                std::size_t memory,
+                ImportProgressCallback progressCallback = {}
                 ) override;
 
-            ImportStats import(const ImportablePgnFiles& pgns, std::size_t memory) override;
+            ImportStats import(
+                const ImportablePgnFiles& pgns, 
+                std::size_t memory,
+                ImportProgressCallback progressCallback = {}
+            ) override;
 
             void flush() override;
 

@@ -984,18 +984,31 @@ namespace persistence
             return { std::move(query), std::move(unflattened) };
         }
 
-        void Database::mergeAll()
+        void Database::mergeAll(Database::MergeProgressCallback progressCallback)
         {
-            const std::size_t numPartitions = 9;
+            constexpr std::size_t numPartitions = cardinality<GameLevel>() * cardinality<GameResult>();
             std::size_t i = 0;
             Logger::instance().logInfo(": Merging files...");
-            forEach(m_partitions, [numPartitions, &i](auto&& partition, GameLevel level, GameResult result) {
+            forEach(m_partitions, [numPartitions, &i, &progressCallback](auto&& partition, GameLevel level, GameResult result) {
 
                 ++i;
                 Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
 
-                auto progressReport = [](const ext::ProgressReport& report) {
+                auto progressReport = [numPartitions, i, &progressCallback](const ext::ProgressReport& report) {
                     Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
+
+                    if (progressCallback)
+                    {
+                        // We can just put whatever value we want here.
+                        // It has to be a constant though because otherwise the
+                        // progress could be not monotonic.
+                        constexpr double totalWork = 1000000.0;
+                        MergeProgressReport r{
+                            static_cast<std::size_t>((report.ratio() + i) * totalWork / numPartitions),
+                            static_cast<std::size_t>(totalWork),
+                        };
+                        progressCallback(r);
+                    }
                 };
 
                 partition.mergeAll(progressReport);
@@ -1004,7 +1017,7 @@ namespace persistence
             Logger::instance().logInfo(": Completed.");
         }
 
-        void Database::replicateMergeAll(const std::filesystem::path& path)
+        void Database::replicateMergeAll(const std::filesystem::path& path, Database::MergeProgressCallback progressCallback)
         {
             if (std::filesystem::exists(path) && !std::filesystem::is_empty(path))
             {
@@ -1017,16 +1030,29 @@ namespace persistence
 
             m_header.replicateTo(path);
 
-            const std::size_t numPartitions = 9;
+            constexpr std::size_t numPartitions = cardinality<GameLevel>() * cardinality<GameResult>();
             std::size_t i = 0;
             Logger::instance().logInfo(": Merging files...");
-            forEach(m_partitions, [numPartitions, &i, &partitionPaths](auto&& partition, GameLevel level, GameResult result) {
+            forEach(m_partitions, [numPartitions, &i, &partitionPaths, &progressCallback](auto&& partition, GameLevel level, GameResult result) {
 
                 ++i;
                 Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
 
-                auto progressReport = [](const ext::ProgressReport& report) {
+                auto progressReport = [numPartitions, i, &progressCallback](const ext::ProgressReport& report) {
                     Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
+
+                    if (progressCallback)
+                    {
+                        // We can just put whatever value we want here.
+                        // It has to be a constant though because otherwise the
+                        // progress could be not monotonic.
+                        constexpr double totalWork = 1000000.0;
+                        MergeProgressReport r{
+                            static_cast<std::size_t>((report.ratio() + i) * totalWork / numPartitions),
+                            static_cast<std::size_t>(totalWork),
+                        };
+                        progressCallback(r);
+                    }
                 };
 
                 partition.replicateMergeAll(partitionPaths[level][result], progressReport);
@@ -1039,9 +1065,12 @@ namespace persistence
             std::execution::parallel_unsequenced_policy,
             const ImportablePgnFiles& pgns,
             std::size_t memory,
-            std::size_t numThreads
+            std::size_t numThreads,
+            Database::ImportProgressCallback progressCallback
             )
         {
+            // TODO: progress reporting
+
             if (pgns.empty())
             {
                 return {};
@@ -1096,7 +1125,8 @@ namespace persistence
         ImportStats Database::import(
             std::execution::sequenced_policy,
             const ImportablePgnFiles& pgns,
-            std::size_t memory
+            std::size_t memory,
+            Database::ImportProgressCallback progressCallback
             )
         {
             const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u) - 1u;
@@ -1139,9 +1169,30 @@ namespace persistence
                     continue;
                 }
 
-                statsTotal += importPgnsImpl(std::execution::seq, pipeline, pathsByLevel[level], level, [&totalSize, &totalSizeProcessed](auto&& pgn) {
-                    totalSizeProcessed += std::filesystem::file_size(pgn);
-                    Logger::instance().logInfo(":     ", static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), "% - completed ", pgn, ".");
+                statsTotal += importPgnsImpl(
+                    std::execution::seq, 
+                    pipeline, 
+                    pathsByLevel[level], 
+                    level, 
+                    [&progressCallback, &totalSize, &totalSizeProcessed](auto&& pgn) {
+                        totalSizeProcessed += std::filesystem::file_size(pgn);
+                        Logger::instance().logInfo(
+                            ":     ", 
+                            static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), 
+                            "% - completed ", 
+                            pgn, 
+                            "."
+                        );
+
+                        if (progressCallback)
+                        {
+                            ImportProgressReport report{
+                                totalSizeProcessed,
+                                totalSize,
+                                pgn
+                            };
+                            progressCallback(report);
+                        }
                     });
             }
             Logger::instance().logInfo(": Finalizing...");
@@ -1158,9 +1209,9 @@ namespace persistence
             return statsTotal;
         }
 
-        ImportStats Database::import(const ImportablePgnFiles& pgns, std::size_t memory)
+        ImportStats Database::import(const ImportablePgnFiles& pgns, std::size_t memory, Database::ImportProgressCallback progressCallback)
         {
-            return import(std::execution::seq, pgns, memory);
+            return import(std::execution::seq, pgns, memory, progressCallback);
         }
 
         void Database::flush()

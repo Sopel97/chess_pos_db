@@ -66,7 +66,7 @@ namespace persistence
         return key;
     }
 
-    void Database::replicateMergeAll(const std::filesystem::path& path)
+    void Database::replicateMergeAll(const std::filesystem::path& path, Database::MergeProgressCallback)
     {
         std::filesystem::copy_file(manifestPath(this->path()), manifestPath(path));
     }

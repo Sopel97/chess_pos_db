@@ -994,12 +994,21 @@ namespace persistence
             return { std::move(query), std::move(unflattened) };
         }
 
-        void Database::mergeAll()
+        void Database::mergeAll(Database::MergeProgressCallback progressCallback)
         {
             Logger::instance().logInfo(": Merging files...");
 
-            auto progressReport = [](const ext::ProgressReport& report) {
+            auto progressReport = [&progressCallback](const ext::ProgressReport& report) {
                 Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
+
+                if (progressCallback)
+                {
+                    MergeProgressReport r{
+                        report.workDone,
+                        report.workTotal
+                    };
+                    progressCallback(r);
+                }
             };
 
             m_partition.mergeAll(progressReport);
@@ -1008,7 +1017,7 @@ namespace persistence
             Logger::instance().logInfo(": Completed.");
         }
 
-        void Database::replicateMergeAll(const std::filesystem::path& path)
+        void Database::replicateMergeAll(const std::filesystem::path& path, Database::MergeProgressCallback progressCallback)
         {
             if (std::filesystem::exists(path) && !std::filesystem::is_empty(path))
             {
@@ -1025,8 +1034,17 @@ namespace persistence
 
             Logger::instance().logInfo(": Merging files...");
 
-            auto progressReport = [](const ext::ProgressReport& report) {
+            auto progressReport = [&progressCallback](const ext::ProgressReport& report) {
                 Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
+
+                if (progressCallback)
+                {
+                    MergeProgressReport r{
+                        report.workDone,
+                        report.workTotal
+                    };
+                    progressCallback(r);
+                }
             };
 
             m_partition.replicateMergeAll(path / partitionDirectory, progressReport);
@@ -1039,9 +1057,12 @@ namespace persistence
             std::execution::parallel_unsequenced_policy,
             const ImportablePgnFiles& pgns,
             std::size_t memory,
-            std::size_t numThreads
+            std::size_t numThreads,
+            Database::ImportProgressCallback progressCallback
             )
         {
+            // TODO: progress reporting
+
             if (pgns.empty())
             {
                 return {};
@@ -1085,7 +1106,8 @@ namespace persistence
         ImportStats Database::import(
             std::execution::sequenced_policy,
             const ImportablePgnFiles& pgns,
-            std::size_t memory
+            std::size_t memory,
+            Database::ImportProgressCallback progressCallback
             )
         {
             const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u) - 1u;
@@ -1118,9 +1140,29 @@ namespace persistence
             );
 
             Logger::instance().logInfo(": Importing pgns...");
-            ImportStats statsTotal = importPgnsImpl(std::execution::seq, pipeline, pgns, [&totalSize, &totalSizeProcessed](auto&& pgn) {
-                totalSizeProcessed += std::filesystem::file_size(pgn);
-                Logger::instance().logInfo(":     ", static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), "% - completed ", pgn, ".");
+            ImportStats statsTotal = importPgnsImpl(
+                std::execution::seq, 
+                pipeline, 
+                pgns, 
+                [&progressCallback, &totalSize, &totalSizeProcessed](auto&& pgn) {
+                    totalSizeProcessed += std::filesystem::file_size(pgn);
+                    Logger::instance().logInfo(
+                        ":     ", 
+                        static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), 
+                        "% - completed ", 
+                        pgn, 
+                        "."
+                    );
+
+                    if (progressCallback)
+                    {
+                        ImportProgressReport report{
+                            totalSizeProcessed,
+                            totalSize,
+                            pgn
+                        };
+                        progressCallback(report);
+                    }
                 });
             Logger::instance().logInfo(": Finalizing...");
 
@@ -1136,9 +1178,9 @@ namespace persistence
             return statsTotal;
         }
 
-        ImportStats Database::import(const ImportablePgnFiles& pgns, std::size_t memory)
+        ImportStats Database::import(const ImportablePgnFiles& pgns, std::size_t memory, Database::ImportProgressCallback progressCallback)
         {
-            return import(std::execution::seq, pgns, memory);
+            return import(std::execution::seq, pgns, memory, progressCallback);
         }
 
         void Database::flush()

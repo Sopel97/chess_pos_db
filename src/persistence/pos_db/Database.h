@@ -4,6 +4,7 @@
 
 #include <execution>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -55,6 +56,32 @@ namespace persistence
 
     struct Database
     {
+        struct ImportProgressReport
+        {
+            std::size_t workDone;
+            std::size_t workTotal;
+            std::optional<std::filesystem::path> importedPgnPath;
+
+            [[nodiscard]] double ratio() const
+            {
+                return static_cast<double>(workDone) / static_cast<double>(workTotal);
+            }
+        };
+
+        struct MergeProgressReport
+        {
+            std::size_t workDone;
+            std::size_t workTotal;
+
+            [[nodiscard]] double ratio() const
+            {
+                return static_cast<double>(workDone) / static_cast<double>(workTotal);
+            }
+        };
+
+        using ImportProgressCallback = std::function<void(const ImportProgressReport&)>;
+        using MergeProgressCallback = std::function<void(const MergeProgressReport&)>;
+
         [[nodiscard]] static std::filesystem::path manifestPath(const std::filesystem::path& dirPath);
 
         [[nodiscard]] static std::optional<std::string> tryReadKey(const std::filesystem::path& dirPath);
@@ -65,24 +92,30 @@ namespace persistence
 
         [[nodiscard]] virtual query::Response executeQuery(query::Request query) = 0;
 
-        virtual void mergeAll() = 0;
+        virtual void mergeAll(MergeProgressCallback progressCallback = {}) = 0;
 
-        virtual void replicateMergeAll(const std::filesystem::path& path);
+        virtual void replicateMergeAll(const std::filesystem::path& path, MergeProgressCallback progressCallback = {});
 
         virtual ImportStats import(
             std::execution::parallel_unsequenced_policy,
             const ImportablePgnFiles& pgns,
             std::size_t memory,
-            std::size_t numThreads = std::thread::hardware_concurrency()
+            std::size_t numThreads = std::thread::hardware_concurrency(),
+            ImportProgressCallback progressCallback = {}
         ) = 0;
 
         virtual ImportStats import(
             std::execution::sequenced_policy,
             const ImportablePgnFiles& pgns,
-            std::size_t memory
+            std::size_t memory,
+            ImportProgressCallback progressCallback = {}
         ) = 0;
 
-        virtual ImportStats import(const ImportablePgnFiles& pgns, std::size_t memory) = 0;
+        virtual ImportStats import(
+            const ImportablePgnFiles& pgns, 
+            std::size_t memory,
+            ImportProgressCallback progressCallback = {}
+        ) = 0;
 
         virtual void flush() = 0;
 
