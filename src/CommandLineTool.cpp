@@ -35,6 +35,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <queue>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -386,14 +387,63 @@ namespace command_line_app
         }
     }
 
-    static void sendProgressFinished(const TcpConnection::Ptr& session)
+    static void sendProgressFinished(const TcpConnection::Ptr& session, std::string operation, nlohmann::json additionalData = nlohmann::json::object())
     {
         nlohmann::json finishedResponse = nlohmann::json{
             { "overall_progress", 1.0f },
-            { "finised", true }
+            { "finished", true },
+            { "operation", operation }
         };
+        finishedResponse.merge_patch(additionalData);
         std::string finisedResponseStr = finishedResponse.dump();
-        session->send(finisedResponseStr.c_str(), finisedResponseStr.size());
+
+        auto packet = TcpConnection::makePacket(finisedResponseStr.c_str(), finisedResponseStr.size());
+        session->send(packet);
+    }
+
+    static nlohmann::json statsToJson(persistence::ImportStats stats)
+    {
+        return nlohmann::json{
+            { "num_games", stats.numGames },
+            { "num_positions", stats.numPositions },
+            { "num_skipped_games", stats.numSkippedGames }
+        };
+    }
+
+    static auto makeImportProgressReportHandler(const TcpConnection::Ptr& session)
+    {
+        return [session](const persistence::Database::ImportProgressReport& report) {
+            auto reportJson = nlohmann::json{
+                { "operation", "import" },
+                { "overall_progress", report.ratio() },
+                { "finished", false }
+            };
+            if (report.importedPgnPath.has_value())
+            {
+                reportJson["imported_file_path"] = report.importedPgnPath->string();
+            }
+
+            auto reportStr = reportJson.dump();
+            auto packet = TcpConnection::makePacket(reportStr.c_str(), reportStr.size());
+
+            session->send(packet, []() {Logger::instance().logInfo("Actually sent..."); });
+            Logger::instance().logInfo("Sending...");
+        };
+    }
+
+    static auto makeMergeProgressReportHandler(const TcpConnection::Ptr& session)
+    {
+        return [session](const persistence::Database::MergeProgressReport& report) {
+            auto reportJson = nlohmann::json{
+                { "operation", "merge" },
+                { "overall_progress", report.ratio() },
+                { "finished", false }
+            };
+
+            auto reportStr = reportJson.dump();
+            auto packet = TcpConnection::makePacket(reportStr.c_str(), reportStr.size());
+            session->send(packet);
+        };
     }
 
     static void handleTcpCommandCreateImpl(
@@ -413,22 +463,26 @@ namespace command_line_app
         if (doMerge)
         {
             auto db = instantiateDatabase(key, temp);
-            // TODO: progress reporting
-            db->import(pgns, importMemory);
+
+            auto callback = makeImportProgressReportHandler(session);
+            auto stats = db->import(pgns, importMemory, callback);
+            sendProgressFinished(session, "import", statsToJson(stats));
+
             db->replicateMergeAll(destination);
         }
         else
         {
             auto db = instantiateDatabase(key, destination);
-            // TODO: progress reporting
-            db->import(pgns, importMemory);
+
+            auto callback = makeImportProgressReportHandler(session);
+            auto stats = db->import(pgns, importMemory, callback);
+            sendProgressFinished(session, "import", statsToJson(stats));
         }
 
         std::filesystem::remove_all(temp);
 
         // We have to always sent some info that we finished
-        // TODO: also send stats
-        sendProgressFinished(session);
+        sendProgressFinished(session, "create");
     }
 
     static void handleTcpCommandCreateImpl(
@@ -445,8 +499,10 @@ namespace command_line_app
 
         {
             auto db = instantiateDatabase(key, destination);
-            // TODO: progress reporting
-            db->import(pgns, importMemory);
+
+            auto callback = makeImportProgressReportHandler(session);
+            auto stats = db->import(pgns, importMemory, callback);
+            sendProgressFinished(session, "import", statsToJson(stats));
 
             if (doMerge)
             {
@@ -455,8 +511,7 @@ namespace command_line_app
         }
 
         // We have to always sent some info that we finished
-        // TODO: also send stats
-        sendProgressFinished(session);
+        sendProgressFinished(session, "create");
     }
 
     static void handleTcpCommandCreate(
@@ -497,10 +552,11 @@ namespace command_line_app
         assertDirectoryEmpty(destination);
         assertDatabaseOpen(db);
 
-        db->replicateMergeAll(destination);
+        auto callback = makeMergeProgressReportHandler(session);
+        db->replicateMergeAll(destination, callback);
 
         // We have to always sent some info that we finished
-        sendProgressFinished(session);
+        sendProgressFinished(session, "merge");
     }
 
     static void handleTcpCommandMergeImpl(
@@ -511,10 +567,11 @@ namespace command_line_app
     {
         assertDatabaseOpen(db);
 
-        db->mergeAll();
+        auto callback = makeMergeProgressReportHandler(session);
+        db->mergeAll(callback);
 
         // We have to always sent some info that we finished
-        sendProgressFinished(session);
+        sendProgressFinished(session, "merge");
     }
 
     static void handleTcpCommandMerge(
@@ -547,7 +604,7 @@ namespace command_line_app
 
         db = loadDatabase(dbPath);
 
-        sendProgressFinished(session);
+        sendProgressFinished(session, "open");
     }
 
     static void handleTcpCommandClose(
@@ -558,7 +615,7 @@ namespace command_line_app
     {
         db.reset();
 
-        sendProgressFinished(session);
+        sendProgressFinished(session, "close");
     }
 
     static void handleTcpCommandQuery(
@@ -573,7 +630,8 @@ namespace command_line_app
         auto response = db->executeQuery(request);
         auto responseStr = nlohmann::json(response).dump();
 
-        session->send(responseStr.c_str(), responseStr.size());
+        auto packet = TcpConnection::makePacket(responseStr.c_str(), responseStr.size());
+        session->send(packet);
     }
 
     static bool handleTcpCommand(
@@ -622,26 +680,30 @@ namespace command_line_app
 
     static void tcpImpl(std::uint16_t port)
     {
+        struct Operation
+        {
+            TcpConnection::Ptr session;
+            std::string data;
+        };
+
         // TODO: Make it so only one connection is allowed.
         //       Or better, have one db per session
 
         std::unique_ptr<persistence::Database> db = nullptr;
 
-        std::promise<void> doExitPromise;
-        std::future<void> doExit = doExitPromise.get_future();
+        std::queue<Operation> operations;
+        std::condition_variable anyOperations;
 
         auto server = TcpService::Create();
         auto listenThread = ListenThread::Create(false, "127.0.0.1", port, [&](TcpSocket::Ptr socket) {
             socket->setNodelay();
 
-            auto enterCallback = [&db, &doExitPromise](const TcpConnection::Ptr& session) {
+            auto enterCallback = [&anyOperations, &operations, &db](const TcpConnection::Ptr& session) {
                 Logger::instance().logInfo("TCP connection from ", session->getIP());
 
-                session->setDataCallback([&db, &doExitPromise, session](const char* buffer, size_t len) {
-                    if (handleTcpCommand(db, session, buffer, len))
-                    {
-                        doExitPromise.set_value();
-                    }
+                session->setDataCallback([&anyOperations, &operations, &db, session](const char* buffer, size_t len) {
+                    operations.push(Operation{ session, std::string(buffer, len) });
+                    anyOperations.notify_one();
                     return len;
                     });
 
@@ -655,11 +717,23 @@ namespace command_line_app
             });
 
         listenThread->startListen();
-        server->startWorkerThread(1);
+        server->startWorkerThread(3);
 
         EventLoop mainloop;
 
-        doExit.get();
+        std::mutex mutex;
+        for (;;)
+        {
+            std::unique_lock lock(mutex);
+            anyOperations.wait(lock, [&operations]() {return !operations.empty(); });
+
+            auto operation = std::move(operations.front());
+            operations.pop();
+            if (handleTcpCommand(db, operation.session, operation.data.c_str(), operation.data.size()))
+            {
+                break;
+            }
+        }
     }
 
     static void tcp(const Args& args)
