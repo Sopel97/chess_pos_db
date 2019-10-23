@@ -886,20 +886,20 @@ namespace persistence
         const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_alpha"]["pgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
+            BaseType(path),
             m_path(path),
             m_header(path)
         {
             // This calls virtual functions but it's fine
             // because this class is final.
-            BaseType::initializeManifest();
             initializePartitions();
         }
 
         Database::Database(std::filesystem::path path, std::size_t headerBufferMemory) :
+            BaseType(path),
             m_path(path),
             m_header(path, headerBufferMemory)
         {
-            BaseType::initializeManifest();
             initializePartitions();
         }
 
@@ -1119,6 +1119,8 @@ namespace persistence
 
             flush();
 
+            BaseType::addStats(stats);
+
             return stats;
         }
 
@@ -1204,7 +1206,9 @@ namespace persistence
 
             Logger::instance().logInfo(": Completed.");
 
-            Logger::instance().logInfo(": Imported ", statsTotal.numGames, " games with ", statsTotal.numPositions, " positions. Skipped ", statsTotal.numSkippedGames, " games.");
+            Logger::instance().logInfo(": Imported ", statsTotal.totalNumGames(), " games with ", statsTotal.totalNumPositions(), " positions. Skipped ", statsTotal.totalNumSkippedGames(), " games.");
+
+            BaseType::addStats(statsTotal);
 
             return statsTotal;
         }
@@ -1337,7 +1341,7 @@ namespace persistence
                 bucket = pipeline.getEmptyBuffer();
                 });
 
-            ImportStats stats{};
+            SingleGameLevelImportStats stats{};
             for (auto& path : paths)
             {
                 pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
@@ -1404,7 +1408,7 @@ namespace persistence
                 store(pipeline, std::move(bucket), level, result);
                 });
 
-            return stats;
+            return ImportStats(stats, level);
         }
 
         [[nodiscard]] std::vector<Database::Block> Database::divideIntoBlocks(
@@ -1510,7 +1514,7 @@ namespace persistence
                     bucket = pipeline.getEmptyBuffer();
                     });
 
-                ImportStats stats{};
+                SingleGameLevelImportStats stats{};
                 auto [begin, end, nextIds] = block;
 
                 for (; begin != end; ++begin)
@@ -1584,7 +1588,7 @@ namespace persistence
             };
 
             // Schedule the work
-            std::vector<std::future<ImportStats>> futureStats;
+            std::vector<std::future<SingleGameLevelImportStats>> futureStats;
             futureStats.reserve(blocks.size());
             for (int i = 1; i < blocks.size(); ++i)
             {
@@ -1596,7 +1600,7 @@ namespace persistence
                 futureStats.emplace_back(std::async(std::launch::async, work, block));
             }
 
-            ImportStats totalStats{};
+            SingleGameLevelImportStats totalStats{};
             // and wait for completion, gather stats.
             // One worker is run in the main thread.
             if (!blocks.empty())
@@ -1609,7 +1613,7 @@ namespace persistence
                 totalStats += f.get();
             }
 
-            return totalStats;
+            return ImportStats(totalStats, level);
         }
 
         // this is nontrivial to do in the constructor initializer list

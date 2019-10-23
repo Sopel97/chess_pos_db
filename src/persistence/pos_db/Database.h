@@ -2,6 +2,10 @@
 
 #include "Query.h"
 
+#include "chess/GameClassification.h"
+
+#include "data_structure/EnumMap.h"
+
 #include <execution>
 #include <filesystem>
 #include <functional>
@@ -11,13 +15,44 @@
 
 namespace persistence
 {
-    struct ImportStats
+    struct SingleGameLevelImportStats
     {
         std::size_t numGames = 0;
         std::size_t numSkippedGames = 0; // We skip games with an unknown result.
         std::size_t numPositions = 0;
 
+        SingleGameLevelImportStats& operator+=(const SingleGameLevelImportStats& rhs);
+    };
+
+    struct ImportStats
+    {
+        EnumMap<GameLevel, SingleGameLevelImportStats> statsByLevel;
+
+        ImportStats() = default;
+        ImportStats(SingleGameLevelImportStats stats, GameLevel level);
+
+        [[nodiscard]] std::size_t totalNumGames() const;
+        [[nodiscard]] std::size_t totalNumSkippedGames() const;
+        [[nodiscard]] std::size_t totalNumPositions() const;
+
+        void add(SingleGameLevelImportStats stats, GameLevel level);
+
         ImportStats& operator+=(const ImportStats& rhs);
+    };
+
+    struct SingleGameLevelDatabaseStats
+    {
+        std::size_t numGames = 0;
+        std::size_t numPositions = 0;
+
+        SingleGameLevelDatabaseStats& operator+=(const SingleGameLevelImportStats& rhs);
+    };
+
+    struct DatabaseStats
+    {
+        EnumMap<GameLevel, SingleGameLevelDatabaseStats> statsByLevel;
+
+        DatabaseStats& operator+=(const ImportStats& rhs);
     };
 
     using ImportablePgnFilePath = std::filesystem::path;
@@ -82,6 +117,8 @@ namespace persistence
         using ImportProgressCallback = std::function<void(const ImportProgressReport&)>;
         using MergeProgressCallback = std::function<void(const MergeProgressReport&)>;
 
+        Database(const std::filesystem::path& dirPath);
+
         [[nodiscard]] static std::filesystem::path manifestPath(const std::filesystem::path& dirPath);
 
         [[nodiscard]] static std::optional<std::string> tryReadKey(const std::filesystem::path& dirPath);
@@ -89,6 +126,8 @@ namespace persistence
         [[nodiscard]] virtual const DatabaseManifest& manifest() const = 0;
 
         virtual const std::filesystem::path & path() const = 0;
+
+        const DatabaseStats& stats() const;
 
         [[nodiscard]] virtual query::Response executeQuery(query::Request query) = 0;
 
@@ -121,14 +160,28 @@ namespace persistence
 
         virtual void clear() = 0;
 
-        [[nodiscard]] ManifestValidationResult createOrValidateManifest() const;
-
-        void initializeManifest() const;
-
         virtual ~Database();
+
+    protected:
+        void addStats(ImportStats stats);
 
     private:
         static const inline std::filesystem::path m_manifestFilename = "manifest";
+        static const inline std::filesystem::path m_statsFilename = "stats";
+
+        [[nodiscard]] static std::filesystem::path statsPath(const std::filesystem::path& dirPath);
+
+        [[nodiscard]] std::filesystem::path statsPath() const;
+
+        std::filesystem::path m_baseDirPath;
+        DatabaseStats m_stats;
+
+        void loadStats();
+        void saveStats();
+
+        [[nodiscard]] ManifestValidationResult createOrValidateManifest() const;
+
+        void initializeManifest() const;
 
         void createManifest() const;
 

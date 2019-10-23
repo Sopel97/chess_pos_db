@@ -12,11 +12,79 @@
 
 namespace persistence
 {
-    ImportStats& ImportStats::operator+=(const ImportStats& rhs)
+    SingleGameLevelImportStats& SingleGameLevelImportStats::operator+=(const SingleGameLevelImportStats& rhs)
     {
         numGames += rhs.numGames;
         numSkippedGames += rhs.numSkippedGames;
         numPositions += rhs.numPositions;
+
+        return *this;
+    }
+
+    ImportStats& ImportStats::operator+=(const ImportStats& rhs)
+    {
+        for (GameLevel level : values<GameLevel>())
+        {
+            statsByLevel[level] += rhs.statsByLevel[level];
+        }
+
+        return *this;
+    }
+
+    ImportStats::ImportStats(SingleGameLevelImportStats stats, GameLevel level)
+    {
+        statsByLevel[level] = stats;
+    }
+
+    [[nodiscard]] std::size_t ImportStats::totalNumGames() const
+    {
+        std::size_t total = 0;
+        for (GameLevel level : values<GameLevel>())
+        {
+            total += statsByLevel[level].numGames;
+        }
+        return total;
+    }
+
+    [[nodiscard]] std::size_t ImportStats::totalNumSkippedGames() const
+    {
+        std::size_t total = 0;
+        for (GameLevel level : values<GameLevel>())
+        {
+            total += statsByLevel[level].numSkippedGames;
+        }
+        return total;
+    }
+
+    [[nodiscard]] std::size_t ImportStats::totalNumPositions() const
+    {
+        std::size_t total = 0;
+        for (GameLevel level : values<GameLevel>())
+        {
+            total += statsByLevel[level].numPositions;
+        }
+        return total;
+    }
+
+    void ImportStats::add(SingleGameLevelImportStats stats, GameLevel level)
+    {
+        statsByLevel[level] += stats;
+    }
+
+    SingleGameLevelDatabaseStats& SingleGameLevelDatabaseStats::operator+=(const SingleGameLevelImportStats& rhs)
+    {
+        numGames += rhs.numGames;
+        numPositions += rhs.numPositions;
+        
+        return *this;
+    }
+
+    DatabaseStats& DatabaseStats::operator+=(const ImportStats& rhs)
+    {
+        for (GameLevel level : values<GameLevel>())
+        {
+            statsByLevel[level] += rhs.statsByLevel[level];
+        }
 
         return *this;
     }
@@ -40,6 +108,13 @@ namespace persistence
     [[nodiscard]] GameLevel ImportablePgnFile::level() const
     {
         return m_level;
+    }
+
+    Database::Database(const std::filesystem::path& dirPath) :
+        m_baseDirPath(dirPath)
+    {
+        initializeManifest();
+        loadStats();
     }
 
     [[nodiscard]] std::filesystem::path Database::manifestPath(const std::filesystem::path& dirPath)
@@ -66,9 +141,15 @@ namespace persistence
         return key;
     }
 
+    const DatabaseStats& Database::stats() const
+    {
+        return m_stats;
+    }
+
     void Database::replicateMergeAll(const std::filesystem::path& path, Database::MergeProgressCallback)
     {
-        std::filesystem::copy_file(manifestPath(this->path()), manifestPath(path));
+        std::filesystem::copy_file(manifestPath(m_baseDirPath), manifestPath(path));
+        std::filesystem::copy_file(statsPath(m_baseDirPath), statsPath(path));
     }
 
     [[nodiscard]] ManifestValidationResult Database::createOrValidateManifest() const
@@ -99,6 +180,38 @@ namespace persistence
     }
 
     Database::~Database() {};
+
+    void Database::addStats(ImportStats stats)
+    {
+        m_stats += stats;
+    }
+
+    void Database::loadStats()
+    {
+        std::ifstream file(statsPath());
+        if (file.is_open())
+        {
+            for (GameLevel level : values<GameLevel>())
+            {
+                file >> m_stats.statsByLevel[level].numGames;
+                file >> m_stats.statsByLevel[level].numPositions;
+            }
+        }
+        else
+        {
+            saveStats();
+        }
+    }
+
+    void Database::saveStats()
+    {
+        std::ofstream file(statsPath(), std::ios_base::out | std::ios_base::trunc);
+        for (GameLevel level : values<GameLevel>())
+        {
+            file << m_stats.statsByLevel[level].numGames;
+            file << m_stats.statsByLevel[level].numPositions;
+        }
+    }
     
     void Database::createManifest() const
     {
@@ -171,9 +284,19 @@ namespace persistence
         }
     }
 
+    [[nodiscard]] std::filesystem::path Database::statsPath(const std::filesystem::path& dirPath)
+    {
+        return dirPath / m_statsFilename;
+    }
+
+    [[nodiscard]] std::filesystem::path Database::statsPath() const
+    {
+        return statsPath(m_baseDirPath);
+    }
+
     [[nodiscard]] std::filesystem::path Database::manifestPath() const
     {
-        return this->path() / m_manifestFilename;
+        return m_baseDirPath / m_manifestFilename;
     }
 
     void Database::writeManifest(const std::vector<std::byte>& data) const

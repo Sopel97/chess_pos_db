@@ -928,23 +928,21 @@ namespace persistence
         const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
+            BaseType(path),
             m_path(path),
             m_headers(makeHeaders(path)),
             m_nextGameIdx(numGamesInHeaders()),
             m_partition(path / partitionDirectory)
         {
-            // This calls virtual functions but it's fine
-            // because this class is final.
-            BaseType::initializeManifest();
         }
 
         Database::Database(std::filesystem::path path, std::size_t headerBufferMemory) :
+            BaseType(path),
             m_path(path),
             m_headers(makeHeaders(path, headerBufferMemory)),
             m_nextGameIdx(numGamesInHeaders()),
             m_partition(path / partitionDirectory)
         {
-            BaseType::initializeManifest();
         }
 
         [[nodiscard]] const std::string& Database::key()
@@ -1100,6 +1098,8 @@ namespace persistence
 
             flush();
 
+            BaseType::addStats(stats);
+
             return stats;
         }
 
@@ -1173,7 +1173,9 @@ namespace persistence
 
             Logger::instance().logInfo(": Completed.");
 
-            Logger::instance().logInfo(": Imported ", statsTotal.numGames, " games with ", statsTotal.numPositions, " positions. Skipped ", statsTotal.numSkippedGames, " games.");
+            Logger::instance().logInfo(": Imported ", statsTotal.totalNumGames(), " games with ", statsTotal.totalNumPositions(), " positions. Skipped ", statsTotal.totalNumSkippedGames(), " games.");
+
+            BaseType::addStats(statsTotal);
 
             return statsTotal;
         }
@@ -1355,7 +1357,7 @@ namespace persistence
                     const std::optional<GameResult> result = game.result();
                     if (!result.has_value())
                     {
-                        stats.numSkippedGames += 1;
+                        stats.statsByLevel[level].numSkippedGames += 1;
                         continue;
                     }
 
@@ -1396,8 +1398,8 @@ namespace persistence
                     ASSERT(gameOffset == actualGameOffset);
                     (void)actualGameOffset;
 
-                    stats.numGames += 1;
-                    stats.numPositions += numPositionsInGame;
+                    stats.statsByLevel[level].numGames += 1;
+                    stats.statsByLevel[level].numPositions += numPositionsInGame;
                 }
 
                 completionCallback(path);
@@ -1519,7 +1521,7 @@ namespace persistence
                         const std::optional<GameResult> result = game.result();
                         if (!result.has_value())
                         {
-                            stats.numSkippedGames += 1;
+                            stats.statsByLevel[level].numSkippedGames += 1;
                             continue;
                         }
 
@@ -1560,8 +1562,8 @@ namespace persistence
 
                         ASSERT(numPositionsInGame > 0);
 
-                        stats.numGames += 1;
-                        stats.numPositions += numPositionsInGame;
+                        stats.statsByLevel[level].numGames += 1;
+                        stats.statsByLevel[level].numPositions += numPositionsInGame;
                     }
                 }
 

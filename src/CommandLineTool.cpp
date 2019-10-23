@@ -404,9 +404,9 @@ namespace command_line_app
     static nlohmann::json statsToJson(persistence::ImportStats stats)
     {
         return nlohmann::json{
-            { "num_games", stats.numGames },
-            { "num_positions", stats.numPositions },
-            { "num_skipped_games", stats.numSkippedGames }
+            { "num_games", stats.totalNumGames() },
+            { "num_positions", stats.totalNumPositions() },
+            { "num_skipped_games", stats.totalNumSkippedGames() }
         };
     }
 
@@ -659,7 +659,6 @@ namespace command_line_app
             { "query", handleTcpCommandQuery }
         };
 
-        std::cout << len << ' ' << std::strlen(data) << '\n';
         auto datastr = std::string(data, len);
         Logger::instance().logInfo("Received data: ", datastr);
 
