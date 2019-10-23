@@ -928,7 +928,7 @@ namespace persistence
         const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
-            BaseType(path),
+            BaseType(path, Database::manifest()),
             m_path(path),
             m_headers(makeHeaders(path)),
             m_nextGameIdx(numGamesInHeaders()),
@@ -937,7 +937,7 @@ namespace persistence
         }
 
         Database::Database(std::filesystem::path path, std::size_t headerBufferMemory) :
-            BaseType(path),
+            BaseType(path, Database::manifest()),
             m_path(path),
             m_headers(makeHeaders(path, headerBufferMemory)),
             m_nextGameIdx(numGamesInHeaders()),

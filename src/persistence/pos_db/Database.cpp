@@ -110,8 +110,9 @@ namespace persistence
         return m_level;
     }
 
-    Database::Database(const std::filesystem::path& dirPath) :
-        m_baseDirPath(dirPath)
+    Database::Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel) :
+        m_baseDirPath(dirPath),
+        m_manifestModel(manifestModel)
     {
         initializeManifest();
         loadStats();
@@ -215,7 +216,7 @@ namespace persistence
     
     void Database::createManifest() const
     {
-        const auto& manifestData = this->manifest();
+        const auto& manifestData = m_manifestModel;
 
         std::vector<std::byte> data;
         const std::size_t keyLength = manifestData.key.size();
@@ -244,7 +245,7 @@ namespace persistence
 
     [[nodiscard]] ManifestValidationResult Database::validateManifest() const
     {
-        const auto& dbManifestData = this->manifest();
+        const auto& dbManifestData = m_manifestModel;
 
         const auto& manifestData = readManifest();
         if (manifestData.size() == 0) return ManifestValidationResult::InvalidManifest;

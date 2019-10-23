@@ -117,7 +117,7 @@ namespace persistence
         using ImportProgressCallback = std::function<void(const ImportProgressReport&)>;
         using MergeProgressCallback = std::function<void(const MergeProgressReport&)>;
 
-        Database(const std::filesystem::path& dirPath);
+        Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel);
 
         [[nodiscard]] static std::filesystem::path manifestPath(const std::filesystem::path& dirPath);
 
@@ -175,6 +175,7 @@ namespace persistence
 
         std::filesystem::path m_baseDirPath;
         DatabaseStats m_stats;
+        DatabaseManifest m_manifestModel;
 
         void loadStats();
         void saveStats();
