@@ -209,8 +209,8 @@ namespace persistence
         std::ofstream file(statsPath(), std::ios_base::out | std::ios_base::trunc);
         for (GameLevel level : values<GameLevel>())
         {
-            file << m_stats.statsByLevel[level].numGames;
-            file << m_stats.statsByLevel[level].numPositions;
+            file << m_stats.statsByLevel[level].numGames << ' ';
+            file << m_stats.statsByLevel[level].numPositions << ' ';
         }
     }
     
