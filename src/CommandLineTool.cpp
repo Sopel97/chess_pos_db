@@ -644,6 +644,36 @@ namespace command_line_app
         session->send(packet);
     }
 
+    static void handleTcpCommandStats(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        assertDatabaseOpen(db);
+
+        auto stats = db->stats();
+
+        auto response = nlohmann::json{
+            { "human", nlohmann::json{
+                { "num_games", stats.statsByLevel[GameLevel::Human].numGames },
+                { "num_positions", stats.statsByLevel[GameLevel::Server].numPositions }
+            }},
+            { "engine", nlohmann::json{
+                { "num_games", stats.statsByLevel[GameLevel::Engine].numGames },
+                { "num_positions", stats.statsByLevel[GameLevel::Engine].numPositions }
+            }},
+            { "server", nlohmann::json{
+                { "num_games", stats.statsByLevel[GameLevel::Server].numGames },
+                { "num_positions", stats.statsByLevel[GameLevel::Server].numPositions }
+            }},
+        };
+
+        auto responseStr = nlohmann::json(response).dump();
+        auto packet = TcpConnection::makePacket(responseStr.c_str(), responseStr.size());
+        session->send(packet);
+    }
+
     static bool handleTcpCommand(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
@@ -656,7 +686,8 @@ namespace command_line_app
             { "merge", handleTcpCommandMerge },
             { "open", handleTcpCommandOpen },
             { "close", handleTcpCommandClose },
-            { "query", handleTcpCommandQuery }
+            { "query", handleTcpCommandQuery },
+            { "stats", handleTcpCommandStats }
         };
 
         auto datastr = std::string(data, len);
