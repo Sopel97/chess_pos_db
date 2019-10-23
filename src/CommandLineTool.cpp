@@ -466,18 +466,23 @@ namespace command_line_app
 
         if (doMerge)
         {
-            auto db = instantiateDatabase(key, temp);
-
             {
-                auto callback = makeImportProgressReportHandler(session, doReportProgress);
-                auto stats = db->import(pgns, importMemory, callback);
-                sendProgressFinished(session, "import", statsToJson(stats));
+                auto db = instantiateDatabase(key, temp);
+
+                {
+                    auto callback = makeImportProgressReportHandler(session, doReportProgress);
+                    auto stats = db->import(pgns, importMemory, callback);
+                    sendProgressFinished(session, "import", statsToJson(stats));
+                }
+
+                {
+                    auto callback = makeMergeProgressReportHandler(session, doReportProgress);
+                    db->replicateMergeAll(destination, callback);
+                }
             }
 
-            {
-                auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                db->replicateMergeAll(destination, callback);
-            }
+            std::filesystem::remove_all(temp);
+            std::filesystem::create_directory(temp);
         }
         else
         {
@@ -487,8 +492,6 @@ namespace command_line_app
             auto stats = db->import(pgns, importMemory, callback);
             sendProgressFinished(session, "import", statsToJson(stats));
         }
-
-        std::filesystem::remove_all(temp);
 
         // We have to always sent some info that we finished
         sendProgressFinished(session, "create");
