@@ -657,7 +657,7 @@ namespace command_line_app
         auto response = nlohmann::json{
             { "human", nlohmann::json{
                 { "num_games", stats.statsByLevel[GameLevel::Human].numGames },
-                { "num_positions", stats.statsByLevel[GameLevel::Server].numPositions }
+                { "num_positions", stats.statsByLevel[GameLevel::Human].numPositions }
             }},
             { "engine", nlohmann::json{
                 { "num_games", stats.statsByLevel[GameLevel::Engine].numGames },

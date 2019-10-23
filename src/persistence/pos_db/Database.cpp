@@ -185,6 +185,7 @@ namespace persistence
     void Database::addStats(ImportStats stats)
     {
         m_stats += stats;
+        saveStats();
     }
 
     void Database::loadStats()
