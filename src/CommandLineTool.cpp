@@ -310,6 +310,59 @@ namespace command_line_app
         session->send(message.c_str(), message.size());
     }
 
+    struct MessageReceiver
+    {
+        std::vector<std::string> onDataReceived(const char* buffer, std::size_t len)
+        {
+            constexpr std::uint32_t maxLength = 4 * 1024 * 1024;
+
+            std::vector<std::string> messages;
+
+            while (len != 0)
+            {
+                if (m_length == 0)
+                {
+                    if (len < 8)
+                    {
+                        throw Exception("Length did not arrive in one packet");
+                    }
+
+                    m_length = receiveLength(buffer);
+                    if (m_length > maxLength)
+                    {
+                        throw Exception("Message too long");
+                    }
+
+                    m_message = "";
+
+                    len -= 8;
+                    buffer += 8;
+                }
+                else
+                {
+                    const std::size_t toRead = std::min(len, m_length);
+                    m_message.append(buffer, toRead);
+                    m_length -= toRead;
+
+                    if (m_length == 0)
+                    {
+                        messages.emplace_back(std::move(m_message));
+                        m_message.clear();
+                    }
+
+                    len -= toRead;
+                    buffer += len;
+                }
+            }
+
+            return messages;
+        }
+
+    private:
+        std::string m_message;
+        std::size_t m_length;
+    };
+
     static void handleTcpRequest(
         persistence::Database& db,
         const TcpConnection::Ptr& session,
@@ -368,45 +421,28 @@ namespace command_line_app
                 Logger::instance().logInfo("TCP connection from ", session->getIP());
 
                 session->setDataCallback(
-                    [&mutex, &anyOperations, &operations, &db, session, length = std::size_t(0), message = std::string("")]
-                    (const char* buffer, size_t len) mutable {
-                        constexpr std::uint32_t maxLength = 4 * 1024 * 1024;
-
-                        if (length == 0)
+                    [&mutex, &anyOperations, &operations, &db, session, messageReceiver = MessageReceiver()]
+                (const char* buffer, size_t len) mutable {
+                    try
+                    {
+                        auto messages = messageReceiver.onDataReceived(buffer, len);
+                        for (auto&& message : messages)
                         {
-                            if (len < 8)
-                            {
-                                sendMessage(session, "{\"error\":\"Message length was not received in one packet.\"");
-                                return len;
-                            }
-
-                            length = receiveLength(buffer);
-                            if (length > maxLength)
-                            {
-                                sendMessage(session, "{\"error\":\"Message is too long.\"");
-                                return len;
-                            }
-
-                            message = "";
-
-                            return std::size_t(8);
+                            std::unique_lock lock(mutex);
+                            operations.emplace(Operation{ session, std::move(message) });
                         }
-                        else
+                        if (!messages.empty())
                         {
-                            const std::size_t toRead = std::min(len, length);
-                            message.append(buffer, toRead);
-                            length -= toRead;
-
-                            if (length == 0)
-                            {
-                                std::unique_lock lock(mutex);
-                                operations.push(Operation{ session, message });
-                                anyOperations.notify_one();
-                            }
-
-                            return toRead;
+                            anyOperations.notify_one();
                         }
-                    });
+                    }
+                    catch (Exception& ex)
+                    {
+                        sendMessage(session, std::string("{\"error\":\"") + ex.what() + "\"");
+                    }
+
+                    return len;
+                });
 
                 session->setDisConnectCallback([](const TcpConnection::Ptr& session) {
                 });
@@ -762,15 +798,20 @@ namespace command_line_app
 
             return false;
         }
+        catch (std::runtime_error& ex)
+        {
+            Logger::instance().logError("Error while trying to perform request");
+
+            auto errorJson = nlohmann::json::object({ {"error", ex.what() } }).dump();
+            sendMessage(session, errorJson);
+        }
         catch (...)
         {
-            Logger::instance().logInfo("Error parsing request");
+            Logger::instance().logError("Unknown error");
+
+            auto errorJson = nlohmann::json::object({ {"error", "Unknown error" } }).dump();
+            sendMessage(session, errorJson);
         }
-
-        Logger::instance().logInfo("Invalid request");
-
-        auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump();
-        sendMessage(session, errorJson);
 
         return false;
     }
@@ -800,44 +841,27 @@ namespace command_line_app
                 Logger::instance().logInfo("TCP connection from ", session->getIP());
 
                 session->setDataCallback(
-                    [&mutex, &anyOperations, &operations, &db, session, length = std::size_t(0), message = std::string("")]
+                    [&mutex, &anyOperations, &operations, &db, session, messageReceiver = MessageReceiver()]
                     (const char* buffer, size_t len) mutable {
-                        constexpr std::uint32_t maxLength = 4 * 1024 * 1024;
-
-                        if (length == 0)
+                        try
                         {
-                            if (len < 8)
-                            {
-                                sendMessage(session, "{\"error\":\"Message length was not received in one packet.\"");
-                                return len;
-                            }
-
-                            length = receiveLength(buffer);
-                            if (length > maxLength)
-                            {
-                                sendMessage(session, "{\"error\":\"Message is too long.\"");
-                                return len;
-                            }
-
-                            message = "";
-
-                            return std::size_t(8);
-                        }
-                        else
-                        {
-                            const std::size_t toRead = std::min(len, length);
-                            message.append(buffer, toRead);
-                            length -= toRead;
-
-                            if (length == 0)
+                            auto messages = messageReceiver.onDataReceived(buffer, len);
+                            for (auto&& message : messages)
                             {
                                 std::unique_lock lock(mutex);
-                                operations.push(Operation{ session, message });
+                                operations.emplace(Operation{ session, std::move(message) });
+                            }
+                            if (!messages.empty())
+                            {
                                 anyOperations.notify_one();
                             }
-
-                            return toRead;
                         }
+                        catch (Exception& ex)
+                        {
+                            sendMessage(session, std::string("{\"error\":\"") + ex.what() + "\"");
+                        }
+
+                        return len;
                     });
 
                 session->setDisConnectCallback([](const TcpConnection::Ptr& session) {

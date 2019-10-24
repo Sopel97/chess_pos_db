@@ -129,7 +129,7 @@ private:
     Logger() :
         m_isEnabled(true),
         m_minLevel(Info),
-        m_stream(&std::cout)
+        m_stream(&std::cerr)
     {
         setOutputFile("log.txt");
     }
