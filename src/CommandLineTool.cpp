@@ -258,6 +258,58 @@ namespace command_line_app
         }
     }
 
+    static std::uint32_t receiveLength(const char* str)
+    {
+        constexpr std::uint32_t xorValue = 3173045653u;
+
+        std::uint32_t size = 0;
+        std::uint32_t xoredSize = 0;
+
+        size += static_cast<std::uint32_t>(static_cast<unsigned char>(str[3])); size *= 256;
+        size += static_cast<std::uint32_t>(static_cast<unsigned char>(str[2])); size *= 256;
+        size += static_cast<std::uint32_t>(static_cast<unsigned char>(str[1])); size *= 256;
+        size += static_cast<std::uint32_t>(static_cast<unsigned char>(str[0]));
+
+        xoredSize += static_cast<std::uint32_t>(static_cast<unsigned char>(str[7])); xoredSize *= 256;
+        xoredSize += static_cast<std::uint32_t>(static_cast<unsigned char>(str[6])); xoredSize *= 256;
+        xoredSize += static_cast<std::uint32_t>(static_cast<unsigned char>(str[5])); xoredSize *= 256;
+        xoredSize += static_cast<std::uint32_t>(static_cast<unsigned char>(str[4]));
+        xoredSize ^= xorValue;
+
+        if (size != xoredSize)
+        {
+            return 0;
+        }
+        return size;
+    }
+
+    // 4 bytes of size S in little endian
+    // 4 bytes of size S xored with 3173045653u (for verification)
+    // then S bytes
+    static void sendMessage(
+        const TcpConnection::Ptr& session,
+        std::string message
+    )
+    {
+        constexpr std::uint32_t xorValue = 3173045653u;
+
+        std::uint32_t size = static_cast<std::uint32_t>(message.size());
+        std::uint32_t xoredSize = size ^ xorValue;
+
+        std::string sizeStr;
+        sizeStr += static_cast<char>(size % 256); size /= 256;
+        sizeStr += static_cast<char>(size % 256); size /= 256;
+        sizeStr += static_cast<char>(size % 256); size /= 256;
+        sizeStr += static_cast<char>(size);
+
+        sizeStr += static_cast<char>(xoredSize % 256); xoredSize /= 256;
+        sizeStr += static_cast<char>(xoredSize % 256); xoredSize /= 256;
+        sizeStr += static_cast<char>(xoredSize % 256); xoredSize /= 256;
+        sizeStr += static_cast<char>(xoredSize);
+        session->send(sizeStr.c_str(), sizeStr.size());
+        session->send(message.c_str(), message.size());
+    }
+
     static void handleTcpRequest(
         persistence::Database& db,
         const TcpConnection::Ptr& session,
@@ -265,7 +317,6 @@ namespace command_line_app
         std::size_t len
     )
     {
-        std::cout << len << ' ' << std::strlen(data) << '\n';
         auto datastr = std::string(data, len);
         Logger::instance().logInfo("Received data: ", datastr);
 
@@ -276,7 +327,7 @@ namespace command_line_app
             if (request.isValid())
             {
                 auto response = nlohmann::json(db.executeQuery(request)).dump();
-                session->send(response.c_str(), response.size());
+                sendMessage(session, response);
                 Logger::instance().logInfo("Handled valid request. Response size: ", response.size());
                 return;
             }
@@ -289,25 +340,73 @@ namespace command_line_app
         Logger::instance().logInfo("Invalid request");
 
         auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump();
-        auto packet = TcpConnection::makePacket(errorJson.c_str(), errorJson.size());
-        session->send(packet);
+        sendMessage(session, std::move(errorJson));
     }
 
     static void tcpImpl(const std::filesystem::path& path, std::uint16_t port)
     {
+        struct Operation
+        {
+            TcpConnection::Ptr session;
+            std::string data;
+        };
+
+        // TODO: Make it so only one connection is allowed.
+        //       Or better, have one db per session
+
+        std::queue<Operation> operations;
+        std::condition_variable anyOperations;
+        std::mutex mutex;
+
         auto db = loadDatabase(path);
 
         auto server = TcpService::Create();
         auto listenThread = ListenThread::Create(false, "127.0.0.1", port, [&](TcpSocket::Ptr socket) {
             socket->setNodelay();
 
-            auto enterCallback = [&db](const TcpConnection::Ptr& session) {
+            auto enterCallback = [&mutex, &anyOperations, &operations, &db](const TcpConnection::Ptr& session) {
                 Logger::instance().logInfo("TCP connection from ", session->getIP());
 
-                session->setDataCallback([&db, session](const char* buffer, size_t len) {
-                    handleTcpRequest(*db, session, buffer, len);
-                    return len;
-                });
+                session->setDataCallback(
+                    [&mutex, &anyOperations, &operations, &db, session, length = std::size_t(0), message = std::string("")]
+                    (const char* buffer, size_t len) mutable {
+                        constexpr std::uint32_t maxLength = 4 * 1024 * 1024;
+
+                        if (length == 0)
+                        {
+                            if (len < 8)
+                            {
+                                sendMessage(session, "{\"error\":\"Message length was not received in one packet.\"");
+                                return len;
+                            }
+
+                            length = receiveLength(buffer);
+                            if (length > maxLength)
+                            {
+                                sendMessage(session, "{\"error\":\"Message is too long.\"");
+                                return len;
+                            }
+
+                            message = "";
+
+                            return std::size_t(8);
+                        }
+                        else
+                        {
+                            const std::size_t toRead = std::min(len, length);
+                            message.append(buffer, toRead);
+                            length -= toRead;
+
+                            if (length == 0)
+                            {
+                                std::unique_lock lock(mutex);
+                                operations.push(Operation{ session, message });
+                                anyOperations.notify_one();
+                            }
+
+                            return toRead;
+                        }
+                    });
 
                 session->setDisConnectCallback([](const TcpConnection::Ptr& session) {
                 });
@@ -323,58 +422,20 @@ namespace command_line_app
 
         EventLoop mainloop;
 
-        /*
-        auto client = TcpService::Create();
-        client->startWorkerThread(1);
+        std::thread workerThread([&]() {
+            for (;;)
+            {
+                std::unique_lock lock(mutex);
+                anyOperations.wait(lock, [&operations]() {return !operations.empty(); });
 
-        auto connector = AsyncConnector::Create();
-        connector->startWorkerThread();
+                auto operation = std::move(operations.front());
+                operations.pop();
 
-        auto enterCallback = [client](TcpSocket::Ptr socket) {
-            socket->setNodelay();
+                lock.unlock();
 
-            auto enterCallback = [](const TcpConnection::Ptr& session) {
-                session->setDataCallback([session](const char* buffer, size_t len) {
-                    std::cerr << std::string(buffer, len) << '\n';
-                    return len;
-                    });
-
-                query::Request query;
-                query.token = "toktok";
-                query.positions = { { "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", std::nullopt } };
-                query.fetchingOptions[query::Select::Continuations].fetchFirstGame = true;
-                query.fetchingOptions[query::Select::Continuations].fetchLastGame = false;
-                query.fetchingOptions[query::Select::Continuations].fetchFirstGameForEachChild = true;
-                query.fetchingOptions[query::Select::Continuations].fetchLastGameForEachChild = false;
-                query.fetchingOptions[query::Select::Continuations].fetchChildren = true;
-                query.fetchingOptions[query::Select::Transpositions].fetchFirstGame = true;
-                query.fetchingOptions[query::Select::Transpositions].fetchLastGame = false;
-                query.fetchingOptions[query::Select::Transpositions].fetchFirstGameForEachChild = true;
-                query.fetchingOptions[query::Select::Transpositions].fetchLastGameForEachChild = false;
-                query.fetchingOptions[query::Select::Transpositions].fetchChildren = true;
-                query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
-                query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
-
-                auto queryjson = nlohmann::json(query).dump();
-                session->send(queryjson.c_str(), queryjson.size());
-            };
-
-            client->addTcpConnection(std::move(socket),
-                brynet::net::TcpService::AddSocketOption::AddEnterCallback(enterCallback),
-                brynet::net::TcpService::AddSocketOption::WithMaxRecvBufferSize(1024 * 1024));
-        };
-
-        auto failedCallback = []() {
-            std::cout << "connect failed" << std::endl;
-        };
-
-        connector->asyncConnect({
-            AsyncConnector::ConnectOptions::WithAddr("127.0.0.1", port),
-            AsyncConnector::ConnectOptions::WithTimeout(std::chrono::seconds(10)),
-            AsyncConnector::ConnectOptions::WithCompletedCallback(enterCallback),
-            AsyncConnector::ConnectOptions::WithFailedCallback(failedCallback) 
+                handleTcpRequest(*db, operation.session, operation.data.c_str(), operation.data.size());
+            }
         });
-        */
 
         for (;;)
         {
@@ -397,8 +458,7 @@ namespace command_line_app
         finishedResponse.merge_patch(additionalData);
         std::string finisedResponseStr = finishedResponse.dump();
 
-        auto packet = TcpConnection::makePacket(finisedResponseStr.c_str(), finisedResponseStr.size());
-        session->send(packet);
+        sendMessage(session, std::move(finisedResponseStr));
     }
 
     static nlohmann::json statsToJson(persistence::ImportStats stats)
@@ -426,10 +486,8 @@ namespace command_line_app
             }
 
             auto reportStr = reportJson.dump();
-            auto packet = TcpConnection::makePacket(reportStr.c_str(), reportStr.size());
 
-            session->send(packet, []() {Logger::instance().logInfo("Actually sent..."); });
-            Logger::instance().logInfo("Sending...");
+            sendMessage(session, std::move(reportStr));
         };
     }
 
@@ -445,8 +503,7 @@ namespace command_line_app
             };
 
             auto reportStr = reportJson.dump();
-            auto packet = TcpConnection::makePacket(reportStr.c_str(), reportStr.size());
-            session->send(packet);
+            sendMessage(session, reportStr);
         };
     }
 
@@ -643,8 +700,7 @@ namespace command_line_app
         auto response = db->executeQuery(request);
         auto responseStr = nlohmann::json(response).dump();
 
-        auto packet = TcpConnection::makePacket(responseStr.c_str(), responseStr.size());
-        session->send(packet);
+        sendMessage(session, responseStr);
     }
 
     static void handleTcpCommandStats(
@@ -673,8 +729,7 @@ namespace command_line_app
         };
 
         auto responseStr = nlohmann::json(response).dump();
-        auto packet = TcpConnection::makePacket(responseStr.c_str(), responseStr.size());
-        session->send(packet);
+        sendMessage(session, responseStr);
     }
 
     static bool handleTcpCommand(
@@ -715,8 +770,7 @@ namespace command_line_app
         Logger::instance().logInfo("Invalid request");
 
         auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump();
-        auto packet = TcpConnection::makePacket(errorJson.c_str(), errorJson.size());
-        session->send(packet);
+        sendMessage(session, errorJson);
 
         return false;
     }
@@ -736,18 +790,54 @@ namespace command_line_app
 
         std::queue<Operation> operations;
         std::condition_variable anyOperations;
+        std::mutex mutex;
 
         auto server = TcpService::Create();
         auto listenThread = ListenThread::Create(false, "127.0.0.1", port, [&](TcpSocket::Ptr socket) {
             socket->setNodelay();
 
-            auto enterCallback = [&anyOperations, &operations, &db](const TcpConnection::Ptr& session) {
+            auto enterCallback = [&mutex, &anyOperations, &operations, &db](const TcpConnection::Ptr& session) {
                 Logger::instance().logInfo("TCP connection from ", session->getIP());
 
-                session->setDataCallback([&anyOperations, &operations, &db, session](const char* buffer, size_t len) {
-                    operations.push(Operation{ session, std::string(buffer, len) });
-                    anyOperations.notify_one();
-                    return len;
+                session->setDataCallback(
+                    [&mutex, &anyOperations, &operations, &db, session, length = std::size_t(0), message = std::string("")]
+                    (const char* buffer, size_t len) mutable {
+                        constexpr std::uint32_t maxLength = 4 * 1024 * 1024;
+
+                        if (length == 0)
+                        {
+                            if (len < 8)
+                            {
+                                sendMessage(session, "{\"error\":\"Message length was not received in one packet.\"");
+                                return len;
+                            }
+
+                            length = receiveLength(buffer);
+                            if (length > maxLength)
+                            {
+                                sendMessage(session, "{\"error\":\"Message is too long.\"");
+                                return len;
+                            }
+
+                            message = "";
+
+                            return std::size_t(8);
+                        }
+                        else
+                        {
+                            const std::size_t toRead = std::min(len, length);
+                            message.append(buffer, toRead);
+                            length -= toRead;
+
+                            if (length == 0)
+                            {
+                                std::unique_lock lock(mutex);
+                                operations.push(Operation{ session, message });
+                                anyOperations.notify_one();
+                            }
+
+                            return toRead;
+                        }
                     });
 
                 session->setDisConnectCallback([](const TcpConnection::Ptr& session) {
@@ -764,7 +854,6 @@ namespace command_line_app
 
         EventLoop mainloop;
 
-        std::mutex mutex;
         for (;;)
         {
             std::unique_lock lock(mutex);
@@ -772,6 +861,9 @@ namespace command_line_app
 
             auto operation = std::move(operations.front());
             operations.pop();
+
+            lock.unlock();
+
             if (handleTcpCommand(db, operation.session, operation.data.c_str(), operation.data.size()))
             {
                 break;
