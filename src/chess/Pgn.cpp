@@ -783,12 +783,21 @@ namespace pgn
                 continue;
             }
 
+            /*
             const std::size_t tagEnd = m_bufferView.find(tagSectionEndSequence, tagStart);
             if (tagEnd == std::string::npos)
             {
                 refillBuffer();
                 continue;
             }
+            */
+            const char* tagEndC = std::strstr(m_bufferView.data() + tagStart, "\n\n");
+            if (tagEndC == nullptr)
+            {
+                refillBuffer();
+                continue;
+            }
+            const std::size_t tagEnd = tagEndC - m_bufferView.data();
 
             const std::size_t moveStart = m_bufferView.find_first_not_of('\n', tagEnd + tagSectionEndSequence.size());
             if (moveStart == std::string::npos)
@@ -797,12 +806,22 @@ namespace pgn
                 continue;
             }
 
+            /*
             const std::size_t moveEnd = m_bufferView.find(moveSectionEndSequence, moveStart);
             if (moveEnd == std::string::npos)
             {
                 refillBuffer();
                 continue;
             }
+            */
+            const char* moveEndC = std::strstr(m_bufferView.data() + moveStart, "\n\n");
+            if (moveEndC == nullptr)
+            {
+                refillBuffer();
+                continue;
+            }
+            const std::size_t moveEnd = moveEndC - m_bufferView.data();
+
 
             std::size_t nextGameStart = m_bufferView.find_first_not_of('\n', moveEnd + moveSectionEndSequence.size());
             if (nextGameStart == std::string::npos)

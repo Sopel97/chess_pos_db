@@ -258,6 +258,27 @@ void Position::set(const char* fen)
     return BaseType::isSquareAttacked(sq, attackerColor);
 }
 
+namespace detail::lookup
+{
+    static constexpr EnumMap<Square, CastlingRights> preservedCastlingRights = []() {
+        EnumMap<Square, CastlingRights> preservedCastlingRights{};
+        for (CastlingRights& rights : preservedCastlingRights)
+        {
+            rights = ~CastlingRights::None;
+        }
+
+        preservedCastlingRights[E1] = ~CastlingRights::White;
+        preservedCastlingRights[E8] = ~CastlingRights::Black;
+
+        preservedCastlingRights[H1] = ~CastlingRights::WhiteKingSide;
+        preservedCastlingRights[A1] = ~CastlingRights::WhiteQueenSide;
+        preservedCastlingRights[H8] = ~CastlingRights::BlackKingSide;
+        preservedCastlingRights[A8] = ~CastlingRights::BlackQueenSide;
+
+        return preservedCastlingRights;
+    }();
+}
+
 ReverseMove Position::doMove(const Move& move)
 {
     ASSERT(move.from.isOk() && move.to.isOk());
@@ -265,11 +286,10 @@ ReverseMove Position::doMove(const Move& move)
     const PieceType movedPiece = pieceAt(move.from).type();
     const Square oldEpSquare = m_epSquare;
     const CastlingRights oldCastlingRights = m_castlingRights;
+    m_castlingRights &= detail::lookup::preservedCastlingRights[move.from];
 
     m_epSquare = Square::none();
-    switch (movedPiece)
-    {
-    case PieceType::Pawn:
+    if(movedPiece == PieceType::Pawn)
     {
         const int d = move.to.rank() - move.from.rank();
         if (d == -2 || d == 2)
@@ -283,24 +303,6 @@ ReverseMove Position::doMove(const Move& move)
                 m_epSquare = potentialEpSquare;
             }
         }
-        break;
-    }
-    case PieceType::King:
-    {
-        if (move.from == E1) m_castlingRights &= ~CastlingRights::White;
-        else if (move.from == E8) m_castlingRights &= ~CastlingRights::Black;
-        break;
-    }
-    case PieceType::Rook:
-    {
-        if (move.from == H1) m_castlingRights &= ~CastlingRights::WhiteKingSide;
-        else if (move.from == A1) m_castlingRights &= ~CastlingRights::WhiteQueenSide;
-        else if (move.from == H8) m_castlingRights &= ~CastlingRights::BlackKingSide;
-        else if (move.from == A8) m_castlingRights &= ~CastlingRights::BlackQueenSide;
-        break;
-    }
-    default:
-        break;
     }
 
     const Piece captured = BaseType::doMove(move);

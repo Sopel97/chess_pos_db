@@ -138,7 +138,7 @@
         }
     },
 
-    "app" : {
+    "console_app" : {
         /*
             Total memory used for buffers when importing PGN
             files into the database.
