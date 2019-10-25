@@ -761,6 +761,9 @@ namespace pgn
         return m_buffer.front() == '\0';
     }
 
+    static const std::string tagSectionEndSequence = "\n\n";
+    static const std::string moveSectionEndSequence = "\n\n";
+
     void LazyPgnFileReader::LazyPgnFileReaderIterator::moveToNextGame()
     {
         while (m_buffer.front() != '\0')
@@ -783,15 +786,7 @@ namespace pgn
                 continue;
             }
 
-            /*
-            const std::size_t tagEnd = m_bufferView.find(tagSectionEndSequence, tagStart);
-            if (tagEnd == std::string::npos)
-            {
-                refillBuffer();
-                continue;
-            }
-            */
-            const char* tagEndC = std::strstr(m_bufferView.data() + tagStart, "\n\n");
+            const char* tagEndC = std::strstr(m_bufferView.data() + tagStart, tagSectionEndSequence.c_str());
             if (tagEndC == nullptr)
             {
                 refillBuffer();
@@ -806,15 +801,7 @@ namespace pgn
                 continue;
             }
 
-            /*
-            const std::size_t moveEnd = m_bufferView.find(moveSectionEndSequence, moveStart);
-            if (moveEnd == std::string::npos)
-            {
-                refillBuffer();
-                continue;
-            }
-            */
-            const char* moveEndC = std::strstr(m_bufferView.data() + moveStart, "\n\n");
+            const char* moveEndC = std::strstr(m_bufferView.data() + moveStart, moveSectionEndSequence.c_str());
             if (moveEndC == nullptr)
             {
                 refillBuffer();

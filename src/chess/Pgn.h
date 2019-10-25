@@ -25,9 +25,6 @@ namespace pgn
         std::string_view value;
     };
 
-    constexpr std::string_view tagSectionEndSequence = "\n\n"sv;
-    constexpr std::string_view moveSectionEndSequence = "\n\n"sv;
-
     struct UnparsedGamePositions
     {
         struct UnparsedPositionsIterator
