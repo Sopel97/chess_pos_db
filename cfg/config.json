@@ -90,7 +90,7 @@
         "header_writer_memory" : "16MiB",
 
         /*
-            Options for the 'local' storage format.
+            Options for the 'alpha' storage format.
             It uses 20 bytes for each position.
             Database is split among 9 directories - each one
             is managed separately.
@@ -131,9 +131,25 @@
             "pgn_parser_memory" : "4MiB"
         },
 
+        /*
+            Options for the 'beta' storage format.
+            It uses 24 bytes for each distinct position.
+            It ends up using less space than alpha format
+            at around 1 billion total positions - but
+            that depends on the number of duplicates.
+            Whole database is stored in one partition.
+            The amound of disk seeks required for querying is
+            around 3 times smaller than for the alpha format.
+        */
         "db_beta" : {
+            /*
+                In this case we always read at least index_granularity entries
+                for a single query. 1024 is a good tradeoff between speed and space.
+            */
             "index_granularity" : 1024,
+
             "max_merge_buffer_size" : "1GiB",
+
             "pgn_parser_memory" : "4MiB"
         }
     },
@@ -152,8 +168,10 @@
             Higher values also result in the importer creating
             less but bigger files. This is benefial both for
             querying and merging performance.
-            For the 'local' format individual files have size
+            For the 'alpha' format individual files have size
             about 1/9 of pgn_import_memory.
+            For the 'beta' format individual files have size
+            about 1/6 of pgn_import_memory.
         */
         "pgn_import_memory" : "2GiB"
     }
