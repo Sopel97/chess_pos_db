@@ -1,0 +1,66 @@
+// In this file all possible fields are listed.
+// For similar fields the body was omitted.
+// Some of the are not always present.
+// Some of the are only present when requested.
+
+{
+    "query" : {
+        // The same token will be used in the response. Can be used for identification.
+        "token" : "...",
+
+        // The position is specified in one of two ways:
+        // 1. Just fen - in this case the position is simply specified fully by the fen
+        // 2. Fen + san - in this case the positions is the position that arises after per
+        //    forming the move encoded by the san on the position encoded by the fen.
+        "positions" : [
+            {
+                "fen" : "...",
+                "move" : "Nf3"
+            }
+        ],
+
+        // In theory targets could be specified per subquery, but it
+        // complicates the implementation and is of little use.
+        "levels" : ["human", "engine", "server"],
+        "results" : ["win", "loss", "draw"],
+
+        // Not all of the following can be present at once.
+        // Possible combinations are:
+        //  - "continuations"
+        //  - "transpositions"
+        //  - "continuations" and "transpositions"
+        //  - "all"
+
+        "continuations" : {
+            "fetch_children" : true,
+            "fetch_first_game" : true,
+            "fetch_last_game" : true,
+            "fetch_first_game_for_each_child" : true,
+            "fetch_last_game_for_each_child" : true
+        },
+
+        "transpositions" : {
+            "fetch_children" : true,
+            "fetch_first_game" : true,
+            "fetch_last_game" : true,
+            "fetch_first_game_for_each_child" : true,
+            "fetch_last_game_for_each_child" : true
+        },
+
+        // This one is here only because it's possible in some cases to
+        // do it in one query instead of two separate ones which are then coalesced.
+        // In particular implementing it requires that for both transpositions and
+        // continuations the settings are the same, so it doesn't make sense
+        // to allow specifying them separately here. If someone want to have
+        // different settings for continuations and transpositions but at the
+        // same time wants to have the results combined they have to
+        // do it themselves; it would require two subqueries anyway.
+        "all" : {
+            "fetch_children" : true,
+            "fetch_first_game" : true,
+            "fetch_last_game" : true,
+            "fetch_first_game_for_each_child" : true,
+            "fetch_last_game_for_each_child" : true
+        }
+    }
+}

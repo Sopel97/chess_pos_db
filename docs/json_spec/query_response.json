@@ -1,0 +1,113 @@
+// In this file all possible fields are listed.
+// For similar fields the body was omitted.
+// Some of the are not always present.
+// Some of the are only present when requested.
+
+// The structure is big, but it allows extracting maximum amount
+// of information by a single query. It is better to pack multiple
+// positions into a single query not only because of network latency
+// but also because larger queries can use more optimized disk access patterns.
+
+{
+    "response" : {
+        "query" : { /* the query returned may have some members changed if not every request could be fullfiled */ },
+        "results" : [
+            // Each queried fen has an entry in the array
+            {
+                "position" : {
+                    "fen" : "...",
+                    "move" : "Nf3"
+                },
+
+                // The result of the query for the fen
+                // continuations are instances which arised after this exact move
+                // transpositions are instances which arised from a different move
+                // ie. not from our root position
+                // all is both combined
+                "continuations" : {
+                    // root position, always present
+                    "--" : {
+                        // 3 game levels
+                        "human" : {
+                            // 3 game results, we store the result in text form because we believe it's clearer as a key
+                            "win" : {
+                                "count" : 0,
+
+                                // We store first/last games separately even by result
+                                // To get the overall first one the client needs to do
+                                // Date comparison
+                                "first_game" : {
+                                    // The result field is redundant, but it's better
+                                    // to store it, makes aggregation easier.
+                                    // Here the results are stored in the PGN's standard form
+                                    "game_id" : 123,
+                                    "result" : "0-1",
+                                    "date" : "01.01.2001",
+                                    "eco" : "E01",
+                                    "ply_count" : 123,
+                                    "event" : "...",
+                                    "white" : "...",
+                                    "black" : "..."
+                                },
+                                // This may be the same game as the first game
+                                // in case there was only one.
+                                "last_game" : {
+                                    "game_id" : 123321,
+                                    "result" : "1/2-1/2",
+                                    "date" : "01.01.2001",
+                                    "eco" : "E01",
+                                    "ply_count" : 123,
+                                    "event" : "...",
+                                    "white" : "...",
+                                    "black" : "..."
+                                }
+                            },
+                            "loss" : {},
+                            "draw" : {}
+                        },
+                        "server" : {},
+                        "engine" : {}
+                    },
+
+                    // all legal moves follow if specified in the query
+                    "Nf6" : {
+                        "human" : {
+                            "win" : {
+                                "count" : 0,
+                                "first_game" : {
+                                    "game_id" : 123,
+                                    "result" : "",
+                                    "date" : "01.01.2001",
+                                    "eco" : "E01",
+                                    "ply_count" : 123,
+                                    "event" : "...",
+                                    "white" : "...",
+                                    "black" : "..."
+                                },
+                                "last_game" : {
+                                    "game_id" : 123321,
+                                    "result" : "",
+                                    "date" : "01.01.2001",
+                                    "eco" : "E01",
+                                    "ply_count" : 123,
+                                    "event" : "...",
+                                    "white" : "...",
+                                    "black" : "..."
+                                }
+                            },
+                            "loss" : {},
+                            "draw" : {}
+                        },
+                        "server" : {},
+                        "engine" : {}
+                    }
+                },
+
+                "transpositions" : {},
+
+                // if all is present then nothing else is
+                "all" : {}
+            }
+        ]
+    }
+}

@@ -1,0 +1,147 @@
+// Only the query command should be used remotely.
+// All the paths are local.
+
+// Create database
+{
+    "command" : "create",
+
+    // Path in which the database should be created
+    "destination_path" : "path",
+
+    // Indicates whether after the pgn importing is done
+    // the files should be merged into one
+    "merge" : true,
+
+    // Indicates whether the server should be sending the
+    // client regular updates on the progress.
+    "report_progress" : true,
+
+    // The path used for the imported pgns data
+    // if "merge" is true.
+    "temporary_path" : "path", // optional
+
+    // Lists of paths of the pgns for each game level.
+    "human_pgns" : ["path", "path"],
+    "engine_pgns" : ["path", "path"],
+    "server_pgns" : ["path", "path"],
+
+    // The name of the database format to use.
+    "database_format" : "db_alpha"
+}
+
+// This is sent during/after the creation of the database
+// if "report_progress" was true.
+// NOTE: the report with "finished" : true is sent even when
+//       "report_progress" is false. It can be relied upon
+//       to wait for operation completion.
+{
+    "operation" : "import",
+
+    // The last completely imported pgn file
+    "imported_file_path" : "path", // optional
+
+    // The progresss indication in range [0, 1]
+    "overall_progress" : 0.99,
+
+    // Indicates whether this is the last report of this operation.
+    "finished" : true,
+
+    // Statistics for the imported pgns files.
+    "num_games_imported" : 123, // only if finished is true
+    "num_positions_imported" : 123, // only if finished is true
+    "num_games_skipped" : 123 // only if finished is true
+}
+
+// Merge files of the currently open database
+{
+    "command" : "merge",
+
+    // Optional destination path. If present it must be
+    // different than the current path of the database.
+    "destination_path" : "path",
+
+    "report_progress" : true
+}
+
+// This is sent during/after the merging process (if specified)
+// after the pgn file have been imported.
+// Analogical to the progress report for import.
+{
+    "operation" : "merge",
+    "overall_progress" : 0.1234,
+    "finished" : true
+}
+
+// This is sent during/after the creation process.
+{
+    "operation" : "create",
+    "overall_progress" : 0.1234,
+    "finished" : true
+}
+
+// Open a database at the given path.
+{
+    "command" : "open",
+
+    // Path of the database
+    "database_path" : "path"
+}
+
+// This is sent during/after the opening process.
+{
+    "operation" : "open",
+    "overall_progress" : 1,
+    "finished" : true
+}
+
+// Perform a query on the currently open database
+{
+    "command" : "query",
+
+    // The query request
+    "query" : { }
+}
+
+// Clos the currently open database
+{
+    "command" : "close"
+}
+
+// This is sent during/after the closing process.
+{
+    "operation" : "create",
+    "overall_progress" : 1,
+    "finished" : true
+}
+
+// Exit the program
+{
+    "command" : "exit"
+}
+
+// Sent always when an error occured while performing a request.
+// Error string contains user readable message.
+{
+    "error" : "..."
+}
+
+// Requests the database statistics
+{
+    "command" : "stats"
+}
+
+// Response for the database statistics
+{
+    "human" : {
+        "num_games" : 123,
+        "num_positions" : 123
+    },
+    "engine" : {
+        "num_games" : 123,
+        "num_positions" : 123
+    },
+    "server" : {
+        "num_games" : 123,
+        "num_positions" : 123
+    },
+}
