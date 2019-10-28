@@ -42,6 +42,17 @@ Compiles with Visual Studio 2019 MSVC Compiler (.sln included).
 
 Support for other compilers and other operating systems is planned but there is no definitive deadline.
 
+# Dependencies
+
+Licenses specified in header files or in respective folders.
+
+- libcppjson - included in /lib folder
+- infint - included in /lib folder
+- robin_hood - included in /lib folder (currently unused)
+- xxhash - included in /lib folder
+- googletest - vcpkg
+- brynet - vcpkg
+
 # UI
 For a Windows GUI see [HERE](https://github.com/Sopel97/chess_pos_db_gui). It also contains setup instructions.
 
