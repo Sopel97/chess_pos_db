@@ -20,6 +20,12 @@ Notable features:
     - Querying is optimized for minimal number of disk seeks. For example for the db_beta format querying all data for a single move and all possible moves takes \~1 second an HDD and is blazingly fast on an SSD.
     - Index kept in RAM, uses 500 times less space than the database and accelerates the queries.
 
+- High limits
+
+    - Can handle trillions of positions (with 1 in a million chance of hash collion)
+    - Up to 4 billion games (can be increased in the future)
+    - No limit on input/output file sizes (can handle large pgn files)
+
 - Distinction between continuations (exact move played to arrive at this position) and transpositions (different move played to arrive at this position).
 - Local, file based database structure allowing for easy copying.
 - Extensive configuration. (see cfg/config.json)
@@ -37,6 +43,8 @@ Notable codebase features:
 # Building
 Currently only Windows is explicitly supported. Though the code is mostly standard compliant C++17 - there are only a few instances of non-portable code, most notably 64 bit file seek functions in External module.
 Not tested on systems other that Windows.
+
+Requires 64-bit builds to work as intended. May not compiler or have bugs on 32-bit builds.
 
 Compiles with Visual Studio 2019 MSVC Compiler (.sln included).
 
