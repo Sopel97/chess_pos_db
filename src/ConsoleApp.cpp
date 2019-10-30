@@ -655,16 +655,69 @@ namespace console_app
     {
         std::vector<CompressedPosition> positions;
 
-        pgn::LazyPgnFileReader reader(pgnPath);
-        for (auto&& game : reader)
+        constexpr std::size_t reportEvery = 1'000'000;
+
         {
-            for (auto&& position : game.positions())
+            std::size_t nextReport = 0;
+            std::size_t totalCount = 0;
+            pgn::LazyPgnFileReader reader(pgnPath);
+            for (auto&& game : reader)
             {
-                positions.emplace_back(compressPosition(position));
+                for (auto&& position : game.positions())
+                {
+                    positions.emplace_back(compressPosition(position));
+                    ++totalCount;
+
+                    if (totalCount >= nextReport)
+                    {
+                        std::cout << "Imported " << totalCount << " positions...\n";
+                        nextReport += reportEvery;
+                    }
+                }
             }
         }
 
+        std::cout << "Sorting...\n";
         std::sort(positions.begin(), positions.end());
+        std::cout << "Sorted.\n";
+
+        auto forEachWithCount = [&positions](auto&& func) {
+            const std::size_t size = positions.size();
+            std::size_t lastUnique = 0;
+            for (std::size_t i = 1; i < size; ++i)
+            {
+                if (!(positions[i - 1] == positions[i]))
+                {
+                    func(positions[i - 1], i - lastUnique);
+                    lastUnique = i;
+                }
+            }
+        };
+
+        {
+            std::ofstream outEpdFile(outEpd, std::ios_base::out | std::ios_base::app);
+            std::size_t nextReport = 0;
+            std::size_t totalCount = 0;
+            std::size_t passed = 0;
+            forEachWithCount([&](const CompressedPosition& pos, std::size_t count)
+                {
+                    if (count >= minN)
+                    {
+                        outEpdFile << decompressPosition(pos).fen() << ";\n";
+                        ++passed;
+                    }
+                    totalCount += count;
+
+                    if (totalCount >= nextReport)
+                    {
+                        std::cout << "Processed " << totalCount << " out of " << positions.size() << ". Outputted " << passed << '\n';
+                        nextReport += reportEvery;
+                    }
+                }
+            );
+
+            std::cout << "Finished.\n";
+        }
     }
 
     void App::assertDatabaseOpened() const
