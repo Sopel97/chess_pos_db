@@ -124,10 +124,37 @@ namespace parser_bits
         return rights;
     }
 
+    FORCEINLINE inline void appendCastlingRightsToString(CastlingRights rights, std::string& str)
+    {
+        if (rights == CastlingRights::None)
+        {
+            str += '-';
+        }
+        else
+        {
+            if (contains(rights, CastlingRights::WhiteKingSide)) str += 'K';
+            if (contains(rights, CastlingRights::WhiteQueenSide)) str += 'Q';
+            if (contains(rights, CastlingRights::BlackKingSide)) str += 'k';
+            if (contains(rights, CastlingRights::BlackQueenSide)) str += 'q';
+        }
+    }
+
     FORCEINLINE inline void appendSquareToString(Square sq, std::string& str)
     {
         str += static_cast<char>('a' + ordinal(sq.file()));
         str += static_cast<char>('1' + ordinal(sq.rank()));
+    }
+
+    FORCEINLINE inline void appendEpSquareToString(Square sq, std::string& str)
+    {
+        if (sq == Square::none())
+        {
+            str += '-';
+        }
+        else
+        {
+            appendSquareToString(sq, str);
+        }
     }
 
     FORCEINLINE inline void appendRankToString(Rank r, std::string& str)

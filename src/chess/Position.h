@@ -36,6 +36,8 @@ public:
         return true;
     }
 
+    [[nodiscard]] std::string fen() const;
+
     [[nodiscard]] constexpr bool trySet(std::string_view boardState)
     {
         File f = fileA;
@@ -589,6 +591,8 @@ struct Position : public Board
     [[nodiscard]] static std::optional<Position> tryFromFen(std::string_view fen);
 
     [[nodiscard]] static Position startPosition();
+
+    [[nodiscard]] std::string fen() const;
 
     void setEpSquareUnchecked(Square sq);
 

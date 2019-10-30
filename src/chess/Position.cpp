@@ -138,6 +138,80 @@ const Piece* Board::piecesRaw() const
     return m_pieces.data();
 }
 
+namespace detail::lookup
+{
+    static constexpr EnumMap<Piece, char> fenPiece = []() {
+        EnumMap<Piece, char> fenPiece{};
+
+        fenPiece[whitePawn] = 'P';
+        fenPiece[blackPawn] = 'p';
+        fenPiece[whiteKnight] = 'N';
+        fenPiece[blackKnight] = 'n';
+        fenPiece[whiteBishop] = 'B';
+        fenPiece[blackBishop] = 'b';
+        fenPiece[whiteRook] = 'R';
+        fenPiece[blackRook] = 'r';
+        fenPiece[whiteQueen] = 'Q';
+        fenPiece[blackQueen] = 'q';
+        fenPiece[whiteKing] = 'K';
+        fenPiece[blackKing] = 'k';
+        fenPiece[Piece::none()] = 'X';
+
+        return fenPiece;
+    }();
+}
+
+[[nodiscard]] std::string Board::fen() const
+{
+    std::string fen;
+    fen.reserve(96); // longest fen is probably in range of around 88
+
+    Rank rank = rank8;
+    File file = fileA;
+    std::uint8_t emptyCounter = 0;
+
+    for (;;)
+    {
+        const Square sq(file, rank);
+        const Piece piece = m_pieces[sq];
+
+        if (piece == Piece::none())
+        {
+            ++emptyCounter;
+        }
+        else
+        {
+            if (emptyCounter != 0)
+            {
+                fen.push_back(static_cast<char>(emptyCounter) + '0');
+                emptyCounter = 0;
+            }
+
+            fen.push_back(detail::lookup::fenPiece[piece]);
+        }
+
+        ++file;
+        if (file > fileH)
+        {
+            file = fileA;
+            --rank;
+            if (rank < rank1)
+            {
+                break;
+            }
+
+            if (emptyCounter != 0)
+            {
+                fen.push_back(static_cast<char>(emptyCounter) + '0');
+                emptyCounter = 0;
+            }
+            fen.push_back('/');
+        }
+    }
+
+    return fen;
+}
+
 void Position::set(const char* fen)
 {
     const char* s = BaseType::set(fen);
@@ -236,6 +310,22 @@ void Position::set(const char* fen)
 {
     static const Position pos = fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     return pos;
+}
+
+[[nodiscard]] std::string Position::fen() const
+{
+    std::string fen = Board::fen();
+
+    fen += ' ';
+    fen += m_sideToMove == Color::White ? 'w' : 'b';
+
+    fen += ' ';
+    parser_bits::appendCastlingRightsToString(m_castlingRights, fen);
+
+    fen += ' ';
+    parser_bits::appendEpSquareToString(m_epSquare, fen);
+
+    return fen;
 }
 
 void Position::setEpSquareUnchecked(Square sq)
