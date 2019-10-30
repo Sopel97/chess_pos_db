@@ -590,6 +590,14 @@ struct Position : public Board
 
     [[nodiscard]] static Position startPosition();
 
+    void setEpSquareUnchecked(Square sq);
+
+    void setSideToMove(Color color);
+
+    void addCastlingRights(CastlingRights rights);
+
+    void setCastlingRights(CastlingRights rights);
+
     ReverseMove doMove(const Move& move);
 
     constexpr void undoMove(const ReverseMove& reverseMove)

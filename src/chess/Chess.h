@@ -87,6 +87,11 @@ struct EnumTraits<PieceType>
 
 struct Piece
 {
+    [[nodiscard]] static constexpr Piece fromId(int id)
+    {
+        return Piece(id);
+    }
+
     [[nodiscard]] static constexpr Piece none()
     {
         return Piece(PieceType::None, Color::White);
@@ -132,6 +137,11 @@ struct Piece
     }
 
 private:
+    constexpr Piece(int id) :
+        m_id(id)
+    {
+    }
+
     std::uint8_t m_id; // lowest bit is a color, 7 highest bits are a piece type
 };
 
@@ -177,6 +187,11 @@ struct EnumTraits<Piece>
     [[nodiscard]] static constexpr int ordinal(EnumType c) noexcept
     {
         return static_cast<IdType>(c);
+    }
+
+    [[nodiscard]] static constexpr EnumType fromOrdinal(int id) noexcept
+    {
+        return Piece::fromId(id);
     }
 };
 

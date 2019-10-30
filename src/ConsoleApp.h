@@ -55,6 +55,8 @@ namespace console_app
 
         void destroy(const Args& args);
 
+        void dump(const Args& args);
+
         static const std::map<std::string_view, CommandFunction> m_commands;
     };
 }

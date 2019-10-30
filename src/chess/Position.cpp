@@ -238,6 +238,26 @@ void Position::set(const char* fen)
     return pos;
 }
 
+void Position::setEpSquareUnchecked(Square sq)
+{
+    m_epSquare = sq;
+}
+
+void Position::setSideToMove(Color color)
+{
+    m_sideToMove = color;
+}
+
+void Position::addCastlingRights(CastlingRights rights)
+{
+    m_castlingRights |= rights;
+}
+
+void Position::setCastlingRights(CastlingRights rights)
+{
+    m_castlingRights = rights;
+}
+
 [[nodiscard]] bool Position::createsDiscoveredAttackOnOwnKing(Move move) const
 {
     return BaseType::createsDiscoveredAttackOnOwnKing(move, m_sideToMove);
