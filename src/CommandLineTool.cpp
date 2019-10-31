@@ -1054,6 +1054,10 @@ namespace command_line_app
 
         assertDirectoryEmpty(temp);
 
+        std::size_t numPosOut = 0;
+        std::size_t numPosIn = 0;
+        std::size_t numGamesIn = 0;
+
         // this has to be destroyed last
         ext::TemporaryPaths tempPaths(temp);
 
@@ -1088,8 +1092,12 @@ namespace command_line_app
                     pgn::LazyPgnFileReader reader(pgn, pgnParserMemory);
                     for (auto&& game : reader)
                     {
+                        ++numGamesIn;
+
                         for (auto&& position : game.positions())
                         {
+                            ++numPosIn;
+
                             positions.emplace_back(position.compress());
 
                             if (positions.size() == positions.capacity())
@@ -1145,6 +1153,7 @@ namespace command_line_app
                 }; 
                 
                 auto append = [
+                        &numPosOut,
                         minN,
                         outEpdFile = std::ofstream(output, std::ios_base::out | std::ios_base::app), 
                         first = true, 
@@ -1165,6 +1174,7 @@ namespace command_line_app
                     {
                         if (count >= minN)
                         {
+                            ++numPosOut;
                             outEpdFile << pos.decompress().fen() << ";\n";
                         }
 
@@ -1176,7 +1186,12 @@ namespace command_line_app
                 ext::merge_for_each(progressCallback, { mergeMemory }, files, append, std::less<>{});
             }
 
-            sendProgressFinished(session, "dump");
+            auto stats = nlohmann::json{
+                { "num_games", numGamesIn },
+                { "num_in_positions", numPosIn },
+                { "num_out_positions", numPosOut }
+            };
+            sendProgressFinished(session, "dump", stats);
         }
     }
 

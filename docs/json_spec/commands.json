@@ -159,6 +159,9 @@
     // There are two stages:
     // "operation" : "import"
     // "operation" : "dump"
+    // Additionaly when "operation" == "dump" and "finished" == true
+    // the fields "num_games", "num_in_positions", "num_out_positions"
+    // are present. They represent staticts of the operation performed.
     "report_progress" : false,
 
     // output file path
