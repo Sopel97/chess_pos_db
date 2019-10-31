@@ -489,3 +489,208 @@ void Position::nullifyEpSquareIfNotPossible()
         m_epSquare = Square::none();
     }
 }
+
+[[nodiscard]] CompressedPosition Position::compress() const
+{
+    auto compressPiece = [this](Square sq, Piece piece) -> std::uint8_t {
+        const PieceType type = piece.type();
+        const Color color = piece.color();
+
+        switch (type)
+        {
+        case PieceType::Knight:
+        case PieceType::Bishop:
+        case PieceType::Queen:
+            return static_cast<std::uint8_t>(ordinal(piece));
+
+        case PieceType::Pawn:
+        {
+            if (m_epSquare == Square::none())
+            {
+                return static_cast<std::uint8_t>(ordinal(piece));
+            }
+            else
+            {
+                const Rank rank = sq.rank();
+                const File file = sq.file();
+                if (file == m_epSquare.file() &&
+                    (
+                    (rank == rank4 && m_sideToMove == Color::Black)
+                        || (rank == rank5) && m_sideToMove == Color::White)
+                    )
+                {
+                    return 12;
+                }
+                else
+                {
+                    return static_cast<std::uint8_t>(ordinal(piece));
+                }
+            }
+        }
+
+        case PieceType::Rook:
+        {
+            const CastlingRights castlingRights = m_castlingRights;
+            if (color == Color::White
+                && (
+                (sq == A1 && contains(castlingRights, CastlingRights::WhiteQueenSide))
+                    || (sq == H1 && contains(castlingRights, CastlingRights::WhiteKingSide))
+                    )
+                )
+            {
+                return 13;
+            }
+            else if (
+                color == Color::Black
+                && (
+                (sq == A8 && contains(castlingRights, CastlingRights::BlackQueenSide))
+                    || (sq == H8 && contains(castlingRights, CastlingRights::BlackKingSide))
+                    )
+                )
+            {
+                return 14;
+            }
+            else
+            {
+                return static_cast<std::uint8_t>(ordinal(piece));
+            }
+        }
+
+        case PieceType::King:
+        {
+            if (color == Color::White)
+            {
+                return 10;
+            }
+            else if (m_sideToMove == Color::White)
+            {
+                return 11;
+            }
+            else
+            {
+                return 15;
+            }
+        }
+        }
+    };
+
+    const Bitboard occ = piecesBB();
+
+    CompressedPosition compressed;
+    compressed.occupied = occ;
+
+    auto it = occ.begin();
+    auto end = occ.end();
+    for (int i = 0;; ++i)
+    {
+        if (it == end) break;
+        compressed.packedState[i] = compressPiece(*it, pieceAt(*it));
+        ++it;
+
+        if (it == end) break;
+        compressed.packedState[i] |= compressPiece(*it, pieceAt(*it)) << 4;
+        ++it;
+    }
+
+    return compressed;
+}
+
+[[nodiscard]] Position CompressedPosition::decompress() const
+{
+    Position pos;
+    pos.setCastlingRights(CastlingRights::None);
+
+    auto decompressPiece = [&pos](Square sq, std::uint8_t nibble) {
+        switch (nibble)
+        {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+        case 10:
+        case 11:
+        {
+            pos.place(fromOrdinal<Piece>(nibble), sq);
+            return;
+        }
+
+        case 12:
+        {
+            const Rank rank = sq.rank();
+            const File file = sq.file();
+            if (rank == rank4)
+            {
+                pos.place(whitePawn, sq);
+                pos.setEpSquareUnchecked(sq + Offset{ 0, -1 });
+            }
+            else // (rank == rank5)
+            {
+                pos.place(blackPawn, sq);
+                pos.setEpSquareUnchecked(sq + Offset{ 0, 1 });
+            }
+            return;
+        }
+
+        case 13:
+        {
+            pos.place(whiteRook, sq);
+            if (sq == A1)
+            {
+                pos.addCastlingRights(CastlingRights::WhiteQueenSide);
+            }
+            else // (sq == H1)
+            {
+                pos.addCastlingRights(CastlingRights::WhiteKingSide);
+            }
+            return;
+        }
+
+        case 14:
+        {
+            pos.place(blackRook, sq);
+            if (sq == A8)
+            {
+                pos.addCastlingRights(CastlingRights::BlackQueenSide);
+            }
+            else // (sq == H8)
+            {
+                pos.addCastlingRights(CastlingRights::BlackKingSide);
+            }
+            return;
+        }
+
+        case 15:
+        {
+            pos.place(blackKing, sq);
+            pos.setSideToMove(Color::Black);
+            return;
+        }
+
+        }
+
+        return;
+    };
+
+    const Bitboard occ = occupied;
+
+    auto it = occ.begin();
+    auto end = occ.end();
+    for (int i = 0;; ++i)
+    {
+        if (it == end) break;
+        decompressPiece(*it, packedState[i] & 0xF);
+        ++it;
+
+        if (it == end) break;
+        decompressPiece(*it, packedState[i] >> 4);
+        ++it;
+    }
+
+    return pos;
+}

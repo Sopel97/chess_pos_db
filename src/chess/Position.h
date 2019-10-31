@@ -559,6 +559,8 @@ private:
     }
 };
 
+struct CompressedPosition;
+
 struct Position : public Board
 {
     using BaseType = Board;
@@ -667,6 +669,8 @@ struct Position : public Board
         return m_epSquare != Square::none();
     }
 
+    [[nodiscard]] CompressedPosition compress() const;
+
 private:
     Color m_sideToMove;
     Square m_epSquare;
@@ -678,3 +682,60 @@ private:
 };
 
 static_assert(sizeof(Position) == 192);
+
+
+struct CompressedPosition
+{
+    // Occupied bitboard has bits set for 
+    // each square with a piece on it.
+    // Each packedState byte holds 2 values (nibbles).
+    // First one at low bits, second one at high bits.
+    // Values correspond to consecutive squares
+    // in bitboard iteration order.
+    // Nibble values:
+    // these are the same as for Piece
+    // knights, bishops, queens can just be copied
+    //  0 : white pawn
+    //  1 : black pawn
+    //  2 : white knight
+    //  3 : black knight
+    //  4 : white bishop
+    //  5 : black bishop
+    //  6 : white rook
+    //  7 : black rook
+    //  8 : white queen
+    //  9 : black queen
+    // 10 : white king
+    // 11 : black king
+    // 
+    // these are special
+    // 12 : pawn with ep square behind (white or black, depending on rank)
+    // 13 : white rook with coresponding castling rights
+    // 14 : black rook with coresponding castling rights
+    // 15 : black king and black is side to move
+    // 
+    // Let N be the number of bits set in occupied bitboard.
+    // Only N nibbles are present. (N+1)/2 bytes are initialized.
+
+    Bitboard occupied;
+    std::uint8_t packedState[16];
+
+    [[nodiscard]] friend bool operator<(const CompressedPosition& lhs, const CompressedPosition& rhs)
+    {
+        if (lhs.occupied.bits() < rhs.occupied.bits()) return true;
+        if (lhs.occupied.bits() > rhs.occupied.bits()) return false;
+
+        return std::strcmp(reinterpret_cast<const char*>(lhs.packedState), reinterpret_cast<const char*>(rhs.packedState)) < 0;
+    }
+
+    [[nodiscard]] friend bool operator==(const CompressedPosition& lhs, const CompressedPosition& rhs)
+    {
+        return lhs.occupied == rhs.occupied
+            && std::strcmp(reinterpret_cast<const char*>(lhs.packedState), reinterpret_cast<const char*>(rhs.packedState)) == 0;
+    }
+
+    [[nodiscard]] Position decompress() const;
+};
+
+static_assert(sizeof(CompressedPosition) == 24);
+
