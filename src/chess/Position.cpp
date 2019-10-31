@@ -490,87 +490,123 @@ void Position::nullifyEpSquareIfNotPossible()
     }
 }
 
+namespace detail
+{
+    [[nodiscard]] FORCEINLINE std::uint8_t compressOrdinaryPiece(const Position&, Square, Piece piece)
+    {
+        return static_cast<std::uint8_t>(ordinal(piece));
+    }
+
+    [[nodiscard]] FORCEINLINE std::uint8_t compressPawn(const Position& position, Square sq, Piece piece)
+    {
+        const Square epSquare = position.epSquare();
+        if (epSquare == Square::none())
+        {
+            return static_cast<std::uint8_t>(ordinal(piece));
+        }
+        else
+        {
+            const Color sideToMove = position.sideToMove();
+            const Rank rank = sq.rank();
+            const File file = sq.file();
+            // use bitwise operators, there is a lot of unpredictable branches but in
+            // total the result is quite predictable
+            if (
+                (file == epSquare.file()) 
+                && (
+                      ((rank == rank4) & (sideToMove == Color::Black))
+                    | ((rank == rank5) & (sideToMove == Color::White))
+                  )
+               )
+            {
+                return 12;
+            }
+            else
+            {
+                return static_cast<std::uint8_t>(ordinal(piece));
+            }
+        }
+    }
+
+    [[nodiscard]] FORCEINLINE std::uint8_t compressRook(const Position& position, Square sq, Piece piece)
+    {
+        const CastlingRights castlingRights = position.castlingRights();
+        const Color color = piece.color();
+
+        if (color == Color::White
+            && (
+            (sq == A1 && contains(castlingRights, CastlingRights::WhiteQueenSide))
+                || (sq == H1 && contains(castlingRights, CastlingRights::WhiteKingSide))
+                )
+            )
+        {
+            return 13;
+        }
+        else if (
+            color == Color::Black
+            && (
+            (sq == A8 && contains(castlingRights, CastlingRights::BlackQueenSide))
+                || (sq == H8 && contains(castlingRights, CastlingRights::BlackKingSide))
+                )
+            )
+        {
+            return 14;
+        }
+        else
+        {
+            return static_cast<std::uint8_t>(ordinal(piece));
+        }
+    }
+
+    [[nodiscard]] FORCEINLINE std::uint8_t compressKing(const Position& position, Square sq, Piece piece)
+    {
+        const Color color = piece.color();
+        const Color sideToMove = position.sideToMove();
+
+        if (color == Color::White)
+        {
+            return 10;
+        }
+        else if (sideToMove == Color::White)
+        {
+            return 11;
+        }
+        else
+        {
+            return 15;
+        }
+    }
+}
+
+namespace detail::lookup
+{
+    static constexpr EnumMap<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc = []() {
+        EnumMap<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc{};
+
+        pieceCompressorFunc[PieceType::Knight] = detail::compressOrdinaryPiece;
+        pieceCompressorFunc[PieceType::Bishop] = detail::compressOrdinaryPiece;
+        pieceCompressorFunc[PieceType::Queen] = detail::compressOrdinaryPiece;
+
+        pieceCompressorFunc[PieceType::Pawn] = detail::compressPawn;
+        pieceCompressorFunc[PieceType::Rook] = detail::compressRook;
+        pieceCompressorFunc[PieceType::King] = detail::compressKing;
+
+        pieceCompressorFunc[PieceType::None] = [](const Position&, Square, Piece) -> std::uint8_t { /* should never happen */ return 0; };
+
+        return pieceCompressorFunc;
+    }();
+}
+
 [[nodiscard]] CompressedPosition Position::compress() const
 {
     auto compressPiece = [this](Square sq, Piece piece) -> std::uint8_t {
-        const PieceType type = piece.type();
-        const Color color = piece.color();
-
-        switch (type)
+        if (piece.type() == PieceType::Pawn) // it's likely to be a pawn
         {
-        case PieceType::Knight:
-        case PieceType::Bishop:
-        case PieceType::Queen:
-            return static_cast<std::uint8_t>(ordinal(piece));
-
-        case PieceType::Pawn:
-        {
-            if (m_epSquare == Square::none())
-            {
-                return static_cast<std::uint8_t>(ordinal(piece));
-            }
-            else
-            {
-                const Rank rank = sq.rank();
-                const File file = sq.file();
-                if (file == m_epSquare.file() &&
-                    (
-                    (rank == rank4 && m_sideToMove == Color::Black)
-                        || (rank == rank5) && m_sideToMove == Color::White)
-                    )
-                {
-                    return 12;
-                }
-                else
-                {
-                    return static_cast<std::uint8_t>(ordinal(piece));
-                }
-            }
+            return detail::compressPawn(*this, sq, piece);
         }
-
-        case PieceType::Rook:
+        else
         {
-            const CastlingRights castlingRights = m_castlingRights;
-            if (color == Color::White
-                && (
-                (sq == A1 && contains(castlingRights, CastlingRights::WhiteQueenSide))
-                    || (sq == H1 && contains(castlingRights, CastlingRights::WhiteKingSide))
-                    )
-                )
-            {
-                return 13;
-            }
-            else if (
-                color == Color::Black
-                && (
-                (sq == A8 && contains(castlingRights, CastlingRights::BlackQueenSide))
-                    || (sq == H8 && contains(castlingRights, CastlingRights::BlackKingSide))
-                    )
-                )
-            {
-                return 14;
-            }
-            else
-            {
-                return static_cast<std::uint8_t>(ordinal(piece));
-            }
-        }
-
-        case PieceType::King:
-        {
-            if (color == Color::White)
-            {
-                return 10;
-            }
-            else if (m_sideToMove == Color::White)
-            {
-                return 11;
-            }
-            else
-            {
-                return 15;
-            }
-        }
+            return detail::lookup::pieceCompressorFunc[piece.type()](*this, sq, piece);
         }
     };
 
