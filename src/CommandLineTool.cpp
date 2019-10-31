@@ -1051,7 +1051,7 @@ namespace command_line_app
         assertDirectoryEmpty(temp);
 
         // this has to be destroyed last
-        ext::TemporaryPaths tempPaths;
+        ext::TemporaryPaths tempPaths(temp);
 
         auto makeBuffers = [](std::size_t numBuffers)
         {
