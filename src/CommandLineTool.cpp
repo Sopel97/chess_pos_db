@@ -768,6 +768,442 @@ namespace command_line_app
         sendMessage(session, responseStr);
     }
 
+    static void handleTcpCommandDumpImpl(
+        const TcpConnection::Ptr& session,
+        const std::vector<std::filesystem::path>& pgns,
+        const std::filesystem::path& output,
+        std::size_t minN,
+        bool doReportProgress
+    )
+    {
+        std::vector<CompressedPosition> positions;
+
+        {
+            auto callback = makeImportProgressReportHandler(session, doReportProgress);
+            std::size_t i = 0;
+            for (auto&& pgn : pgns)
+            {
+                pgn::LazyPgnFileReader reader(pgn);
+                for (auto&& game : reader)
+                {
+                    for (auto&& position : game.positions())
+                    {
+                        positions.emplace_back(position.compress());
+                    }
+                }
+
+                ++i;
+                callback({
+                    i,
+                    pgns.size(),
+                    pgn
+                    });
+            }
+
+            sendProgressFinished(session, "import");
+        }
+
+        std::sort(positions.begin(), positions.end());
+
+        auto forEachWithCount = [&positions](auto&& func) {
+            const std::size_t size = positions.size();
+            std::size_t lastUnique = 0;
+            for (std::size_t i = 1; i < size; ++i)
+            {
+                if (!(positions[i - 1] == positions[i]))
+                {
+                    func(positions[i - 1], i - lastUnique);
+                    lastUnique = i;
+                }
+            }
+        };
+
+        {
+            constexpr std::size_t reportEvery = 10'000'000;
+
+            std::ofstream outEpdFile(output, std::ios_base::out | std::ios_base::app);
+            std::size_t nextReport = 0;
+            std::size_t totalCount = 0;
+            std::size_t passed = 0;
+            forEachWithCount([&](const CompressedPosition& pos, std::size_t count)
+                {
+                    if (count >= minN)
+                    {
+                        outEpdFile << pos.decompress().fen() << ";\n";
+                        ++passed;
+                    }
+                    totalCount += count;
+
+                    if (totalCount >= nextReport)
+                    {
+                        if (doReportProgress)
+                        {
+                            auto reportJson = nlohmann::json{
+                                { "operation", "dump" },
+                                { "overall_progress", static_cast<double>(totalCount) / positions.size() },
+                                { "finished", false }
+                            };
+
+                            auto reportStr = reportJson.dump();
+                            sendMessage(session, reportStr);
+                        }
+
+                        nextReport += reportEvery;
+                    }
+                }
+            );
+
+            sendProgressFinished(session, "dump");
+        }
+    }
+
+    namespace detail
+    {
+        struct AsyncStorePipeline
+        {
+        private:
+            using EntryType = CompressedPosition;
+            using BufferType = std::vector<EntryType>;
+            using PromiseType = std::promise<std::filesystem::path>;
+            using FutureType = std::future<std::filesystem::path>;
+
+            struct Job
+            {
+                Job(std::filesystem::path path, BufferType&& buffer, PromiseType&& promise) :
+                    path(std::move(path)),
+                    buffer(std::move(buffer)),
+                    promise(std::move(promise))
+                {
+                }
+
+                std::filesystem::path path;
+                BufferType buffer;
+                PromiseType promise;
+            };
+
+        public:
+            AsyncStorePipeline(std::vector<BufferType>&& buffers, std::size_t numSortingThreads = 1) :
+                m_sortingThreadFinished(false),
+                m_writingThreadFinished(false),
+                m_writingThread([this]() { runWritingThread(); })
+            {
+                ASSERT(numSortingThreads >= 1);
+                ASSERT(!buffers.empty());
+
+                m_sortingThreads.reserve(numSortingThreads);
+                for (std::size_t i = 0; i < numSortingThreads; ++i)
+                {
+                    m_sortingThreads.emplace_back([this]() { runSortingThread(); });
+                }
+
+                for (auto&& buffer : buffers)
+                {
+                    m_bufferQueue.emplace(std::move(buffer));
+                }
+            }
+
+            AsyncStorePipeline(const AsyncStorePipeline&) = delete;
+
+            ~AsyncStorePipeline()
+            {
+                waitForCompletion();
+            }
+
+            [[nodiscard]] FutureType scheduleUnordered(const std::filesystem::path& path, BufferType&& elements)
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                PromiseType promise;
+                FutureType future = promise.get_future();
+                m_sortQueue.emplace(path, std::move(elements), std::move(promise));
+
+                lock.unlock();
+                m_sortQueueNotEmpty.notify_one();
+
+                return future;
+            }
+
+            [[nodiscard]] BufferType getEmptyBuffer()
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                m_bufferQueueNotEmpty.wait(lock, [this]() {return !m_bufferQueue.empty(); });
+
+                auto buffer = std::move(m_bufferQueue.front());
+                m_bufferQueue.pop();
+
+                buffer.clear();
+
+                return buffer;
+            }
+
+            void waitForCompletion()
+            {
+                if (!m_sortingThreadFinished.load())
+                {
+                    m_sortingThreadFinished.store(true);
+                    m_sortQueueNotEmpty.notify_one();
+                    for (auto& th : m_sortingThreads)
+                    {
+                        th.join();
+                    }
+
+                    m_writingThreadFinished.store(true);
+                    m_writeQueueNotEmpty.notify_one();
+                    m_writingThread.join();
+                }
+            }
+
+        private:
+            std::queue<Job> m_sortQueue;
+            std::queue<Job> m_writeQueue;
+            std::queue<BufferType> m_bufferQueue;
+
+            std::condition_variable m_sortQueueNotEmpty;
+            std::condition_variable m_writeQueueNotEmpty;
+            std::condition_variable m_bufferQueueNotEmpty;
+
+            std::mutex m_mutex;
+
+            std::atomic_bool m_sortingThreadFinished;
+            std::atomic_bool m_writingThreadFinished;
+
+            std::vector<std::thread> m_sortingThreads;
+            std::thread m_writingThread;
+
+            void runSortingThread()
+            {
+                for (;;)
+                {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_sortQueueNotEmpty.wait(lock, [this]() {return !m_sortQueue.empty() || m_sortingThreadFinished.load(); });
+
+                    if (m_sortQueue.empty())
+                    {
+                        lock.unlock();
+                        m_sortQueueNotEmpty.notify_one();
+                        return;
+                    }
+
+                    Job job = std::move(m_sortQueue.front());
+                    m_sortQueue.pop();
+
+                    lock.unlock();
+
+                    sort(job.buffer);
+
+                    lock.lock();
+                    m_writeQueue.emplace(std::move(job));
+                    lock.unlock();
+
+                    m_writeQueueNotEmpty.notify_one();
+                }
+            }
+
+            void runWritingThread()
+            {
+                for (;;)
+                {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_writeQueueNotEmpty.wait(lock, [this]() {return !m_writeQueue.empty() || m_writingThreadFinished.load(); });
+
+                    if (m_writeQueue.empty())
+                    {
+                        lock.unlock();
+                        m_writeQueueNotEmpty.notify_one();
+                        return;
+                    }
+
+                    Job job = std::move(m_writeQueue.front());
+                    m_writeQueue.pop();
+
+                    lock.unlock();
+
+                    (void)ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
+                    job.promise.set_value(job.path);
+
+                    job.buffer.clear();
+
+                    lock.lock();
+                    m_bufferQueue.emplace(std::move(job.buffer));
+                    lock.unlock();
+
+                    m_bufferQueueNotEmpty.notify_one();
+                }
+            }
+
+            void sort(BufferType& buffer)
+            {
+                std::sort(buffer.begin(), buffer.end());
+            }
+        };
+    }
+
+    static void handleTcpCommandDumpImpl(
+        const TcpConnection::Ptr& session,
+        const std::vector<std::filesystem::path>& pgns,
+        const std::filesystem::path& output,
+        const std::filesystem::path& temp,
+        std::size_t minN,
+        bool doReportProgress
+    )
+    {
+        assertDirectoryEmpty(temp);
+
+        // this has to be destroyed last
+        ext::TemporaryPaths tempPaths;
+
+        auto makeBuffers = [](std::size_t numBuffers)
+        {
+            ASSERT(size > 0);
+
+            const std::size_t size = ext::numObjectsPerBufferUnit<CompressedPosition>(importMemory, numBuffers);
+
+            std::vector<std::vector<CompressedPosition>> buffers;
+            buffers.resize(numBuffers);
+            for (auto& buffer : buffers)
+            {
+                buffer.reserve(size);
+            }
+            return buffers;
+        };
+
+        {
+            std::vector<std::future<std::filesystem::path>> futureParts;
+
+            detail::AsyncStorePipeline pipeline(makeBuffers(4), 2);
+
+            {
+                auto callback = makeImportProgressReportHandler(session, doReportProgress);
+
+                std::size_t i = 0;
+                auto positions = pipeline.getEmptyBuffer();
+
+                for (auto&& pgn : pgns)
+                {
+                    pgn::LazyPgnFileReader reader(pgn);
+                    for (auto&& game : reader)
+                    {
+                        for (auto&& position : game.positions())
+                        {
+                            positions.emplace_back(position.compress());
+
+                            if (positions.size() == positions.capacity())
+                            {
+                                auto path = tempPaths.next();
+                                futureParts.emplace_back(pipeline.scheduleUnordered(path, std::move(positions)));
+                                positions = pipeline.getEmptyBuffer();
+                                Logger::instance().logInfo("Created temp file ", path);
+                            }
+                        }
+                    }
+
+                    ++i;
+                    callback({
+                        i,
+                        pgns.size(),
+                        pgn
+                        });
+
+                    Logger::instance().logInfo("Finished file ", pgn);
+                }
+
+                if (!positions.empty())
+                {
+                    auto path = tempPaths.next();
+                    futureParts.emplace_back(pipeline.scheduleUnordered(path, std::move(positions)));
+                    Logger::instance().logInfo("Created temp file ", path);
+                }
+
+                sendProgressFinished(session, "import");
+            }
+
+            {
+                std::vector<ext::ImmutableSpan<CompressedPosition>> files;
+                for (auto&& f : futureParts)
+                {
+                    auto path = f.get();
+                    files.emplace_back(ext::ImmutableBinaryFile(ext::Pooled{}, path));
+                    Logger::instance().logInfo("Commited file ", path);
+                }
+
+                auto progressCallback = [session, doReportProgress](const ext::ProgressReport& report) {
+                    if (!doReportProgress) return;
+
+                    auto reportJson = nlohmann::json{
+                        { "operation", "dump" },
+                        { "overall_progress", report.ratio() },
+                        { "finished", false }
+                    };
+
+                    auto reportStr = reportJson.dump();
+                    sendMessage(session, reportStr);
+                }; 
+                
+                auto append = [
+                        minN,
+                        outEpdFile = std::ofstream(output, std::ios_base::out | std::ios_base::app), 
+                        first = true, 
+                        pos = CompressedPosition{}, 
+                        count = 0
+                    ](const CompressedPosition& position) mutable {
+                    if (first)
+                    {
+                        first = false;
+                        pos = position;
+                        count = 1;
+                    }
+                    else if (pos == position)
+                    {
+                        ++count;
+                    }
+                    else
+                    {
+                        if (count >= minN)
+                        {
+                            outEpdFile << pos.decompress().fen() << ";\n";
+                        }
+
+                        pos = position;
+                        count = 1;
+                    }
+                };
+
+                const std::size_t mergeMemory = cfg::g_config["persistence"]["db_alpha"]["max_merge_buffer_size"].get<MemoryAmount>();
+
+                ext::merge_for_each(progressCallback, { mergeMemory }, files, append, std::less<>{});
+            }
+
+            sendProgressFinished(session, "dump");
+        }
+    }
+
+    static void handleTcpCommandDump(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        std::vector<std::filesystem::path> pgns;
+        for (auto& v : json["pgns"]) pgns.emplace_back(v.get<std::string>());
+
+        const std::filesystem::path epdOut = json["output_path"].get<std::string>();
+        const bool reportProgress = json["report_progress"];
+        const std::size_t minN = json["min_count"].get<std::size_t>();
+
+        if (minN == 0) throw Exception("Min count must be positive.");
+
+        if (json.contains("temporary_path"))
+        {
+            const std::filesystem::path temp = json["temporary_path"].get<std::string>();
+            handleTcpCommandDumpImpl(session, pgns, epdOut, temp, minN, reportProgress);
+        }
+        else
+        {
+            handleTcpCommandDumpImpl(session, pgns, epdOut, minN, reportProgress);
+        }
+    }
+
     static bool handleTcpCommand(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
@@ -781,7 +1217,8 @@ namespace command_line_app
             { "open", handleTcpCommandOpen },
             { "close", handleTcpCommandClose },
             { "query", handleTcpCommandQuery },
-            { "stats", handleTcpCommandStats }
+            { "stats", handleTcpCommandStats },
+            { "dump", handleTcpCommandDump }
         };
 
         auto datastr = std::string(data, len);
