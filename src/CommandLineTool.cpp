@@ -1048,7 +1048,9 @@ namespace command_line_app
         bool doReportProgress
     )
     {
-        static const std::size_t pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
+        static const std::size_t pgnParserMemory = cfg::g_config["command_line_app"]["dump"]["pgn_parser_memory"].get<MemoryAmount>();
+        static const std::size_t importMemory = cfg::g_config["command_line_app"]["dump"]["pgn_import_memory"].get<MemoryAmount>();
+        static const std::size_t mergeMemory = cfg::g_config["command_line_app"]["dump"]["max_merge_buffer_size"].get<MemoryAmount>();
 
         assertDirectoryEmpty(temp);
 
@@ -1170,9 +1172,7 @@ namespace command_line_app
                         count = 1;
                     }
                 };
-
-                const std::size_t mergeMemory = cfg::g_config["persistence"]["db_alpha"]["max_merge_buffer_size"].get<MemoryAmount>();
-
+                
                 ext::merge_for_each(progressCallback, { mergeMemory }, files, append, std::less<>{});
             }
 

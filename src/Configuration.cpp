@@ -158,6 +158,14 @@ namespace cfg
     }
 },
 
+"command_line_app" : {
+    "dump" : {
+        "pgn_import_memory" : "2GiB",
+        "pgn_parser_memory" : "4MiB",
+        "max_merge_buffer_size" : "1GiB"
+    }
+},
+
 "console_app" : {
     "pgn_import_memory" : "2GiB"
 }
