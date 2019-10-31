@@ -145,3 +145,25 @@
         "num_positions" : 123
     },
 }
+
+// Create an EPD file with positions with at least N instances
+{
+    "command" : "dump",
+    "pgns" : ["file_path", "file_path"],
+
+    // temporary path is optional. If not specified then it has to fit in RAM.
+    // Directory must be empty
+    "temporary_path" : "dir_path",
+
+    // Progress is reported analogically to the create command.
+    // There are two stages:
+    // "operation" : "import"
+    // "operation" : "dump"
+    "report_progress" : false,
+
+    // output file path
+    "output_path" : "file_path",
+
+    // minimal number of instances of a position to dump it. Must be at least 1.
+    "min_count" : 2
+}

@@ -1048,6 +1048,8 @@ namespace command_line_app
         bool doReportProgress
     )
     {
+        static const std::size_t pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
+
         assertDirectoryEmpty(temp);
 
         // this has to be destroyed last
@@ -1071,9 +1073,9 @@ namespace command_line_app
         {
             std::vector<std::future<std::filesystem::path>> futureParts;
 
-            detail::AsyncStorePipeline pipeline(makeBuffers(4), 2);
-
             {
+                detail::AsyncStorePipeline pipeline(makeBuffers(4), 2);
+
                 auto callback = makeImportProgressReportHandler(session, doReportProgress);
 
                 std::size_t i = 0;
@@ -1081,7 +1083,7 @@ namespace command_line_app
 
                 for (auto&& pgn : pgns)
                 {
-                    pgn::LazyPgnFileReader reader(pgn);
+                    pgn::LazyPgnFileReader reader(pgn, pgnParserMemory);
                     for (auto&& game : reader)
                     {
                         for (auto&& position : game.positions())
