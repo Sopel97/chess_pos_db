@@ -150,16 +150,16 @@ namespace movegen
         // all square on a castling path must be empty
         constexpr EnumMap2<Color, CastleType, Bitboard> castlingPaths = { 
             { 
-                {{ Bitboard::square(F1) | G1, Bitboard::square(B1) | C1 | D1 }},
-                {{ Bitboard::square(F8) | G8, Bitboard::square(B8) | C8 | D8 }}
+                {{ Bitboard::square(f1) | g1, Bitboard::square(b1) | c1 | d1 }},
+                {{ Bitboard::square(f8) | g8, Bitboard::square(b8) | c8 | d8 }}
             } 
         };
 
         // this square must not be attacked by the enemy
         constexpr EnumMap2<Color, CastleType, Square> squarePassedByKing = {
             {
-                {{ F1, D1 }},
-                {{ F8, D8 }}
+                {{ f1, d1 }},
+                {{ f8, d8 }}
             }
         };
 

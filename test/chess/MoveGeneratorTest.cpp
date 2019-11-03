@@ -26,10 +26,10 @@ static std::size_t perft(const Position& pos, int depth)
 
 TEST(MoveGeneratorTest, GeneralMoveGeneratorTest) {
     ASSERT_TRUE(perft(Position::startPosition(), 5) == 4'865'609);
-    ASSERT_TRUE(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ H2,H3 }).afterMove(Move{ A7, A5 })).size() == 19);
+    ASSERT_TRUE(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ h2, h3 }).afterMove(Move{ a7, a5 })).size() == 19);
     ASSERT_TRUE(movegen::generateLegalMoves(Position::startPosition()).size() == 20);
-    ASSERT_TRUE(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ E2, E4 })).size() == 20);
-    ASSERT_TRUE(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ E2, E4 }).afterMove(Move{ E7, E5 })).size() == 29);
+    ASSERT_TRUE(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ e2, e4 })).size() == 20);
+    ASSERT_TRUE(movegen::generateLegalMoves(Position::startPosition().afterMove(Move{ e2, e4 }).afterMove(Move{ e7, e5 })).size() == 29);
     ASSERT_TRUE(movegen::generateLegalMoves(Position::fromFen("rnbqkbnr/1ppppppp/8/8/Pp6/8/2PPPPPP/RNBQKBNR w KQkq - 0 3")).size() == 21);
     ASSERT_TRUE(movegen::generateLegalMoves(Position::fromFen("rnbqkbnr/2pppppp/p7/Pp6/8/8/1PPPPPPP/RNBQKBNR w KQkq b6 0 3")).size() == 22);
     ASSERT_TRUE(movegen::generateLegalMoves(Position::fromFen("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")).size() == 31);

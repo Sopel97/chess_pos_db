@@ -62,7 +62,7 @@ namespace bb
         {
             EnumMap<Square, Bitboard> bbs{};
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
+            for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
                 Bitboard bb{};
 
@@ -111,7 +111,7 @@ namespace bb
         {
             EnumMap<Square, Bitboard> bbs{};
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
+            for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
                 bbs[fromSq] = generateSliderPseudoAttacks(bishopOffsets, fromSq);
             }
@@ -123,7 +123,7 @@ namespace bb
         {
             EnumMap<Square, Bitboard> bbs{};
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
+            for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
                 bbs[fromSq] = generateSliderPseudoAttacks(rookOffsets, fromSq);
             }
@@ -135,7 +135,7 @@ namespace bb
         {
             EnumMap<Square, Bitboard> bbs{};
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
+            for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
                 bbs[fromSq] =
                     generateSliderPseudoAttacks(bishopOffsets, fromSq)
@@ -149,7 +149,7 @@ namespace bb
         {
             EnumMap<Square, Bitboard> bbs{};
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
+            for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
                 Bitboard bb{};
 
@@ -211,7 +211,7 @@ namespace bb
         {
             EnumMap<Square, Bitboard> bbs{};
 
-            for (Square fromSq = A1; fromSq != Square::none(); ++fromSq)
+            for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
                 bbs[fromSq] = generatePositiveRayAttacks(dir, fromSq);
             }
@@ -246,12 +246,12 @@ namespace bb
 
             if constexpr (DirV == NorthWest || DirV == North || DirV == NorthEast || DirV == East)
             {
-                Bitboard blocker = (attacks & occupied) | H8; // set highest bit (H8) so msb never fails
+                Bitboard blocker = (attacks & occupied) | h8; // set highest bit (H8) so msb never fails
                 return attacks ^ positiveRayAttacks[DirV][blocker.first()];
             }
             else
             {
-                Bitboard blocker = (attacks & occupied) | A1;
+                Bitboard blocker = (attacks & occupied) | a1;
                 return attacks ^ positiveRayAttacks[DirV][blocker.last()];
             }
         }

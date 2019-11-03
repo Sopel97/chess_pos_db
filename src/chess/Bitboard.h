@@ -236,11 +236,11 @@ public:
 
         if (offset.ranks > 0)
         {
-            m_squares <<= 8 * offset.ranks;
+            m_squares <<= 8 * static_cast<std::uint64_t>(offset.ranks);
         }
         else if (offset.ranks < 0)
         {
-            m_squares >>= -8 * offset.ranks;
+            m_squares >>= -8 * static_cast<std::uint64_t>(offset.ranks);
         }
 
         if (offset.files > 0)
@@ -351,6 +351,21 @@ public:
         return bb;
     }
 
+    [[nodiscard]] constexpr friend Bitboard operator^(Square sq, Bitboard bb)
+    {
+        return bb ^ sq;
+    }
+
+    [[nodiscard]] constexpr friend Bitboard operator&(Square sq, Bitboard bb)
+    {
+        return bb & sq;
+    }
+
+    [[nodiscard]] constexpr friend Bitboard operator|(Square sq, Bitboard bb)
+    {
+        return bb | sq;
+    }
+
     constexpr Bitboard& operator^=(Bitboard rhs)
     {
         m_squares ^= rhs.m_squares;
@@ -429,9 +444,10 @@ public:
         return m_squares;
     }
 
-    // assumes the bitboard is not empty
     constexpr void popFirst()
     {
+        ASSERT(m_square != 0);
+
         m_squares &= m_squares - 1;
     }
 
@@ -440,6 +456,21 @@ public:
 private:
     std::uint64_t m_squares;
 };
+
+[[nodiscard]] constexpr Bitboard operator^(Square sq0, Square sq1)
+{
+    return Bitboard::square(sq0) ^ sq1;
+}
+
+[[nodiscard]] constexpr Bitboard operator&(Square sq0, Square sq1)
+{
+    return Bitboard::square(sq0) & sq1;
+}
+
+[[nodiscard]] constexpr Bitboard operator|(Square sq0, Square sq1)
+{
+    return Bitboard::square(sq0) | sq1;
+}
 
 [[nodiscard]] constexpr Bitboard operator""_bb(std::uint64_t bits)
 {
@@ -488,6 +519,78 @@ namespace bb
     constexpr Bitboard rank6 = bb::rank(::rank6);
     constexpr Bitboard rank7 = bb::rank(::rank7);
     constexpr Bitboard rank8 = bb::rank(::rank8);
+
+    constexpr Bitboard a1 = bb::square(::a1);
+    constexpr Bitboard a2 = bb::square(::a2);
+    constexpr Bitboard a3 = bb::square(::a3);
+    constexpr Bitboard a4 = bb::square(::a4);
+    constexpr Bitboard a5 = bb::square(::a5);
+    constexpr Bitboard a6 = bb::square(::a6);
+    constexpr Bitboard a7 = bb::square(::a7);
+    constexpr Bitboard a8 = bb::square(::a8);
+
+    constexpr Bitboard b1 = bb::square(::b1);
+    constexpr Bitboard b2 = bb::square(::b2);
+    constexpr Bitboard b3 = bb::square(::b3);
+    constexpr Bitboard b4 = bb::square(::b4);
+    constexpr Bitboard b5 = bb::square(::b5);
+    constexpr Bitboard b6 = bb::square(::b6);
+    constexpr Bitboard b7 = bb::square(::b7);
+    constexpr Bitboard b8 = bb::square(::b8);
+
+    constexpr Bitboard c1 = bb::square(::c1);
+    constexpr Bitboard c2 = bb::square(::c2);
+    constexpr Bitboard c3 = bb::square(::c3);
+    constexpr Bitboard c4 = bb::square(::c4);
+    constexpr Bitboard c5 = bb::square(::c5);
+    constexpr Bitboard c6 = bb::square(::c6);
+    constexpr Bitboard c7 = bb::square(::c7);
+    constexpr Bitboard c8 = bb::square(::c8);
+
+    constexpr Bitboard d1 = bb::square(::d1);
+    constexpr Bitboard d2 = bb::square(::d2);
+    constexpr Bitboard d3 = bb::square(::d3);
+    constexpr Bitboard d4 = bb::square(::d4);
+    constexpr Bitboard d5 = bb::square(::d5);
+    constexpr Bitboard d6 = bb::square(::d6);
+    constexpr Bitboard d7 = bb::square(::d7);
+    constexpr Bitboard d8 = bb::square(::d8);
+
+    constexpr Bitboard e1 = bb::square(::e1);
+    constexpr Bitboard e2 = bb::square(::e2);
+    constexpr Bitboard e3 = bb::square(::e3);
+    constexpr Bitboard e4 = bb::square(::e4);
+    constexpr Bitboard e5 = bb::square(::e5);
+    constexpr Bitboard e6 = bb::square(::e6);
+    constexpr Bitboard e7 = bb::square(::e7);
+    constexpr Bitboard e8 = bb::square(::e8);
+
+    constexpr Bitboard f1 = bb::square(::f1);
+    constexpr Bitboard f2 = bb::square(::f2);
+    constexpr Bitboard f3 = bb::square(::f3);
+    constexpr Bitboard f4 = bb::square(::f4);
+    constexpr Bitboard f5 = bb::square(::f5);
+    constexpr Bitboard f6 = bb::square(::f6);
+    constexpr Bitboard f7 = bb::square(::f7);
+    constexpr Bitboard f8 = bb::square(::f8);
+
+    constexpr Bitboard g1 = bb::square(::g1);
+    constexpr Bitboard g2 = bb::square(::g2);
+    constexpr Bitboard g3 = bb::square(::g3);
+    constexpr Bitboard g4 = bb::square(::g4);
+    constexpr Bitboard g5 = bb::square(::g5);
+    constexpr Bitboard g6 = bb::square(::g6);
+    constexpr Bitboard g7 = bb::square(::g7);
+    constexpr Bitboard g8 = bb::square(::g8);
+
+    constexpr Bitboard h1 = bb::square(::h1);
+    constexpr Bitboard h2 = bb::square(::h2);
+    constexpr Bitboard h3 = bb::square(::h3);
+    constexpr Bitboard h4 = bb::square(::h4);
+    constexpr Bitboard h5 = bb::square(::h5);
+    constexpr Bitboard h6 = bb::square(::h6);
+    constexpr Bitboard h7 = bb::square(::h7);
+    constexpr Bitboard h8 = bb::square(::h8);
 
     template <PieceType PieceTypeV>
     [[nodiscard]] Bitboard pseudoAttacks(Square sq);

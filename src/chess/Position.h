@@ -15,8 +15,8 @@
 struct Board
 {
 private:
-    static constexpr EnumMap2<Color, CastleType, Square> m_rookCastleDestinations = { { {{ F1, D1 }}, {{ F8, D8 }} } };
-    static constexpr EnumMap2<Color, CastleType, Square> m_kingCastleDestinations = { { {{ G1, C1 }}, {{ G8, C8 }} } };
+    static constexpr EnumMap2<Color, CastleType, Square> m_rookCastleDestinations = { { {{ f1, d1 }}, {{ f8, d8 }} } };
+    static constexpr EnumMap2<Color, CastleType, Square> m_kingCastleDestinations = { { {{ g1, c1 }}, {{ g8, c8 }} } };
 
 public:
 
@@ -239,7 +239,7 @@ public:
     [[nodiscard]] constexpr friend bool operator==(const Board& lhs, const Board& rhs) noexcept
     {
         bool equal = true;
-        for (Square sq = A1; sq <= H8; ++sq)
+        for (Square sq = a1; sq <= h8; ++sq)
         {
             if (lhs.m_pieces[sq] != rhs.m_pieces[sq])
             {
@@ -266,18 +266,6 @@ public:
         m_pieces[sq] = piece;
         m_pieceBB[piece] |= sq;
         m_piecesByColorBB[piece.color()] |= sq;
-    }
-
-    constexpr void print(std::ostream& out) const
-    {
-        for (Rank r = rank8; r >= rank1; --r)
-        {
-            for (File f = fileA; f <= fileH; ++f)
-            {
-                out << toChar(m_pieces[Square(f, r)]);
-            }
-            out << '\n';
-        }
     }
 
     // returns captured piece

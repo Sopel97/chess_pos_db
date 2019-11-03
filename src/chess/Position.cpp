@@ -377,13 +377,13 @@ namespace detail::lookup
             rights = ~CastlingRights::None;
         }
 
-        preservedCastlingRights[E1] = ~CastlingRights::White;
-        preservedCastlingRights[E8] = ~CastlingRights::Black;
+        preservedCastlingRights[e1] = ~CastlingRights::White;
+        preservedCastlingRights[e8] = ~CastlingRights::Black;
 
-        preservedCastlingRights[H1] = ~CastlingRights::WhiteKingSide;
-        preservedCastlingRights[A1] = ~CastlingRights::WhiteQueenSide;
-        preservedCastlingRights[H8] = ~CastlingRights::BlackKingSide;
-        preservedCastlingRights[A8] = ~CastlingRights::BlackQueenSide;
+        preservedCastlingRights[h1] = ~CastlingRights::WhiteKingSide;
+        preservedCastlingRights[a1] = ~CastlingRights::WhiteQueenSide;
+        preservedCastlingRights[h8] = ~CastlingRights::BlackKingSide;
+        preservedCastlingRights[a8] = ~CastlingRights::BlackQueenSide;
 
         return preservedCastlingRights;
     }();
@@ -535,8 +535,8 @@ namespace detail
 
         if (color == Color::White
             && (
-            (sq == A1 && contains(castlingRights, CastlingRights::WhiteQueenSide))
-                || (sq == H1 && contains(castlingRights, CastlingRights::WhiteKingSide))
+            (sq == a1 && contains(castlingRights, CastlingRights::WhiteQueenSide))
+                || (sq == h1 && contains(castlingRights, CastlingRights::WhiteKingSide))
                 )
             )
         {
@@ -545,8 +545,8 @@ namespace detail
         else if (
             color == Color::Black
             && (
-            (sq == A8 && contains(castlingRights, CastlingRights::BlackQueenSide))
-                || (sq == H8 && contains(castlingRights, CastlingRights::BlackKingSide))
+            (sq == a8 && contains(castlingRights, CastlingRights::BlackQueenSide))
+                || (sq == h8 && contains(castlingRights, CastlingRights::BlackKingSide))
                 )
             )
         {
@@ -676,7 +676,7 @@ namespace detail::lookup
         case 13:
         {
             pos.place(whiteRook, sq);
-            if (sq == A1)
+            if (sq == a1)
             {
                 pos.addCastlingRights(CastlingRights::WhiteQueenSide);
             }
@@ -690,7 +690,7 @@ namespace detail::lookup
         case 14:
         {
             pos.place(blackRook, sq);
-            if (sq == A8)
+            if (sq == a8)
             {
                 pos.addCastlingRights(CastlingRights::BlackQueenSide);
             }

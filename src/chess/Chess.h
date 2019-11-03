@@ -4,6 +4,9 @@
 #include "data_structure/EnumMap.h"
 
 #include <cstdint>
+#include <optional>
+#include <string_view>
+#include <utility>
 
 enum struct Color : std::uint8_t
 {
@@ -35,6 +38,31 @@ struct EnumTraits<Color>
         ASSERT(id >= 0 && id < cardinality);
 
         return static_cast<EnumType>(id);
+    }
+
+    [[nodiscard]] static constexpr std::string_view toString(EnumType c) noexcept
+    {
+        return std::string_view("wb" + ordinal(c), 1);
+    }
+
+    [[nodiscard]] static constexpr char toChar(EnumType c) noexcept
+    {
+        return "wb"[ordinal(c)];
+    }
+
+    [[nodiscard]] static constexpr std::optional<Color> fromChar(char c) noexcept
+    {
+        if (c == 'w') return Color::White;
+        if (c == 'b') return Color::Black;
+
+        return {};
+    }
+
+    [[nodiscard]] static constexpr std::optional<Color> fromString(std::string_view sv) noexcept
+    {
+        if (sv.size() != 1) return {};
+
+        return fromChar(sv[0]);
     }
 };
 
@@ -81,7 +109,33 @@ struct EnumTraits<PieceType>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
+    }
+
+    [[nodiscard]] static constexpr std::string_view toString(EnumType p, Color c) noexcept
+    {
+        return std::string_view("PpNnBbRrQqKk " + (ordinal(p) * 2 + ::ordinal(c)), 1);
+    }
+
+    [[nodiscard]] static constexpr char toChar(EnumType p, Color c) noexcept
+    {
+        return "PpNnBbRrQqKk "[ordinal(p) * 2 + ::ordinal(c)];
+    }
+
+    [[nodiscard]] static constexpr std::optional<PieceType> fromChar(char c) noexcept
+    {
+        auto it = std::string_view("PpNnBbRrQqKk ").find(c);
+        if (it == std::string::npos) return {};
+        else return static_cast<PieceType>(it/2);
+    }
+
+    [[nodiscard]] static constexpr std::optional<PieceType> fromString(std::string_view sv) noexcept
+    {
+        if (sv.size() != 1) return {};
+
+        return fromChar(sv[0]);
     }
 };
 
@@ -131,6 +185,11 @@ struct Piece
         return fromOrdinal<Color>(m_id & 1);
     }
 
+    [[nodiscard]] constexpr std::pair<PieceType, Color> parts() const
+    {
+        return std::make_pair(type(), color());
+    }
+
     [[nodiscard]] constexpr explicit operator int() const
     {
         return static_cast<int>(m_id);
@@ -144,6 +203,16 @@ private:
 
     std::uint8_t m_id; // lowest bit is a color, 7 highest bits are a piece type
 };
+
+[[nodiscard]] constexpr Piece operator|(PieceType type, Color color) noexcept
+{
+    return Piece(type, color);
+}
+
+[[nodiscard]] constexpr Piece operator|(Color color, PieceType type) noexcept
+{
+    return Piece(type, color);
+}
 
 constexpr Piece whitePawn = Piece(PieceType::Pawn, Color::White);
 constexpr Piece whiteKnight = Piece(PieceType::Knight, Color::White);
@@ -191,28 +260,44 @@ struct EnumTraits<Piece>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(int id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return Piece::fromId(id);
     }
+
+    [[nodiscard]] static constexpr std::string_view toString(EnumType p) noexcept
+    {
+        return std::string_view("PpNnBbRrQqKk " + ordinal(p), 1);
+    }
+
+    [[nodiscard]] static constexpr char toChar(EnumType p) noexcept
+    {
+        return "PpNnBbRrQqKk "[ordinal(p)];
+    }
+
+    [[nodiscard]] static constexpr std::optional<Piece> fromChar(char c) noexcept
+    {
+        auto it = std::string_view("PpNnBbRrQqKk ").find(c);
+        if (it == std::string::npos) return {};
+        else return Piece::fromId(static_cast<int>(it));
+    }
+
+    [[nodiscard]] static constexpr std::optional<Piece> fromString(std::string_view sv) noexcept
+    {
+        if (sv.size() != 1) return {};
+
+        return fromChar(sv[0]);
+    }
 };
-
-[[nodiscard]] constexpr char toChar(Piece piece)
-{
-    constexpr EnumMap<Piece, char> chars = {
-        'P', 'p',
-        'N', 'n',
-        'B', 'b',
-        'R', 'r',
-        'Q', 'q',
-        'K', 'k',
-        '.'
-    };
-
-    return chars[piece];
-}
 
 template <typename TagT>
 struct Coord
 {
+    constexpr Coord() noexcept :
+        m_i(0)
+    {
+    }
+
     constexpr explicit Coord(int i) noexcept :
         m_i(i)
     {
@@ -339,7 +424,29 @@ struct EnumTraits<File>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
+    }
+
+    [[nodiscard]] static constexpr std::string_view toString(EnumType c) noexcept
+    {
+        ASSERT(c.isOk());
+
+        return std::string_view("abcdefgh" + ordinal(c), 1);
+    }
+
+    [[nodiscard]] static constexpr std::optional<File> fromChar(char c) noexcept
+    {
+        if (c < 'a' || c > 'h') return {};
+        return static_cast<File>(c - 'a');
+    }
+
+    [[nodiscard]] static constexpr std::optional<File> fromString(std::string_view sv) noexcept
+    {
+        if (sv.size() != 1) return {};
+
+        return fromChar(sv[0]);
     }
 };
 
@@ -359,7 +466,29 @@ struct EnumTraits<Rank>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
+    }
+
+    [[nodiscard]] static constexpr std::string_view toString(EnumType c) noexcept
+    {
+        ASSERT(c.isOk());
+
+        return std::string_view("12345678" + ordinal(c), 1);
+    }
+
+    [[nodiscard]] static constexpr std::optional<Rank> fromChar(char c) noexcept
+    {
+        if (c < '1' || c > '8') return {};
+        return static_cast<Rank>(c - '1');
+    }
+
+    [[nodiscard]] static constexpr std::optional<Rank> fromString(std::string_view sv) noexcept
+    {
+        if (sv.size() != 1) return {};
+
+        return fromChar(sv[0]);
     }
 };
 
@@ -368,6 +497,11 @@ struct EnumTraits<Rank>
 struct FlatSquareOffset
 {
     std::int8_t value;
+
+    constexpr FlatSquareOffset() noexcept :
+        value(0)
+    {
+    }
 
     constexpr FlatSquareOffset(int files, int ranks) noexcept :
         value(files + ranks * cardinality<File>())
@@ -392,6 +526,12 @@ struct SquareCoords
 {
     File file;
     Rank rank;
+
+    constexpr SquareCoords() noexcept :
+        file{},
+        rank{}
+    {
+    }
 
     constexpr SquareCoords(File f, Rank r) noexcept :
         file(f),
@@ -429,6 +569,11 @@ public:
     [[nodiscard]] static constexpr Square none()
     {
         return Square(m_noneId);
+    }
+
+    constexpr Square() noexcept :
+        m_id(0)
+    {
     }
 
     constexpr explicit Square(int idx) noexcept :
@@ -555,77 +700,77 @@ private:
     std::int8_t m_id;
 };
 
-constexpr Square A1(fileA, rank1);
-constexpr Square A2(fileA, rank2);
-constexpr Square A3(fileA, rank3);
-constexpr Square A4(fileA, rank4);
-constexpr Square A5(fileA, rank5);
-constexpr Square A6(fileA, rank6);
-constexpr Square A7(fileA, rank7);
-constexpr Square A8(fileA, rank8);
+constexpr Square a1(fileA, rank1);
+constexpr Square a2(fileA, rank2);
+constexpr Square a3(fileA, rank3);
+constexpr Square a4(fileA, rank4);
+constexpr Square a5(fileA, rank5);
+constexpr Square a6(fileA, rank6);
+constexpr Square a7(fileA, rank7);
+constexpr Square a8(fileA, rank8);
 
-constexpr Square B1(fileB, rank1);
-constexpr Square B2(fileB, rank2);
-constexpr Square B3(fileB, rank3);
-constexpr Square B4(fileB, rank4);
-constexpr Square B5(fileB, rank5);
-constexpr Square B6(fileB, rank6);
-constexpr Square B7(fileB, rank7);
-constexpr Square B8(fileB, rank8);
+constexpr Square b1(fileB, rank1);
+constexpr Square b2(fileB, rank2);
+constexpr Square b3(fileB, rank3);
+constexpr Square b4(fileB, rank4);
+constexpr Square b5(fileB, rank5);
+constexpr Square b6(fileB, rank6);
+constexpr Square b7(fileB, rank7);
+constexpr Square b8(fileB, rank8);
 
-constexpr Square C1(fileC, rank1);
-constexpr Square C2(fileC, rank2);
-constexpr Square C3(fileC, rank3);
-constexpr Square C4(fileC, rank4);
-constexpr Square C5(fileC, rank5);
-constexpr Square C6(fileC, rank6);
-constexpr Square C7(fileC, rank7);
-constexpr Square C8(fileC, rank8);
+constexpr Square c1(fileC, rank1);
+constexpr Square c2(fileC, rank2);
+constexpr Square c3(fileC, rank3);
+constexpr Square c4(fileC, rank4);
+constexpr Square c5(fileC, rank5);
+constexpr Square c6(fileC, rank6);
+constexpr Square c7(fileC, rank7);
+constexpr Square c8(fileC, rank8);
 
-constexpr Square D1(fileD, rank1);
-constexpr Square D2(fileD, rank2);
-constexpr Square D3(fileD, rank3);
-constexpr Square D4(fileD, rank4);
-constexpr Square D5(fileD, rank5);
-constexpr Square D6(fileD, rank6);
-constexpr Square D7(fileD, rank7);
-constexpr Square D8(fileD, rank8);
+constexpr Square d1(fileD, rank1);
+constexpr Square d2(fileD, rank2);
+constexpr Square d3(fileD, rank3);
+constexpr Square d4(fileD, rank4);
+constexpr Square d5(fileD, rank5);
+constexpr Square d6(fileD, rank6);
+constexpr Square d7(fileD, rank7);
+constexpr Square d8(fileD, rank8);
 
-constexpr Square E1(fileE, rank1);
-constexpr Square E2(fileE, rank2);
-constexpr Square E3(fileE, rank3);
-constexpr Square E4(fileE, rank4);
-constexpr Square E5(fileE, rank5);
-constexpr Square E6(fileE, rank6);
-constexpr Square E7(fileE, rank7);
-constexpr Square E8(fileE, rank8);
+constexpr Square e1(fileE, rank1);
+constexpr Square e2(fileE, rank2);
+constexpr Square e3(fileE, rank3);
+constexpr Square e4(fileE, rank4);
+constexpr Square e5(fileE, rank5);
+constexpr Square e6(fileE, rank6);
+constexpr Square e7(fileE, rank7);
+constexpr Square e8(fileE, rank8);
 
-constexpr Square F1(fileF, rank1);
-constexpr Square F2(fileF, rank2);
-constexpr Square F3(fileF, rank3);
-constexpr Square F4(fileF, rank4);
-constexpr Square F5(fileF, rank5);
-constexpr Square F6(fileF, rank6);
-constexpr Square F7(fileF, rank7);
-constexpr Square F8(fileF, rank8);
+constexpr Square f1(fileF, rank1);
+constexpr Square f2(fileF, rank2);
+constexpr Square f3(fileF, rank3);
+constexpr Square f4(fileF, rank4);
+constexpr Square f5(fileF, rank5);
+constexpr Square f6(fileF, rank6);
+constexpr Square f7(fileF, rank7);
+constexpr Square f8(fileF, rank8);
 
-constexpr Square G1(fileG, rank1);
-constexpr Square G2(fileG, rank2);
-constexpr Square G3(fileG, rank3);
-constexpr Square G4(fileG, rank4);
-constexpr Square G5(fileG, rank5);
-constexpr Square G6(fileG, rank6);
-constexpr Square G7(fileG, rank7);
-constexpr Square G8(fileG, rank8);
+constexpr Square g1(fileG, rank1);
+constexpr Square g2(fileG, rank2);
+constexpr Square g3(fileG, rank3);
+constexpr Square g4(fileG, rank4);
+constexpr Square g5(fileG, rank5);
+constexpr Square g6(fileG, rank6);
+constexpr Square g7(fileG, rank7);
+constexpr Square g8(fileG, rank8);
 
-constexpr Square H1(fileH, rank1);
-constexpr Square H2(fileH, rank2);
-constexpr Square H3(fileH, rank3);
-constexpr Square H4(fileH, rank4);
-constexpr Square H5(fileH, rank5);
-constexpr Square H6(fileH, rank6);
-constexpr Square H7(fileH, rank7);
-constexpr Square H8(fileH, rank8);
+constexpr Square h1(fileH, rank1);
+constexpr Square h2(fileH, rank2);
+constexpr Square h3(fileH, rank3);
+constexpr Square h4(fileH, rank4);
+constexpr Square h5(fileH, rank5);
+constexpr Square h6(fileH, rank6);
+constexpr Square h7(fileH, rank7);
+constexpr Square h8(fileH, rank8);
 
 template <>
 struct EnumTraits<Square>
@@ -636,6 +781,17 @@ struct EnumTraits<Square>
     static constexpr int cardinality = ::cardinality<Rank>() * ::cardinality<File>();
     static constexpr bool isNaturalIndex = true;
 
+    static constexpr std::array<EnumType, cardinality> values{
+        a1, a2, a3, a4, a5, a6, a7, a8,
+        b1, b2, b3, b4, b5, b6, b7, b8,
+        c1, c2, c3, c4, c5, c6, c7, c8,
+        d1, d2, d3, d4, d5, d6, d7, d8,
+        e1, e2, e3, e4, e5, e6, e7, e8,
+        f1, f2, f3, f4, f5, f6, f7, f8,
+        g1, g2, g3, g4, g5, g6, g7, g8,
+        h1, h2, h3, h4, h5, h6, h7, h8
+    };
+
     [[nodiscard]] static constexpr int ordinal(EnumType c) noexcept
     {
         return static_cast<IdType>(c);
@@ -643,7 +799,40 @@ struct EnumTraits<Square>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
+    }
+
+    [[nodiscard]] static constexpr std::string_view toString(Square sq)
+    {
+        ASSERT(sq.isOk());
+
+        return
+            std::string_view(
+                "a1a2a3a4a5a6a7a8"
+                "b1b2b3b4b5b6b7b8"
+                "c1c2c3c4c5c6c7c8"
+                "d1d2d3d4d5d6d7d8"
+                "e1e2e3e4e5e6e7e8"
+                "f1f2f3f4f5f6f7f8"
+                "g1g2g3g4g5g6g7g8"
+                "h1h2h3h4h5h6h7h8"
+                + (ordinal(sq) * 2),
+                2
+            );
+    }
+
+    [[nodiscard]] static constexpr std::optional<Square> fromString(std::string_view sv) noexcept
+    {
+        if (sv.size() != 2) return {};
+
+        const char f = sv[0];
+        const char r = sv[1];
+        if (f < 'a' || f > 'h') return {};
+        if (r < '1' || r > '8') return {};
+
+        return Square(static_cast<File>(f - 'a'), static_cast<Rank>(r - '1'));
     }
 };
 
@@ -678,6 +867,8 @@ struct EnumTraits<MoveType>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
     }
 };
@@ -709,6 +900,8 @@ struct EnumTraits<CastleType>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
     }
 };
@@ -741,13 +934,28 @@ struct Move
     }
 
     [[nodiscard]] constexpr static Move castle(CastleType ct, Color c);
+
+    [[nodiscard]] constexpr static Move normal(Square from, Square to)
+    {
+        return Move{ from, to, MoveType::Normal, Piece::none() };
+    }
+
+    [[nodiscard]] constexpr static Move enPassant(Square from, Square to)
+    {
+        return Move{ from, to, MoveType::EnPassant, Piece::none() };
+    }
+
+    [[nodiscard]] constexpr static Move promotion(Square from, Square to, Piece piece)
+    {
+        return Move{ from, to, MoveType::Promotion, piece };
+    }
 };
 
 namespace detail::castle
 {
     constexpr EnumMap2<CastleType, Color, Move> moves = { {
-        {{ { E1, H1, MoveType::Castle }, { E8, H8, MoveType::Castle } }},
-        {{ { E1, A1, MoveType::Castle }, { E8, A8, MoveType::Castle } }}
+        {{ { e1, h1, MoveType::Castle }, { e8, h8, MoveType::Castle } }},
+        {{ { e1, a1, MoveType::Castle }, { e8, a8, MoveType::Castle } }}
     } };
 }
 
@@ -756,15 +964,15 @@ namespace detail::castle
     return detail::castle::moves[ct][c];
 }
 
-static_assert(A4 + Offset{ 0, 1 } == A5);
-static_assert(A4 + Offset{ 0, 2 } == A6);
-static_assert(A4 + Offset{ 0, -2 } == A2);
-static_assert(A4 + Offset{ 0, -1 } == A3);
+static_assert(a4 + Offset{ 0, 1 } == a5);
+static_assert(a4 + Offset{ 0, 2 } == a6);
+static_assert(a4 + Offset{ 0, -2 } == a2);
+static_assert(a4 + Offset{ 0, -1 } == a3);
 
-static_assert(E4 + Offset{ 1, 0 } == F4);
-static_assert(E4 + Offset{ 2, 0 } == G4);
-static_assert(E4 + Offset{ -1, 0 } == D4);
-static_assert(E4 + Offset{ -2, 0 } == C4);
+static_assert(e4 + Offset{ 1, 0 } == f4);
+static_assert(e4 + Offset{ 2, 0 } == g4);
+static_assert(e4 + Offset{ -1, 0 } == d4);
+static_assert(e4 + Offset{ -2, 0 } == c4);
 
 enum struct CastlingRights : std::uint8_t
 {
@@ -807,10 +1015,10 @@ constexpr CastlingRights& operator&=(CastlingRights& lhs, CastlingRights rhs)
 
 constexpr CastlingRights moveToCastlingType(Move move)
 {
-    if (move.to == H1) return CastlingRights::WhiteKingSide;
-    if (move.to == A1) return CastlingRights::WhiteQueenSide;
-    if (move.to == H8) return CastlingRights::WhiteKingSide;
-    if (move.to == A8) return CastlingRights::WhiteQueenSide;
+    if (move.to == h1) return CastlingRights::WhiteKingSide;
+    if (move.to == a1) return CastlingRights::WhiteQueenSide;
+    if (move.to == h8) return CastlingRights::WhiteKingSide;
+    if (move.to == a8) return CastlingRights::WhiteQueenSide;
     return CastlingRights::None;
 }
 
@@ -843,6 +1051,8 @@ struct EnumTraits<CastlingRights>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
+        ASSERT(id >= 0 && id < cardinality);
+
         return static_cast<EnumType>(id);
     }
 };
