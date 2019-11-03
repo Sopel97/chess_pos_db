@@ -10,8 +10,8 @@
 #include "chess/Position.h"
 #include "chess/San.h"
 
-#include "data_structure/Enum.h"
-#include "data_structure/EnumMap.h"
+#include "enum/Enum.h"
+#include "enum/EnumArray.h"
 
 #include "external_storage/External.h"
 
@@ -71,7 +71,7 @@ namespace console_app
         return pgns;
     }
 
-    [[nodiscard]] static std::string resultsToString(const EnumMap<GameResult, std::pair<std::size_t, std::size_t>>& results)
+    [[nodiscard]] static std::string resultsToString(const EnumArray<GameResult, std::pair<std::size_t, std::size_t>>& results)
     {
         auto str = std::string("+") + std::to_string(results[GameResult::WhiteWin].first);
         str += std::string("=") + std::to_string(results[GameResult::Draw].first);
@@ -88,7 +88,7 @@ namespace console_app
         std::size_t total = 0;
         std::size_t totalDirect = 0;
 
-        EnumMap2<GameLevel, GameResult, std::pair<std::size_t, std::size_t>> cc{};
+        EnumArray2<GameLevel, GameResult, std::pair<std::size_t, std::size_t>> cc{};
 
         for (auto& [origin, e] : entriesDirect)
         {

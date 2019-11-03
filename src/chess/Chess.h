@@ -1,7 +1,7 @@
 #pragma once
 
-#include "data_structure/Enum.h"
-#include "data_structure/EnumMap.h"
+#include "enum/Enum.h"
+#include "enum/EnumArray.h"
 
 #include <cstdint>
 #include <optional>
@@ -953,7 +953,7 @@ struct Move
 
 namespace detail::castle
 {
-    constexpr EnumMap2<CastleType, Color, Move> moves = { {
+    constexpr EnumArray2<CastleType, Color, Move> moves = { {
         {{ { e1, h1, MoveType::Castle }, { e8, h8, MoveType::Castle } }},
         {{ { e1, a1, MoveType::Castle }, { e8, a8, MoveType::Castle } }}
     } };

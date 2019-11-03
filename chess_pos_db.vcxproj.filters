@@ -97,6 +97,12 @@
     <Filter Include="Header Files\src\chess\detail">
       <UniqueIdentifier>{cf75b40c-8695-42d2-9081-a0e6017fe5c0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\src\enum">
+      <UniqueIdentifier>{0ec0aa1a-708a-46ca-8315-fbc6650d7ba9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\enum">
+      <UniqueIdentifier>{fb936208-2d71-46b8-ae77-17fe6041f75c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\algorithm\Unsort.h">
@@ -137,12 +143,6 @@
     </ClInclude>
     <ClInclude Include="src\coding\Compression.h">
       <Filter>Header Files\src\coding</Filter>
-    </ClInclude>
-    <ClInclude Include="src\data_structure\Enum.h">
-      <Filter>Header Files\src\data_structure</Filter>
-    </ClInclude>
-    <ClInclude Include="src\data_structure\EnumMap.h">
-      <Filter>Header Files\src\data_structure</Filter>
     </ClInclude>
     <ClInclude Include="src\data_structure\FixedVector.h">
       <Filter>Header Files\src\data_structure</Filter>
@@ -200,6 +200,12 @@
     </ClInclude>
     <ClInclude Include="src\CommandLineTool.h">
       <Filter>Header Files\src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\enum\Enum.h">
+      <Filter>Header Files\src\enum</Filter>
+    </ClInclude>
+    <ClInclude Include="src\enum\EnumArray.h">
+      <Filter>Header Files\src\enum</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -18,7 +18,7 @@
 
 #include "chess/GameClassification.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"

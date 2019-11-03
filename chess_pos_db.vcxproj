@@ -60,9 +60,9 @@
     <ClInclude Include="src\CommandLineTool.h" />
     <ClInclude Include="src\Configuration.h" />
     <ClInclude Include="src\ConsoleApp.h" />
-    <ClInclude Include="src\data_structure\Enum.h" />
-    <ClInclude Include="src\data_structure\EnumMap.h" />
     <ClInclude Include="src\data_structure\FixedVector.h" />
+    <ClInclude Include="src\enum\Enum.h" />
+    <ClInclude Include="src\enum\EnumArray.h" />
     <ClInclude Include="src\external_storage\External.h" />
     <ClInclude Include="src\intrin\Intrinsics.h" />
     <ClInclude Include="src\Logger.h" />

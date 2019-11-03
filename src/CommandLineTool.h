@@ -1,7 +1,6 @@
 #pragma once
 
-#include "data_structure/Enum.h"
-
+#include <stdexcept>
 #include <string_view>
 
 namespace command_line_app

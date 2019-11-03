@@ -2,8 +2,8 @@
 
 #include "Chess.h"
 
-#include "data_structure/Enum.h"
-#include "data_structure/EnumMap.h"
+#include "enum/Enum.h"
+#include "enum/EnumArray.h"
 
 #include "intrin/Intrinsics.h"
 
@@ -109,7 +109,7 @@ private:
     }
 
     // files A..file inclusive
-    static constexpr EnumMap<File, std::uint64_t> m_filesUpToBB{
+    static constexpr EnumArray<File, std::uint64_t> m_filesUpToBB{
         0x0101010101010101ULL,
         0x0303030303030303ULL,
         0x0707070707070707ULL,

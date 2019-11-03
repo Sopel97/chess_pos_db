@@ -2,8 +2,8 @@
 
 #include "Chess.h"
 
-#include "data_structure/Enum.h"
-#include "data_structure/EnumMap.h"
+#include "enum/Enum.h"
+#include "enum/EnumArray.h"
 
 #include "intrin/Intrinsics.h"
 
@@ -52,15 +52,15 @@ namespace bb
             offsets[West]
         };
 
-        [[nodiscard]] static EnumMap<Square, Bitboard> generatePseudoAttacks_Pawn()
+        [[nodiscard]] static EnumArray<Square, Bitboard> generatePseudoAttacks_Pawn()
         {
             // pseudo attacks don't make sense for pawns
             return {};
         }
 
-        [[nodiscard]] static EnumMap<Square, Bitboard> generatePseudoAttacks_Knight()
+        [[nodiscard]] static EnumArray<Square, Bitboard> generatePseudoAttacks_Knight()
         {
-            EnumMap<Square, Bitboard> bbs{};
+            EnumArray<Square, Bitboard> bbs{};
 
             for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
@@ -107,9 +107,9 @@ namespace bb
             return bb;
         }
 
-        [[nodiscard]] static EnumMap<Square, Bitboard> generatePseudoAttacks_Bishop()
+        [[nodiscard]] static EnumArray<Square, Bitboard> generatePseudoAttacks_Bishop()
         {
-            EnumMap<Square, Bitboard> bbs{};
+            EnumArray<Square, Bitboard> bbs{};
 
             for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
@@ -119,9 +119,9 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static EnumMap<Square, Bitboard> generatePseudoAttacks_Rook()
+        [[nodiscard]] static EnumArray<Square, Bitboard> generatePseudoAttacks_Rook()
         {
-            EnumMap<Square, Bitboard> bbs{};
+            EnumArray<Square, Bitboard> bbs{};
 
             for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
@@ -131,9 +131,9 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static EnumMap<Square, Bitboard> generatePseudoAttacks_Queen()
+        [[nodiscard]] static EnumArray<Square, Bitboard> generatePseudoAttacks_Queen()
         {
-            EnumMap<Square, Bitboard> bbs{};
+            EnumArray<Square, Bitboard> bbs{};
 
             for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
@@ -145,9 +145,9 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static EnumMap<Square, Bitboard> generatePseudoAttacks_King()
+        [[nodiscard]] static EnumArray<Square, Bitboard> generatePseudoAttacks_King()
         {
-            EnumMap<Square, Bitboard> bbs{};
+            EnumArray<Square, Bitboard> bbs{};
 
             for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
@@ -168,9 +168,9 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static EnumMap2<PieceType, Square, Bitboard> generatePseudoAttacks()
+        [[nodiscard]] static EnumArray2<PieceType, Square, Bitboard> generatePseudoAttacks()
         {
-            return EnumMap2<PieceType, Square, Bitboard>{
+            return EnumArray2<PieceType, Square, Bitboard>{
                 generatePseudoAttacks_Pawn(),
                     generatePseudoAttacks_Knight(),
                     generatePseudoAttacks_Bishop(),
@@ -180,7 +180,7 @@ namespace bb
             };
         }
 
-        static const EnumMap2<PieceType, Square, Bitboard> pseudoAttacks = generatePseudoAttacks();
+        static const EnumArray2<PieceType, Square, Bitboard> pseudoAttacks = generatePseudoAttacks();
 
         [[nodiscard]] static Bitboard generatePositiveRayAttacks(Direction dir, Square fromSq)
         {
@@ -207,9 +207,9 @@ namespace bb
 
         // classical slider move generation approach https://www.chessprogramming.org/Classical_Approach
 
-        [[nodiscard]] static EnumMap<Square, Bitboard> generatePositiveRayAttacks(Direction dir)
+        [[nodiscard]] static EnumArray<Square, Bitboard> generatePositiveRayAttacks(Direction dir)
         {
-            EnumMap<Square, Bitboard> bbs{};
+            EnumArray<Square, Bitboard> bbs{};
 
             for (Square fromSq = ::a1; fromSq != Square::none(); ++fromSq)
             {
@@ -219,9 +219,9 @@ namespace bb
             return bbs;
         }
 
-        [[nodiscard]] static std::array<EnumMap<Square, Bitboard>, 8> generatePositiveRayAttacks()
+        [[nodiscard]] static std::array<EnumArray<Square, Bitboard>, 8> generatePositiveRayAttacks()
         {
-            std::array<EnumMap<Square, Bitboard>, 8> bbs{};
+            std::array<EnumArray<Square, Bitboard>, 8> bbs{};
 
             bbs[North] = generatePositiveRayAttacks(North);
             bbs[NorthEast] = generatePositiveRayAttacks(NorthEast);
@@ -235,7 +235,7 @@ namespace bb
             return bbs;
         }
 
-        static const std::array<EnumMap<Square, Bitboard>, 8> positiveRayAttacks = generatePositiveRayAttacks();
+        static const std::array<EnumArray<Square, Bitboard>, 8> positiveRayAttacks = generatePositiveRayAttacks();
 
         template <Direction DirV>
         [[nodiscard]] static Bitboard slidingAttacks(Square sq, Bitboard occupied)

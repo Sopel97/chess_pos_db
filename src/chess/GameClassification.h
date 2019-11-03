@@ -1,7 +1,7 @@
 #pragma once
 
-#include "data_structure/Enum.h"
-#include "data_structure/EnumMap.h"
+#include "enum/Enum.h"
+#include "enum/EnumArray.h"
 
 #include <cstdint>
 #include <optional>
