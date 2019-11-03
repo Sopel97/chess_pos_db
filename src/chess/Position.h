@@ -5,7 +5,7 @@
 #include "Bitboard.h"
 #include "Chess.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include "util/Assert.h"
 
@@ -15,8 +15,8 @@
 struct Board
 {
 private:
-    static constexpr EnumMap2<Color, CastleType, Square> m_rookCastleDestinations = { { {{ f1, d1 }}, {{ f8, d8 }} } };
-    static constexpr EnumMap2<Color, CastleType, Square> m_kingCastleDestinations = { { {{ g1, c1 }}, {{ g8, c8 }} } };
+    static constexpr EnumArray2<Color, CastleType, Square> m_rookCastleDestinations = { { {{ f1, d1 }}, {{ f8, d8 }} } };
+    static constexpr EnumArray2<Color, CastleType, Square> m_kingCastleDestinations = { { {{ g1, c1 }}, {{ g8, c8 }} } };
 
 public:
 
@@ -525,9 +525,9 @@ public:
     const Piece* piecesRaw() const;
 
 private:
-    EnumMap<Square, Piece> m_pieces;
-    EnumMap<Piece, Bitboard> m_pieceBB;
-    EnumMap<Color, Bitboard> m_piecesByColorBB;
+    EnumArray<Square, Piece> m_pieces;
+    EnumArray<Piece, Bitboard> m_pieceBB;
+    EnumArray<Color, Bitboard> m_piecesByColorBB;
 
     // NOTE: currently we don't track it because it's not 
     // required to perform ep if we don't need to check validity

@@ -148,7 +148,7 @@ namespace movegen
     inline void forEachCastlingMove(const Position& pos, FuncT&& f)
     {
         // all square on a castling path must be empty
-        constexpr EnumMap2<Color, CastleType, Bitboard> castlingPaths = { 
+        constexpr EnumArray2<Color, CastleType, Bitboard> castlingPaths = { 
             { 
                 {{ Bitboard::square(f1) | g1, Bitboard::square(b1) | c1 | d1 }},
                 {{ Bitboard::square(f8) | g8, Bitboard::square(b8) | c8 | d8 }}
@@ -156,7 +156,7 @@ namespace movegen
         };
 
         // this square must not be attacked by the enemy
-        constexpr EnumMap2<Color, CastleType, Square> squarePassedByKing = {
+        constexpr EnumArray2<Color, CastleType, Square> squarePassedByKing = {
             {
                 {{ f1, d1 }},
                 {{ f8, d8 }}
@@ -164,7 +164,7 @@ namespace movegen
         };
 
         // we can't use CastlingRights directly as it is a flag set
-        constexpr EnumMap2<Color, CastleType, CastlingRights> castlingRightsMap = {
+        constexpr EnumArray2<Color, CastleType, CastlingRights> castlingRightsMap = {
             {
                 {{ CastlingRights::WhiteKingSide, CastlingRights::WhiteQueenSide }},
                 {{ CastlingRights::BlackKingSide, CastlingRights::BlackQueenSide }}

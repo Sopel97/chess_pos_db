@@ -4,7 +4,7 @@
 
 #include "chess/GameClassification.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include <execution>
 #include <filesystem>
@@ -26,7 +26,7 @@ namespace persistence
 
     struct ImportStats
     {
-        EnumMap<GameLevel, SingleGameLevelImportStats> statsByLevel;
+        EnumArray<GameLevel, SingleGameLevelImportStats> statsByLevel;
 
         ImportStats() = default;
         ImportStats(SingleGameLevelImportStats stats, GameLevel level);
@@ -50,7 +50,7 @@ namespace persistence
 
     struct DatabaseStats
     {
-        EnumMap<GameLevel, SingleGameLevelDatabaseStats> statsByLevel;
+        EnumArray<GameLevel, SingleGameLevelDatabaseStats> statsByLevel;
 
         DatabaseStats& operator+=(const ImportStats& rhs);
     };

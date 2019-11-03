@@ -7,7 +7,7 @@
 #include "chess/Position.h"
 #include "chess/San.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include "external_storage/External.h"
 
@@ -1193,7 +1193,7 @@ namespace persistence
             }
         }
 
-        [[nodiscard]] EnumMap<GameLevel, Header> Database::makeHeaders(const std::filesystem::path& path)
+        [[nodiscard]] EnumArray<GameLevel, Header> Database::makeHeaders(const std::filesystem::path& path)
         {
             return {
                 Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[0]]),
@@ -1202,7 +1202,7 @@ namespace persistence
             };
         }
 
-        [[nodiscard]] EnumMap<GameLevel, Header> Database::makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
+        [[nodiscard]] EnumArray<GameLevel, Header> Database::makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
         {
             return {
                 Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
@@ -1235,8 +1235,8 @@ namespace persistence
 
         [[nodiscard]] std::vector<GameHeader> Database::queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestination>& destinations)
         {
-            EnumMap<GameLevel, std::vector<std::uint64_t>> offsetsByLevel;
-            EnumMap<GameLevel, std::vector<std::size_t>> indices;
+            EnumArray<GameLevel, std::vector<std::uint64_t>> offsetsByLevel;
+            EnumArray<GameLevel, std::vector<std::size_t>> indices;
 
             for (std::size_t i = 0; i < offsets.size(); ++i)
             {
@@ -1244,7 +1244,7 @@ namespace persistence
                 indices[destinations[i].level].emplace_back(i);
             }
 
-            EnumMap<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
+            EnumArray<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
             for (GameLevel level : values<GameLevel>())
             {
                 packedHeadersByLevel[level] = queryHeadersByOffsets(offsetsByLevel[level], level);

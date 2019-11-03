@@ -7,7 +7,7 @@
 #include "chess/Pgn.h"
 #include "chess/San.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include "external_storage/External.h"
 
@@ -839,9 +839,9 @@ namespace persistence
                 return buffers;
             }
 
-            [[nodiscard]] static EnumMap<GameLevel, ImportablePgnFilePaths> partitionPathsByLevel(ImportablePgnFiles files)
+            [[nodiscard]] static EnumArray<GameLevel, ImportablePgnFilePaths> partitionPathsByLevel(ImportablePgnFiles files)
             {
-                EnumMap<GameLevel, ImportablePgnFilePaths> partitioned;
+                EnumArray<GameLevel, ImportablePgnFilePaths> partitioned;
                 for (auto&& file : files)
                 {
                     partitioned[file.level()].emplace_back(std::move(file).path());

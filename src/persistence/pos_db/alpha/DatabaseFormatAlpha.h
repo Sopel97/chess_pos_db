@@ -6,7 +6,7 @@
 
 #include "chess/GameClassification.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include "external_storage/External.h"
 
@@ -228,7 +228,7 @@ namespace persistence
                 void combine(const CountAndGameIndices& rhs);
             };
 
-            using PositionStats = EnumMap<query::Select, EnumMap2<GameLevel, GameResult, CountAndGameIndices>>;
+            using PositionStats = EnumArray<query::Select, EnumArray2<GameLevel, GameResult, CountAndGameIndices>>;
 
             struct File
             {
@@ -423,22 +423,22 @@ namespace persistence
             static inline const DatabaseManifest m_manifest = { "db_alpha", true };
 
             template <typename T>
-            using PerPartition = EnumMap2<GameLevel, GameResult, T>;
+            using PerPartition = EnumArray2<GameLevel, GameResult, T>;
 
             template <typename T>
-            using PerPartitionWithSpecificGameLevel = EnumMap<GameResult, T>;
+            using PerPartitionWithSpecificGameLevel = EnumArray<GameResult, T>;
 
             using PartitionStorageType = PerPartition<detail::Partition>;
 
             using PartitionPathsStorageType = PerPartition<std::filesystem::path>;
 
-            static inline const EnumMap<GameLevel, std::filesystem::path> m_pathByGameLevel = {
+            static inline const EnumArray<GameLevel, std::filesystem::path> m_pathByGameLevel = {
                 "human",
                 "engine",
                 "server"
             };
 
-            static inline const EnumMap<GameResult, std::filesystem::path> m_pathByGameResult = {
+            static inline const EnumArray<GameResult, std::filesystem::path> m_pathByGameResult = {
                 "w",
                 "l",
                 "d"

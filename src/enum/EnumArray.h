@@ -8,7 +8,7 @@
 #include <iterator>
 
 template <typename EnumT, typename ValueT, std::size_t SizeV = cardinality<EnumT>()>
-struct EnumMap
+struct EnumArray
 {
     static_assert(isNaturalIndex<EnumT>(), "Enum must start with 0 and end with cardinality-1.");
 
@@ -150,4 +150,4 @@ struct EnumMap
 };
 
 template <typename Enum1T, typename Enum2T, typename ValueT, std::size_t Size1V = cardinality<Enum1T>(), std::size_t Size2V = cardinality<Enum2T>()>
-using EnumMap2 = EnumMap<Enum1T, EnumMap<Enum2T, ValueT, Size2V>, Size1V>;
+using EnumArray2 = EnumArray<Enum1T, EnumArray<Enum2T, ValueT, Size2V>, Size1V>;

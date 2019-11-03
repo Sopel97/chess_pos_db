@@ -6,7 +6,7 @@
 
 #include "chess/GameClassification.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include "external_storage/External.h"
 
@@ -430,7 +430,7 @@ namespace persistence
             static_assert(sizeof(Entry) == 16 + sizeof(CountAndGameOffsetType));
             static_assert(std::is_trivially_copyable_v<Entry>);
 
-            using PositionStats = EnumMap<query::Select, EnumMap2<GameLevel, GameResult, CountAndGameOffset>>;
+            using PositionStats = EnumArray<query::Select, EnumArray2<GameLevel, GameResult, CountAndGameOffset>>;
 
             using Index = ext::RangeIndex<Key, Entry::CompareLessWithoutReverseMove>;
 
@@ -624,7 +624,7 @@ namespace persistence
 
             static constexpr std::size_t m_totalNumDirectories = 1;
 
-            static inline const EnumMap<GameLevel, std::string> m_headerNames = {
+            static inline const EnumArray<GameLevel, std::string> m_headerNames = {
                 "_human",
                 "_engine",
                 "_server"
@@ -677,15 +677,15 @@ namespace persistence
         private:
             std::filesystem::path m_path;
 
-            EnumMap<GameLevel, Header> m_headers;
+            EnumArray<GameLevel, Header> m_headers;
             std::atomic<std::uint32_t> m_nextGameIdx;
 
             // We only have one partition for this format
             detail::Partition m_partition;
 
-            [[nodiscard]] EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path);
+            [[nodiscard]] EnumArray<GameLevel, Header> makeHeaders(const std::filesystem::path& path);
 
-            [[nodiscard]] EnumMap<GameLevel, Header> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory);
+            [[nodiscard]] EnumArray<GameLevel, Header> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory);
 
             [[nodiscard]] std::uint32_t numGamesInHeaders() const;
 

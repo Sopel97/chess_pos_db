@@ -7,7 +7,7 @@
 #include "chess/Position.h"
 #include "chess/San.h"
 
-#include "data_structure/Enum.h"
+#include "enum/Enum.h"
 
 #include "util/Assert.h"
 

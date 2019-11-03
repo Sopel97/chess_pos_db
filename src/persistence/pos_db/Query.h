@@ -5,7 +5,7 @@
 #include "chess/GameClassification.h"
 #include "chess/Position.h"
 
-#include "data_structure/Enum.h"
+#include "enum/Enum.h"
 
 #include <map>
 #include <optional>
@@ -371,7 +371,7 @@ namespace query
 
     // This is the result type to be used by databases' query functions
     // It is flatter, allows easier in memory manipulation.
-    using PositionQueryResults = std::vector<EnumMap<Select, SegregatedEntries>>;
+    using PositionQueryResults = std::vector<EnumArray<Select, SegregatedEntries>>;
 
     [[nodiscard]] std::vector<ResultForRoot> unflatten(PositionQueryResults&& raw, const Request& query, const PositionQueries& individialQueries);
 
@@ -398,7 +398,7 @@ namespace query
         bool fetchLast;
     };
 
-    using FetchLookups = EnumMap2<PositionQueryOrigin, Select, GameFetchSettings>;
+    using FetchLookups = EnumArray2<PositionQueryOrigin, Select, GameFetchSettings>;
 
     [[nodiscard]] FetchLookups buildGameHeaderFetchLookup(const Request& query);
 }

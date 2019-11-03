@@ -8,6 +8,18 @@ template <typename EnumT>
 struct EnumTraits;
 
 template <typename EnumT>
+[[nodiscard]] constexpr auto hasEnumTraits() -> decltype(EnumTraits<EnumT>::cardinaliy, bool{})
+{
+    return true;
+}
+
+template <typename EnumT>
+[[nodiscard]] constexpr bool hasEnumTraits(...)
+{
+    return false;
+}
+
+template <typename EnumT>
 [[nodiscard]] constexpr bool isNaturalIndex() noexcept
 {
     return EnumTraits<EnumT>::isNaturalIndex;
@@ -39,28 +51,46 @@ template <typename EnumT>
     return EnumTraits<EnumT>::ordinal(v);
 }
 
+template <typename EnumT, typename... ArgsTs, typename SFINAE = std::enable_if_t<hasEnumTraits<EnumT>()>>
+[[nodiscard]] decltype(auto) toString(EnumT v, ArgsTs&&... args)
+{
+    return EnumTraits<EnumT>::toString(v, std::forward<ArgsTs>(args)...);
+}
+
 template <typename EnumT>
 [[nodiscard]] decltype(auto) toString(EnumT v)
 {
     return EnumTraits<EnumT>::toString(v);
 }
 
-template <typename EnumT, typename FormatT>
+template <typename EnumT, typename FormatT, typename SFINAE = std::enable_if_t<!hasEnumTraits<FormatT>()>>
 [[nodiscard]] decltype(auto) toString(FormatT&& f, EnumT v)
 {
     return EnumTraits<EnumT>::toString(std::forward<FormatT>(f), v);
 }
 
 template <typename EnumT>
-[[nodiscard]] decltype(auto) fromString(std::string_view str)
+[[nodiscard]] decltype(auto) toChar(EnumT v)
 {
-    return EnumTraits<EnumT>::fromString(str);
+    return EnumTraits<EnumT>::toChar(v);
 }
 
 template <typename EnumT, typename FormatT>
-[[nodiscard]] decltype(auto) fromString(FormatT&& f, std::string_view str)
+[[nodiscard]] decltype(auto) toChar(FormatT&& f, EnumT v)
 {
-    return EnumTraits<EnumT>::fromString(std::forward<FormatT>(f), str);
+    return EnumTraits<EnumT>::toChar(std::forward<FormatT>(f), v);
+}
+
+template <typename EnumT, typename... ArgsTs>
+[[nodiscard]] decltype(auto) fromString(ArgsTs&& ... args)
+{
+    return EnumTraits<EnumT>::fromString(std::forward<ArgsTs>(args)...);
+}
+
+template <typename EnumT, typename... ArgsTs>
+[[nodiscard]] decltype(auto) fromChar(ArgsTs&& ... args)
+{
+    return EnumTraits<EnumT>::fromChar(std::forward<ArgsTs>(args)...);
 }
 
 template <>

@@ -5,7 +5,7 @@
 #include "Bitboard.h"
 #include "Chess.h"
 
-#include "data_structure/EnumMap.h"
+#include "enum/EnumArray.h"
 
 #include "util/Assert.h"
 
@@ -140,8 +140,8 @@ const Piece* Board::piecesRaw() const
 
 namespace detail::lookup
 {
-    static constexpr EnumMap<Piece, char> fenPiece = []() {
-        EnumMap<Piece, char> fenPiece{};
+    static constexpr EnumArray<Piece, char> fenPiece = []() {
+        EnumArray<Piece, char> fenPiece{};
 
         fenPiece[whitePawn] = 'P';
         fenPiece[blackPawn] = 'p';
@@ -370,8 +370,8 @@ void Position::setCastlingRights(CastlingRights rights)
 
 namespace detail::lookup
 {
-    static constexpr EnumMap<Square, CastlingRights> preservedCastlingRights = []() {
-        EnumMap<Square, CastlingRights> preservedCastlingRights{};
+    static constexpr EnumArray<Square, CastlingRights> preservedCastlingRights = []() {
+        EnumArray<Square, CastlingRights> preservedCastlingRights{};
         for (CastlingRights& rights : preservedCastlingRights)
         {
             rights = ~CastlingRights::None;
@@ -580,8 +580,8 @@ namespace detail
 
 namespace detail::lookup
 {
-    static constexpr EnumMap<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc = []() {
-        EnumMap<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc{};
+    static constexpr EnumArray<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc = []() {
+        EnumArray<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc{};
 
         pieceCompressorFunc[PieceType::Knight] = detail::compressOrdinaryPiece;
         pieceCompressorFunc[PieceType::Bishop] = detail::compressOrdinaryPiece;
