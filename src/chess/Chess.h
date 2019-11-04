@@ -906,6 +906,8 @@ struct EnumTraits<CastleType>
     }
 };
 
+struct CompressedMove;
+
 // castling is encoded as a king capturing rook
 // ep is encoded as a normal pawn capture (move.to is empty on the board)
 struct Move
@@ -927,6 +929,8 @@ struct Move
     {
         return !(lhs == rhs);
     }
+
+    [[nodiscard]] constexpr CompressedMove compress() const noexcept;
 
     [[nodiscard]] constexpr static Move null()
     {
@@ -950,6 +954,99 @@ struct Move
         return Move{ from, to, MoveType::Promotion, piece };
     }
 };
+
+static_assert(sizeof(Move) == 4);
+
+struct CompressedMove
+{
+    // from most significant bits
+    // 2 bits for move type
+    // 6 bits for from square
+    // 6 bits for to square
+    // 2 bits for promoted piece type
+    //    0 if not a promotion
+
+    static constexpr std::uint16_t mask = 0xFFFFu;
+    static constexpr std::uint16_t squareMask = 0b111111u;
+    static constexpr std::uint16_t promotedPieceTypeMask = 0b11u;
+    static constexpr std::uint16_t moveTypeMask = 0b11u;
+    static constexpr std::size_t numBits = 16;
+
+    constexpr CompressedMove() noexcept :
+        m_packed(0)
+    {
+    }
+
+    // move must be either valid or a null move
+    constexpr CompressedMove(Move move) noexcept :
+        m_packed(0)
+    {
+        // else null move
+        if (move.from != move.to)
+        {
+            ASSERT(move.from != Square::none());
+            ASSERT(move.to != Square::none());
+
+            m_packed =
+                (static_cast<std::uint16_t>(ordinal(move.type)) << (16 - 2))
+                | (static_cast<std::uint16_t>(ordinal(move.from)) << (16 - 2 - 6))
+                | (static_cast<std::uint16_t>(ordinal(move.to)) << (16 - 2 - 6 - 6));
+
+            if (move.type == MoveType::Promotion)
+            {
+                ASSERT(move.promotedPiece != Piece::none());
+
+                m_packed |= ordinal(move.promotedPiece.type()) - ordinal(PieceType::Knight);
+            }
+            else
+            {
+                ASSERT(move.promotedPiece == Piece::none());
+            }
+        }
+    }
+
+    [[nodiscard]] constexpr Move decompress() const noexcept
+    {
+        if (m_packed == 0)
+        {
+            return Move::null();
+        }
+        else
+        {
+            const MoveType type = fromOrdinal<MoveType>(m_packed >> (16 - 2));
+            const Square from = fromOrdinal<Square>((m_packed >> (16 - 2 - 6)) & squareMask);
+            const Square to = fromOrdinal<Square>((m_packed >> (16 - 2 - 6 - 6)) & squareMask);
+            const Piece promotedPiece = [&]() {
+                if (type == MoveType::Promotion)
+                {
+                    const Color color =
+                        (to.rank() == rank1)
+                        ? Color::Black
+                        : Color::White;
+
+                    const PieceType pt = fromOrdinal<PieceType>((m_packed & promotedPieceTypeMask) + ordinal(PieceType::Knight));
+                    return color | pt;
+                }
+                else
+                {
+                    return Piece::none();
+                }
+            }();
+
+            return Move{ from, to, type, promotedPiece };
+        }
+    }
+
+private:
+    std::uint16_t m_packed;
+};
+
+static_assert(sizeof(CompressedMove) == 2);
+
+[[nodiscard]] constexpr CompressedMove Move::compress() const noexcept
+{
+    return CompressedMove(*this);
+}
 
 namespace detail::castle
 {
