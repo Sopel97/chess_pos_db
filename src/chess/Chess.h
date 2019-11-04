@@ -959,17 +959,18 @@ static_assert(sizeof(Move) == 4);
 
 struct CompressedMove
 {
+private:
     // from most significant bits
     // 2 bits for move type
     // 6 bits for from square
     // 6 bits for to square
     // 2 bits for promoted piece type
     //    0 if not a promotion
-
     static constexpr std::uint16_t squareMask = 0b111111u;
     static constexpr std::uint16_t promotedPieceTypeMask = 0b11u;
     static constexpr std::uint16_t moveTypeMask = 0b11u;
 
+public:
     constexpr CompressedMove() noexcept :
         m_packed(0)
     {
@@ -1000,6 +1001,39 @@ struct CompressedMove
             {
                 ASSERT(move.promotedPiece == Piece::none());
             }
+        }
+    }
+
+    [[nodiscard]] constexpr MoveType type() const
+    {
+        return fromOrdinal<MoveType>(m_packed >> (16 - 2));
+    }
+
+    [[nodiscard]] constexpr Square from() const
+    {
+        return fromOrdinal<Square>((m_packed >> (16 - 2 - 6)) & squareMask);
+    }
+
+    [[nodiscard]] constexpr Square to() const
+    {
+        return fromOrdinal<Square>((m_packed >> (16 - 2 - 6 - 6)) & squareMask);
+    }
+
+    [[nodiscard]] constexpr Piece promotedPiece() const
+    {
+        if (type() == MoveType::Promotion)
+        {
+            const Color color =
+                (to().rank() == rank1)
+                ? Color::Black
+                : Color::White;
+
+            const PieceType pt = fromOrdinal<PieceType>((m_packed & promotedPieceTypeMask) + ordinal(PieceType::Knight));
+            return color | pt;
+        }
+        else
+        {
+            return Piece::none();
         }
     }
 
@@ -1185,12 +1219,12 @@ static_assert(sizeof(ReverseMove) == 7);
 
 struct CompressedReverseMove
 {
+private:
     // we use 7 bits because it can be Square::none()
     static constexpr std::uint32_t squareMask = 0b1111111u;
     static constexpr std::uint32_t pieceMask = 0b1111u;
-    static constexpr std::uint32_t pieceTypeMask = 0b111u;
     static constexpr std::uint32_t castlingRightsMask = 0b1111;
-    static constexpr std::uint32_t fileMask = 0b111;
+public:
 
     constexpr CompressedReverseMove() noexcept :
         m_move{},
@@ -1206,6 +1240,31 @@ struct CompressedReverseMove
             | (ordinal(rm.oldEpSquare) & squareMask)
         }
     {
+    }
+
+    [[nodiscard]] constexpr Move move() const
+    {
+        return m_move.decompress();
+    }
+
+    [[nodiscard]] const CompressedMove& compressedMove() const
+    {
+        return m_move;
+    }
+
+    [[nodiscard]] constexpr Piece capturedPiece() const
+    {
+        return fromOrdinal<Piece>(m_oldState >> 11);
+    }
+
+    [[nodiscard]] constexpr CastlingRights oldCastlingRights() const
+    {
+        return fromOrdinal<CastlingRights>((m_oldState >> 7) & castlingRightsMask);
+    }
+
+    [[nodiscard]] constexpr Square oldEpSquare() const
+    {
+        return fromOrdinal<Square>(m_oldState & squareMask);
     }
 
     [[nodiscard]] constexpr ReverseMove decompress() const noexcept
@@ -1235,12 +1294,16 @@ static_assert(sizeof(CompressedReverseMove) == 4);
 struct PackedReverseMove
 {
     static constexpr std::uint32_t mask = 0x7FFFFFFu;
+    static constexpr std::size_t numBits = 27;
+
+private:
     static constexpr std::uint32_t squareMask = 0b111111u;
     static constexpr std::uint32_t pieceMask = 0b1111u;
     static constexpr std::uint32_t pieceTypeMask = 0b111u;
     static constexpr std::uint32_t castlingRightsMask = 0b1111;
     static constexpr std::uint32_t fileMask = 0b111;
 
+public:
     constexpr PackedReverseMove(const ReverseMove& reverseMove) :
         m_packed(
             0u

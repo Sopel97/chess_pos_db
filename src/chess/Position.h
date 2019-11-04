@@ -584,13 +584,25 @@ struct Position : public Board
 
     [[nodiscard]] std::string fen() const;
 
-    void setEpSquareUnchecked(Square sq);
+    constexpr void setEpSquareUnchecked(Square sq)
+    {
+        m_epSquare = sq;
+    }
 
-    void setSideToMove(Color color);
+    constexpr void setSideToMove(Color color)
+    {
+        m_sideToMove = color;
+    }
 
-    void addCastlingRights(CastlingRights rights);
+    constexpr void addCastlingRights(CastlingRights rights)
+    {
+        m_castlingRights |= rights;
+    }
 
-    void setCastlingRights(CastlingRights rights);
+    constexpr void setCastlingRights(CastlingRights rights)
+    {
+        m_castlingRights = rights;
+    }
 
     ReverseMove doMove(const Move& move);
 
@@ -657,7 +669,7 @@ struct Position : public Board
         return m_epSquare != Square::none();
     }
 
-    [[nodiscard]] CompressedPosition compress() const;
+    [[nodiscard]] constexpr CompressedPosition compress() const;
 
 private:
     Color m_sideToMove;
@@ -674,6 +686,8 @@ static_assert(sizeof(Position) == 192);
 
 struct CompressedPosition
 {
+    friend struct Position;
+
     // Occupied bitboard has bits set for 
     // each square with a piece on it.
     // Each packedState byte holds 2 values (nibbles).
@@ -705,25 +719,277 @@ struct CompressedPosition
     // Let N be the number of bits set in occupied bitboard.
     // Only N nibbles are present. (N+1)/2 bytes are initialized.
 
-    Bitboard occupied;
-    std::uint8_t packedState[16];
+    constexpr CompressedPosition() :
+        m_occupied{},
+        m_packedState{}
+    {
+    }
 
     [[nodiscard]] friend bool operator<(const CompressedPosition& lhs, const CompressedPosition& rhs)
     {
-        if (lhs.occupied.bits() < rhs.occupied.bits()) return true;
-        if (lhs.occupied.bits() > rhs.occupied.bits()) return false;
+        if (lhs.m_occupied.bits() < rhs.m_occupied.bits()) return true;
+        if (lhs.m_occupied.bits() > rhs.m_occupied.bits()) return false;
 
-        return std::strcmp(reinterpret_cast<const char*>(lhs.packedState), reinterpret_cast<const char*>(rhs.packedState)) < 0;
+        return std::strcmp(reinterpret_cast<const char*>(lhs.m_packedState), reinterpret_cast<const char*>(rhs.m_packedState)) < 0;
     }
 
     [[nodiscard]] friend bool operator==(const CompressedPosition& lhs, const CompressedPosition& rhs)
     {
-        return lhs.occupied == rhs.occupied
-            && std::strcmp(reinterpret_cast<const char*>(lhs.packedState), reinterpret_cast<const char*>(rhs.packedState)) == 0;
+        return lhs.m_occupied == rhs.m_occupied
+            && std::strcmp(reinterpret_cast<const char*>(lhs.m_packedState), reinterpret_cast<const char*>(rhs.m_packedState)) == 0;
     }
 
-    [[nodiscard]] Position decompress() const;
+    [[nodiscard]] constexpr Position decompress() const;
+
+    [[nodiscard]] constexpr Bitboard pieceBB() const
+    {
+        return m_occupied;
+    }
+
+private:
+    Bitboard m_occupied;
+    std::uint8_t m_packedState[16];
 };
 
 static_assert(sizeof(CompressedPosition) == 24);
 
+namespace detail
+{
+    [[nodiscard]] FORCEINLINE constexpr std::uint8_t compressOrdinaryPiece(const Position&, Square, Piece piece)
+    {
+        return static_cast<std::uint8_t>(ordinal(piece));
+    }
+
+    [[nodiscard]] FORCEINLINE constexpr std::uint8_t compressPawn(const Position& position, Square sq, Piece piece)
+    {
+        const Square epSquare = position.epSquare();
+        if (epSquare == Square::none())
+        {
+            return static_cast<std::uint8_t>(ordinal(piece));
+        }
+        else
+        {
+            const Color sideToMove = position.sideToMove();
+            const Rank rank = sq.rank();
+            const File file = sq.file();
+            // use bitwise operators, there is a lot of unpredictable branches but in
+            // total the result is quite predictable
+            if (
+                (file == epSquare.file())
+                && (
+                ((rank == rank4) & (sideToMove == Color::Black))
+                    | ((rank == rank5) & (sideToMove == Color::White))
+                    )
+                )
+            {
+                return 12;
+            }
+            else
+            {
+                return static_cast<std::uint8_t>(ordinal(piece));
+            }
+        }
+    }
+
+    [[nodiscard]] FORCEINLINE constexpr std::uint8_t compressRook(const Position& position, Square sq, Piece piece)
+    {
+        const CastlingRights castlingRights = position.castlingRights();
+        const Color color = piece.color();
+
+        if (color == Color::White
+            && (
+            (sq == a1 && contains(castlingRights, CastlingRights::WhiteQueenSide))
+                || (sq == h1 && contains(castlingRights, CastlingRights::WhiteKingSide))
+                )
+            )
+        {
+            return 13;
+        }
+        else if (
+            color == Color::Black
+            && (
+            (sq == a8 && contains(castlingRights, CastlingRights::BlackQueenSide))
+                || (sq == h8 && contains(castlingRights, CastlingRights::BlackKingSide))
+                )
+            )
+        {
+            return 14;
+        }
+        else
+        {
+            return static_cast<std::uint8_t>(ordinal(piece));
+        }
+    }
+
+    [[nodiscard]] FORCEINLINE constexpr std::uint8_t compressKing(const Position& position, Square sq, Piece piece)
+    {
+        const Color color = piece.color();
+        const Color sideToMove = position.sideToMove();
+
+        if (color == Color::White)
+        {
+            return 10;
+        }
+        else if (sideToMove == Color::White)
+        {
+            return 11;
+        }
+        else
+        {
+            return 15;
+        }
+    }
+}
+
+namespace detail::lookup
+{
+    static constexpr EnumArray<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc = []() {
+        EnumArray<PieceType, std::uint8_t(*)(const Position&, Square, Piece)> pieceCompressorFunc{};
+
+        pieceCompressorFunc[PieceType::Knight] = detail::compressOrdinaryPiece;
+        pieceCompressorFunc[PieceType::Bishop] = detail::compressOrdinaryPiece;
+        pieceCompressorFunc[PieceType::Queen] = detail::compressOrdinaryPiece;
+
+        pieceCompressorFunc[PieceType::Pawn] = detail::compressPawn;
+        pieceCompressorFunc[PieceType::Rook] = detail::compressRook;
+        pieceCompressorFunc[PieceType::King] = detail::compressKing;
+
+        pieceCompressorFunc[PieceType::None] = [](const Position&, Square, Piece) -> std::uint8_t { /* should never happen */ return 0; };
+
+        return pieceCompressorFunc;
+    }();
+}
+
+[[nodiscard]] constexpr CompressedPosition Position::compress() const
+{
+    auto compressPiece = [this](Square sq, Piece piece) -> std::uint8_t {
+        if (piece.type() == PieceType::Pawn) // it's likely to be a pawn
+        {
+            return detail::compressPawn(*this, sq, piece);
+        }
+        else
+        {
+            return detail::lookup::pieceCompressorFunc[piece.type()](*this, sq, piece);
+        }
+    };
+
+    const Bitboard occ = piecesBB();
+
+    CompressedPosition compressed;
+    compressed.m_occupied = occ;
+
+    auto it = occ.begin();
+    auto end = occ.end();
+    for (int i = 0;; ++i)
+    {
+        if (it == end) break;
+        compressed.m_packedState[i] = compressPiece(*it, pieceAt(*it));
+        ++it;
+
+        if (it == end) break;
+        compressed.m_packedState[i] |= compressPiece(*it, pieceAt(*it)) << 4;
+        ++it;
+    }
+
+    return compressed;
+}
+
+[[nodiscard]] constexpr Position CompressedPosition::decompress() const
+{
+    Position pos;
+    pos.setCastlingRights(CastlingRights::None);
+
+    auto decompressPiece = [&pos](Square sq, std::uint8_t nibble) {
+        switch (nibble)
+        {
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+        case 10:
+        case 11:
+        {
+            pos.place(fromOrdinal<Piece>(nibble), sq);
+            return;
+        }
+
+        case 12:
+        {
+            const Rank rank = sq.rank();
+            const File file = sq.file();
+            if (rank == rank4)
+            {
+                pos.place(whitePawn, sq);
+                pos.setEpSquareUnchecked(sq + Offset{ 0, -1 });
+            }
+            else // (rank == rank5)
+            {
+                pos.place(blackPawn, sq);
+                pos.setEpSquareUnchecked(sq + Offset{ 0, 1 });
+            }
+            return;
+        }
+
+        case 13:
+        {
+            pos.place(whiteRook, sq);
+            if (sq == a1)
+            {
+                pos.addCastlingRights(CastlingRights::WhiteQueenSide);
+            }
+            else // (sq == H1)
+            {
+                pos.addCastlingRights(CastlingRights::WhiteKingSide);
+            }
+            return;
+        }
+
+        case 14:
+        {
+            pos.place(blackRook, sq);
+            if (sq == a8)
+            {
+                pos.addCastlingRights(CastlingRights::BlackQueenSide);
+            }
+            else // (sq == H8)
+            {
+                pos.addCastlingRights(CastlingRights::BlackKingSide);
+            }
+            return;
+        }
+
+        case 15:
+        {
+            pos.place(blackKing, sq);
+            pos.setSideToMove(Color::Black);
+            return;
+        }
+
+        }
+
+        return;
+    };
+
+    const Bitboard occ = m_occupied;
+
+    auto it = occ.begin();
+    auto end = occ.end();
+    for (int i = 0;; ++i)
+    {
+        if (it == end) break;
+        decompressPiece(*it, m_packedState[i] & 0xF);
+        ++it;
+
+        if (it == end) break;
+        decompressPiece(*it, m_packedState[i] >> 4);
+        ++it;
+    }
+
+    return pos;
+}
