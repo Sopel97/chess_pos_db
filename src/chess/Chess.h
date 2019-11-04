@@ -799,7 +799,7 @@ struct EnumTraits<Square>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
-        ASSERT(id >= 0 && id < cardinality);
+        ASSERT(id >= 0 && id < cardinality + 1);
 
         return static_cast<EnumType>(id);
     }
@@ -966,11 +966,9 @@ struct CompressedMove
     // 2 bits for promoted piece type
     //    0 if not a promotion
 
-    static constexpr std::uint16_t mask = 0xFFFFu;
     static constexpr std::uint16_t squareMask = 0b111111u;
     static constexpr std::uint16_t promotedPieceTypeMask = 0b11u;
     static constexpr std::uint16_t moveTypeMask = 0b11u;
-    static constexpr std::size_t numBits = 16;
 
     constexpr CompressedMove() noexcept :
         m_packed(0)
@@ -1154,6 +1152,8 @@ struct EnumTraits<CastlingRights>
     }
 };
 
+struct CompressedReverseMove;
+
 struct ReverseMove
 {
     Move move;
@@ -1177,8 +1177,61 @@ struct ReverseMove
         oldCastlingRights(oldCastlingRights)
     {
     }
+
+    [[nodiscard]] constexpr CompressedReverseMove compress() const noexcept;
 };
 
+static_assert(sizeof(ReverseMove) == 7);
+
+struct CompressedReverseMove
+{
+    // we use 7 bits because it can be Square::none()
+    static constexpr std::uint32_t squareMask = 0b1111111u;
+    static constexpr std::uint32_t pieceMask = 0b1111u;
+    static constexpr std::uint32_t pieceTypeMask = 0b111u;
+    static constexpr std::uint32_t castlingRightsMask = 0b1111;
+    static constexpr std::uint32_t fileMask = 0b111;
+
+    constexpr CompressedReverseMove() noexcept :
+        m_move{},
+        m_oldState{}
+    {
+    }
+
+    constexpr CompressedReverseMove(const ReverseMove& rm) noexcept :
+        m_move(rm.move.compress()),
+        m_oldState{
+            ((ordinal(rm.capturedPiece) & pieceMask) << 11)
+            | ((ordinal(rm.oldCastlingRights) & castlingRightsMask) << 7)
+            | (ordinal(rm.oldEpSquare) & squareMask)
+        }
+    {
+    }
+
+    [[nodiscard]] constexpr ReverseMove decompress() const noexcept
+    {
+        const Piece capturedPiece = fromOrdinal<Piece>(m_oldState >> 11);
+        const CastlingRights castlingRights = fromOrdinal<CastlingRights>((m_oldState >> 7) & castlingRightsMask);
+        // We could pack the ep square more, but don't have to, because
+        // can't save another byte anyway.
+        const Square epSquare = fromOrdinal<Square>(m_oldState & squareMask);
+
+        return ReverseMove(m_move.decompress(), capturedPiece, epSquare, castlingRights);
+    }
+
+private:
+    CompressedMove m_move;
+    std::uint16_t m_oldState;
+};
+
+static_assert(sizeof(CompressedReverseMove) == 4);
+
+[[nodiscard]] constexpr CompressedReverseMove ReverseMove::compress() const noexcept
+{
+    return CompressedReverseMove(*this);
+}
+
+// This can be regarded as a perfect hash. Going back is hard.
 struct PackedReverseMove
 {
     static constexpr std::uint32_t mask = 0x7FFFFFFu;
@@ -1187,7 +1240,6 @@ struct PackedReverseMove
     static constexpr std::uint32_t pieceTypeMask = 0b111u;
     static constexpr std::uint32_t castlingRightsMask = 0b1111;
     static constexpr std::uint32_t fileMask = 0b111;
-    static constexpr std::size_t numBits = 27;
 
     constexpr PackedReverseMove(const ReverseMove& reverseMove) :
         m_packed(
