@@ -464,6 +464,13 @@ namespace console_app
         }
     }
 
+    static void showBanner()
+    {
+        std::cout << "chess_pos_db\n";
+        std::cout << "console application\n";
+        std::cout << "see help\n";
+    }
+
     void App::assertDatabaseOpened() const
     {
         if (m_database == nullptr)
@@ -478,6 +485,8 @@ namespace console_app
 
     void App::run()
     {
+        showBanner();
+
         for (;;)
         {
             std::string cmdline;
