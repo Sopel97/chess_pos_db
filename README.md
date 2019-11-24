@@ -1,12 +1,12 @@
 # chess_pos_db
 
-chess_pos_db is an opensource software aiming to provide a high performance database service for aggregation of chess position data. The goal is easy to use and integrate interprocess communication protocol, high creation and querying performance, and minimal storage overhead.
+chess_pos_db is a free, opensource software aiming to provide a high performance database service for aggregation of chess position data from pgn files. It provides a simple TCP interface for interprocess communication, a console interface, and an optional windows gui (see below). The goal is to achieve high query and creation performance.
 
 For a Windows GUI see [HERE](https://github.com/Sopel97/chess_pos_db_gui). It also contains setup instructions.
 
 Notable features:
 
-- Creation of a position database from pgn files. Aggregated data:
+- Creation of a position database from pgn files. Data being agreggated:
 
     - Win count from a given position
     - Draw count from a given position
@@ -18,19 +18,19 @@ Notable features:
     - On modern hardware and fast storage it can process about 10 million positions (when creating the database) in a sequential mode. (Parallel mode coming in the future).
     - Depending on a format used each position can require little or less than 20 bytes, all that while providing above statistics. Notably db_beta format requires \~17 bytes per position when there is \~6 billion of them.
     - Querying is optimized for minimal number of disk seeks. For example for the db_beta format querying all data for a single move and all possible moves takes \~1 second an HDD and is blazingly fast on an SSD.
-    - Index kept in RAM, uses 500 times less space than the database and accelerates the queries.
+    - Index kept in RAM, uses 500 times less space than the database and accelerates the queries (size configurable).
 
 - High limits
 
     - Can handle trillions of positions (with 1 in a million chance of hash collion)
-    - Up to 4 billion games (can be increased in the future)
+    - Up to 4 billion games (can be increased in the future, and some formats may work with higher numbers)
     - No limit on input/output file sizes (can handle large pgn files)
 
 - Distinction between continuations (exact move played to arrive at this position) and transpositions (different move played to arrive at this position).
-- Local, file based database structure allowing for easy copying.
+- Local, file based database structure allowing for easy copying and distribution.
 - Extensive configuration. (see cfg/config.json)
 - Console user interface
-- A simple TCP server aiming for interprocess communication.
+- A simple TCP server allowing interprocess communication.
 
 Notable codebase features:
 
@@ -44,7 +44,7 @@ Notable codebase features:
 Currently only Windows is explicitly supported. Though the code is mostly standard compliant C++17 - there are only a few instances of non-portable code, most notably 64 bit file seek functions in External module.
 Not tested on systems other that Windows.
 
-Requires 64-bit builds to work as intended. May not compiler or have bugs on 32-bit builds.
+Requires 64-bit builds to work as intended. May not compile or have bugs on 32-bit builds.
 
 Compiles with Visual Studio 2019 MSVC Compiler (.sln included).
 
