@@ -15,7 +15,7 @@ Notable features:
 
 - High performance and little storage
 
-    - On modern hardware and fast storage it can process about 10 million positions (when creating the database) in a sequential mode. (Parallel mode coming in the future).
+    - On modern hardware and fast storage it can process about 10 million positions per second (when creating the database) in a sequential mode. (Parallel mode coming in the future).
     - Depending on a format used each position can require little or less than 20 bytes, all that while providing above statistics. Notably db_beta format requires \~17 bytes per position when there is \~6 billion of them.
     - Querying is optimized for minimal number of disk seeks. For example for the db_beta format querying all data for a single move and all possible moves takes \~1 second an HDD and is blazingly fast on an SSD.
     - Index kept in RAM, uses 500 times less space than the database and accelerates the queries (size configurable).
