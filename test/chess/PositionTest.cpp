@@ -81,4 +81,6 @@ TEST(PositionTest, GeneralPositionTest) {
     ASSERT_TRUE((!Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(h1, Move{ e5, d6, MoveType::EnPassant }, Color::Black)));
 
     ASSERT_TRUE((!Position::fromFen("rnb2k1r/pp1Pbppp/2p5/q7/2B5/8/PPPQNnPP/RNB1K2R w KQ - 0 1").createsAttackOnOwnKing(Move{ e1, h1, MoveType::Castle })));
+
+    ASSERT_EQ(Position::fromFen("rnbqkbnr/p1p1pppp/1p1p4/8/8/6P1/PPPPPPBP/RNBQK1NR w KQkq - 0 3").afterMove(Move{ g2, a8 }).castlingRights(), CastlingRights::All & ~CastlingRights::BlackQueenSide);
 }

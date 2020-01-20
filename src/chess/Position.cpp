@@ -377,6 +377,7 @@ ReverseMove Position::doMove(const Move& move)
     const Square oldEpSquare = m_epSquare;
     const CastlingRights oldCastlingRights = m_castlingRights;
     m_castlingRights &= detail::lookup::preservedCastlingRights[move.from];
+    m_castlingRights &= detail::lookup::preservedCastlingRights[move.to];
 
     m_epSquare = Square::none();
     if(movedPiece == PieceType::Pawn)
