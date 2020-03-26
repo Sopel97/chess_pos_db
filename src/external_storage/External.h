@@ -2307,7 +2307,7 @@ namespace ext
     template <typename T>
     [[nodiscard]] std::size_t merge_assess_work(const std::vector<ImmutableSpan<T>>& in)
     {
-        return detail::sort::merge_assess_work(in);
+        return detail::merge::merge_assess_work(in);
     }
 
     namespace detail::sort
