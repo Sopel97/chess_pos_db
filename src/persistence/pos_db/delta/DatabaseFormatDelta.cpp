@@ -1150,15 +1150,18 @@ namespace persistence
                             auto& segregatedEntry = results[i][select].emplace(level, result, entry.count());
                             segregatedEntry.second.eloDiff = entry.eloDiff();
 
-                            if (lookup[origin][select].fetchFirst && entry.firstGameIndex() != detail::invalidGameIndex)
+                            if (entry.count() > 0)
                             {
-                                firstGameIndices.emplace_back(entry.firstGameIndex());
-                                firstGameDestinations.emplace_back(i, select, level, result, &query::Entry::firstGame);
-                            }
-                            if (lookup[origin][select].fetchLast && entry.lastGameIndex() != detail::invalidGameIndex)
-                            {
-                                lastGameIndices.emplace_back(entry.firstGameIndex());
-                                lastGameDestinations.emplace_back(i, select, level, result, &query::Entry::lastGame);
+                                if (lookup[origin][select].fetchFirst)
+                                {
+                                    firstGameIndices.emplace_back(entry.firstGameIndex());
+                                    firstGameDestinations.emplace_back(i, select, level, result, &query::Entry::firstGame);
+                                }
+                                if (lookup[origin][select].fetchLast)
+                                {
+                                    lastGameIndices.emplace_back(entry.firstGameIndex());
+                                    lastGameDestinations.emplace_back(i, select, level, result, &query::Entry::lastGame);
+                                }
                             }
                         }
                     }

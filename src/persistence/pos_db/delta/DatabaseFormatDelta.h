@@ -44,8 +44,6 @@ namespace persistence
             // Have ranges of mixed values be at most this long
             extern const std::size_t indexGranularity;
 
-            static constexpr std::uint32_t invalidGameIndex = std::numeric_limits<std::uint32_t>::max();
-
             struct alignas(32) Entry
             {
                 // Hash              : 64
