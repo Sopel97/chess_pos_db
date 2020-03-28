@@ -87,30 +87,15 @@ namespace persistence
 
                 [[nodiscard]] GameResult result() const;
 
-                [[nodiscard]] std::int64_t eloDiff() const
-                {
-                    return signExtend<64 - additionalHashBits>(m_eloDiffAndHashPart2 >> additionalHashBits);
-                }
+                [[nodiscard]] std::int64_t eloDiff() const;
 
-                [[nodiscard]] std::array<std::uint64_t, 2> hash() const
-                {
-                    return std::array<std::uint64_t, 2>{ m_hashPart1, ((m_eloDiffAndHashPart2 & nbitmask<std::uint64_t>[additionalHashBits]) << 32) | m_packedInfo };
-                }
+                [[nodiscard]] std::array<std::uint64_t, 2> hash() const;
 
-                [[nodiscard]] std::uint32_t count() const
-                {
-                    return m_count;
-                }
+                [[nodiscard]] std::uint32_t count() const;
 
-                [[nodiscard]] std::uint32_t firstGameIndex() const
-                {
-                    return m_firstGameIndex;
-                }
+                [[nodiscard]] std::uint32_t firstGameIndex() const;
 
-                [[nodiscard]] std::uint32_t lastGameIndex() const
-                {
-                    return m_lastGameIndex;
-                }
+                [[nodiscard]] std::uint32_t lastGameIndex() const;
 
                 void combine(const Entry& other)
                 {
@@ -207,10 +192,7 @@ namespace persistence
                 std::uint32_t m_firstGameIndex;
                 std::uint32_t m_lastGameIndex;
 
-                [[nodiscard]] std::uint32_t additionalHash() const
-                {
-                    return m_hashPart1 & nbitmask<std::uint32_t>[additionalHashBits];
-                }
+                [[nodiscard]] std::uint32_t additionalHash() const;
             };
             static_assert(sizeof(Entry) == 32);
 

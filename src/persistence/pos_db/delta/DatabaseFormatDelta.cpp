@@ -89,6 +89,41 @@ namespace persistence
                     | ((ordinal(result) & resultMask) << resultShift);
             }
 
+            [[nodiscard]] std::int64_t Entry::eloDiff() const
+            {
+                return signExtend<64 - additionalHashBits>(m_eloDiffAndHashPart2 >> additionalHashBits);
+            }
+
+            [[nodiscard]] std::array<std::uint64_t, 2> Entry::hash() const
+            {
+                return std::array<std::uint64_t, 2>{ m_hashPart1, ((m_eloDiffAndHashPart2& nbitmask<std::uint64_t>[additionalHashBits]) << 32) | m_packedInfo };
+            }
+
+            [[nodiscard]] std::uint32_t Entry::count() const
+            {
+                return m_count;
+            }
+
+            [[nodiscard]] std::uint32_t Entry::firstGameIndex() const
+            {
+                return m_firstGameIndex;
+            }
+
+            [[nodiscard]] std::uint32_t Entry::lastGameIndex() const
+            {
+                return m_lastGameIndex;
+            }
+
+            void Entry::combine(const Entry& other)
+            {
+                m_eloDiffAndHashPart2 += other.m_eloDiffAndHashPart2 & ~nbitmask<std::uint64_t>[additionalHashBits];
+                m_count += other.m_count;
+                const auto newFirstGame = std::min(m_firstGameIndex, other.m_firstGameIndex);
+                const auto newLastGame = std::max(m_lastGameIndex, other.m_lastGameIndex);
+                m_firstGameIndex = newFirstGame;
+                m_lastGameIndex = newLastGame;
+            }
+
             [[nodiscard]] GameLevel Entry::level() const
             {
                 return fromOrdinal<GameLevel>((m_packedInfo >> levelShift) & levelMask);
@@ -97,6 +132,11 @@ namespace persistence
             [[nodiscard]] GameResult Entry::result() const
             {
                 return fromOrdinal<GameResult>((m_packedInfo >> resultShift) & resultMask);
+            }
+
+            [[nodiscard]] std::uint32_t Entry::additionalHash() const
+            {
+                return m_hashPart1 & nbitmask<std::uint32_t>[additionalHashBits];
             }
 
             [[nodiscard]] static std::filesystem::path pathForIndex(const std::filesystem::path& path)
