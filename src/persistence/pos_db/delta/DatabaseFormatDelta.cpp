@@ -43,9 +43,21 @@ namespace persistence
         namespace detail
         {
             const std::size_t indexGranularity = cfg::g_config["persistence"]["db_delta"]["index_granularity"].get<std::size_t>();
-            
+
+            Entry::Entry() :
+                m_hashPart1{},
+                m_eloDiffAndHashPart2(0),
+                m_packedInfo{},
+                m_count(0),
+                m_firstGameIndex(std::numeric_limits<std::uint32_t>::max()),
+                m_lastGameIndex(0)
+            {
+            }
+
             Entry::Entry(const Position& pos, const ReverseMove& reverseMove) :
-                m_count(1)
+                m_count(1),
+                m_firstGameIndex(std::numeric_limits<std::uint32_t>::max()),
+                m_lastGameIndex(0)
             {
                 const auto hash = pos.hash();
                 m_hashPart1 = static_cast<std::uint64_t>(hash[0]) << 32 | hash[1];

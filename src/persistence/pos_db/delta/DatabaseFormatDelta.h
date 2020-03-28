@@ -72,7 +72,7 @@ namespace persistence
 
                 static_assert(PackedReverseMove::numBits + levelBits + resultBits <= 32);
 
-                Entry() = default;
+                Entry();
 
                 Entry(const Position& pos, const ReverseMove& reverseMove = ReverseMove{});
 
