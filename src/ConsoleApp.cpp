@@ -17,6 +17,7 @@
 
 #include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"
+#include "persistence/pos_db/delta/DatabaseFormatDelta.h"
 
 #include "persistence/pos_db/Query.h"
 
@@ -41,7 +42,7 @@ using namespace std::literals;
 
 namespace console_app
 {
-    using DbType = persistence::db_beta::Database;
+    using DbType = persistence::db_delta::Database;
 
     const std::size_t importMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
 
