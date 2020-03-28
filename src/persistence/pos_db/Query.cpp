@@ -244,7 +244,7 @@ namespace query
 
         if (j.contains("elo_diff"))
         {
-            entry.eloDiff = j["elo_diff"].get<std::uint64_t>();
+            entry.eloDiff = j["elo_diff"].get<std::int64_t>();
         }
     }
 

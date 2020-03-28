@@ -148,7 +148,7 @@ namespace query
         std::size_t count;
         std::optional<persistence::GameHeader> firstGame;
         std::optional<persistence::GameHeader> lastGame;
-        std::optional<std::uint64_t> eloDiff;
+        std::optional<std::int64_t> eloDiff;
 
         Entry(std::size_t count);
 

@@ -87,7 +87,7 @@ namespace persistence
 
                 [[nodiscard]] GameResult result() const;
 
-                [[nodiscard]] std::uint64_t eloDiff() const
+                [[nodiscard]] std::int64_t eloDiff() const
                 {
                     return signExtend<64 - additionalHashBits>(m_eloDiffAndHashPart2 >> additionalHashBits);
                 }
