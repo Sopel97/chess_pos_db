@@ -43,15 +43,13 @@ namespace persistence
         namespace detail
         {
             const std::size_t indexGranularity = cfg::g_config["persistence"]["db_delta"]["index_granularity"].get<std::size_t>();
-
+            
             Entry::Entry(const Position& pos, const ReverseMove& reverseMove) :
-                m_count(1),
-                m_firstGameIndex(0),
-                m_lastGameIndex(0)
+                m_count(1)
             {
                 const auto hash = pos.hash();
                 m_hashPart1 = static_cast<std::uint64_t>(hash[0]) << 32 | hash[1];
-                m_eloDiffAndHashPart2 = hash[2] & nbitmask<std::uint64_t>[additionalHashBits];
+                m_eloDiffAndHashPart2 = (hash[2] & nbitmask<std::uint64_t>[additionalHashBits]);
 
                 auto packedReverseMove = PackedReverseMove(reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
@@ -73,7 +71,10 @@ namespace persistence
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
                 // We want entries ordered with reverse move to also be ordered by just hash
                 // so we have to modify the lowest bits.
-                m_packedInfo = (packedReverseMove.packed() << reverseMoveShift);
+                m_packedInfo = 
+                    (packedReverseMove.packed() << reverseMoveShift)
+                    | ((ordinal(level) & levelMask) << levelShift)
+                    | ((ordinal(result) & resultMask) << resultShift);
             }
 
             [[nodiscard]] GameLevel Entry::level() const
