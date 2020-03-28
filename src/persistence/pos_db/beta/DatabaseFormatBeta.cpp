@@ -252,13 +252,6 @@ namespace persistence
             {
             }
 
-            // TODO: eventually remove this overload?
-            Entry::Entry(const Position& pos, GameLevel level, GameResult result, std::uint64_t gameOffset) :
-                m_key(pos, {}, level, result),
-                m_countAndGameOffset(SingleGame{}, gameOffset)
-            {
-            }
-
             [[nodiscard]] const Key& Entry::key() const
             {
                 return m_key;
@@ -1532,7 +1525,7 @@ namespace persistence
 
                         std::size_t numPositionsInGame = 0;
                         auto processPosition = [&, &nextId = nextId](const Position& position, const ReverseMove& reverseMove) {
-                            entries.emplace_back(position, level, *result, gameOffset);
+                            entries.emplace_back(position, reverseMove, level, *result, gameOffset);
                             numPositionsInGame += 1;
 
                             if (entries.size() == bufferSize)

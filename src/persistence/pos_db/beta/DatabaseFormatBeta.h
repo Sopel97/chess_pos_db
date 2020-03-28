@@ -261,9 +261,6 @@ namespace persistence
 
                 Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint64_t gameOffset);
 
-                // TODO: eventually remove this overload?
-                Entry(const Position& pos, GameLevel level, GameResult result, std::uint64_t gameOffset);
-
                 Entry(const Entry&) = default;
                 Entry(Entry&&) = default;
                 Entry& operator=(const Entry&) = default;
