@@ -9,6 +9,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <iostream>
 
 namespace persistence
 {
@@ -303,13 +304,15 @@ namespace persistence
 
     void Database::writeManifest(const std::vector<std::byte>& data) const
     {
-        std::ofstream out(manifestPath());
+        const auto path = manifestPath();
+        std::filesystem::create_directories(path.parent_path());
+        std::ofstream out(path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(data.data()), data.size());
     }
 
     std::vector<std::byte> Database::readManifest() const
     {
-        std::ifstream in(manifestPath());
+        std::ifstream in(manifestPath(), std::ios::binary);
         std::vector<char> data(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>{});
         std::vector<std::byte> bytes(data.size());
         std::memcpy(bytes.data(), data.data(), data.size());
