@@ -103,6 +103,12 @@
     <Filter Include="Source Files\src\enum">
       <UniqueIdentifier>{fb936208-2d71-46b8-ae77-17fe6041f75c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\src\persistence\pos_db\delta">
+      <UniqueIdentifier>{1d4c877b-48e3-46a8-9a7d-3c98462b0620}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\persistence\pos_db\delta">
+      <UniqueIdentifier>{6caf5f73-4e52-4734-971f-33d1a295f7ab}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\algorithm\Unsort.h">
@@ -207,6 +213,9 @@
     <ClInclude Include="src\enum\EnumArray.h">
       <Filter>Header Files\src\enum</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h">
+      <Filter>Header Files\src\persistence\pos_db\delta</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -280,6 +289,9 @@
     </ClCompile>
     <ClCompile Include="src\CommandLineTool.cpp">
       <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp">
+      <Filter>Source Files\src\persistence\pos_db\delta</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

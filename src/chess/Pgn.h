@@ -176,6 +176,8 @@ namespace pgn
             std::uint16_t& plyCount
         ) const;
 
+        [[nodiscard]] std::int64_t eloDiff() const;
+
         [[nodiscard]] std::optional<GameResult> result() const;
 
         [[nodiscard]] Date date() const;

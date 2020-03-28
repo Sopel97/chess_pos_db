@@ -22,6 +22,7 @@
 
 #include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"
+#include "persistence/pos_db/delta/DatabaseFormatDelta.h"
 #include "persistence/pos_db/Database.h"
 #include "persistence/pos_db/DatabaseFactory.h"
 #include "persistence/pos_db/Query.h"
@@ -112,6 +113,7 @@ namespace command_line_app
 
         g_factory.registerDatabaseType<persistence::db_alpha::Database>();
         g_factory.registerDatabaseType<persistence::db_beta::Database>();
+        g_factory.registerDatabaseType<persistence::db_delta::Database>();
 
         return g_factory;
     }();
