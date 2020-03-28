@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <type_traits>
+#include <climits>
 
 template <typename IntT>
 [[nodiscard]] constexpr IntT mulSaturate(IntT lhs, IntT rhs)
@@ -124,3 +125,31 @@ constexpr auto computeFibonacciNumbers()
 // F(0) = 0, F(1) = 1
 template <typename IntT>
 constexpr auto fibonacciNumbers = computeFibonacciNumbers<IntT>();
+
+template <std::size_t N, typename FromT, typename ToT = std::make_signed_t<FromT>>
+ToT signExtend(FromT value)
+{
+    static_assert(std::is_signed_v<ToT>);
+    static_assert(std::is_unsigned_v<FromT>);
+    static_assert(sizeof(ToT) == sizeof(FromT));
+
+    constexpr std::size_t totalBits = sizeof(FromT) * CHAR_BIT;
+
+    static_assert(N > 0 && N <= totalBits);
+
+    constexpr std::size_t unusedBits = totalBits - N;
+    if constexpr (ToT(~FromT(0)) >> 1 == ToT(~FromT(0)))
+    {
+        return ToT(value << unusedBits) >> ToT(unusedBits);
+    }
+    else
+    {
+        constexpr FromT mask = (~FromT(0)) >> unusedBits;
+        value &= mask;
+        if (value & (FromT(1) << (N - 1)))
+        {
+            value |= ~mask;
+        }
+        return static_cast<ToT>(value);
+    }
+}
