@@ -97,15 +97,7 @@ namespace persistence
 
                 [[nodiscard]] std::uint32_t lastGameIndex() const;
 
-                void combine(const Entry& other)
-                {
-                    m_eloDiffAndHashPart2 += other.m_eloDiffAndHashPart2 & ~nbitmask<std::uint64_t>[additionalHashBits];
-                    m_count += other.m_count;
-                    const auto newFirstGame = std::min(m_firstGameIndex, other.m_firstGameIndex);
-                    const auto newLastGame = std::max(m_lastGameIndex, other.m_lastGameIndex);
-                    m_firstGameIndex = newFirstGame;
-                    m_lastGameIndex = newLastGame;
-                }
+                void combine(const Entry & other);
 
                 struct CompareLessWithReverseMove
                 {
