@@ -221,6 +221,11 @@ namespace query
         {
             j["last_game"] = *entry.lastGame;
         }
+
+        if (entry.eloDiff.has_value())
+        {
+            j["elo_diff"] = *entry.eloDiff;
+        }
     }
 
     void from_json(const nlohmann::json& j, Entry& entry)
@@ -235,6 +240,11 @@ namespace query
         if (j.contains("last_game"))
         {
             entry.lastGame = j["last_game"].get<persistence::GameHeader>();
+        }
+
+        if (j.contains("elo_diff"))
+        {
+            entry.eloDiff = j["elo_diff"].get<std::uint64_t>();
         }
     }
 

@@ -1095,7 +1095,8 @@ namespace persistence
                         for (GameResult result : query.results)
                         {
                             auto& entry = stat[select][level][result];
-                            results[i][select].emplace(level, result, entry.count());
+                            auto& segregatedEntry = results[i][select].emplace(level, result, entry.count());
+                            segregatedEntry.second.eloDiff = entry.eloDiff();
 
                             if (lookup[origin][select].fetchFirst && entry.firstGameIndex() != detail::invalidGameIndex)
                             {

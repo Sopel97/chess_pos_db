@@ -148,6 +148,7 @@ namespace query
         std::size_t count;
         std::optional<persistence::GameHeader> firstGame;
         std::optional<persistence::GameHeader> lastGame;
+        std::optional<std::uint64_t> eloDiff;
 
         Entry(std::size_t count);
 
@@ -171,7 +172,7 @@ namespace query
         template <typename... Args>
         decltype(auto) emplace(GameLevel level, GameResult result, Args&& ... args)
         {
-            m_entries.emplace_back(
+            return m_entries.emplace_back(
                 std::piecewise_construct,
                 std::forward_as_tuple(Origin{ level, result }),
                 std::forward_as_tuple(std::forward<Args>(args)...)
