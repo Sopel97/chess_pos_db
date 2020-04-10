@@ -4,6 +4,7 @@
 
 #include "Chess.h"
 #include "Bitboard.h"
+#include "MoveGenerator.h"
 #include "Position.h"
 
 #include "util/Assert.h"
@@ -674,14 +675,12 @@ namespace san
 
             const Move move = Move::castle(ct, c);
 
-            if (
-                !contains(castlingRights, requiredCastlingRights)
-                || pos.pieceAt(move.from).type() != PieceType::King
-                || pos.pieceAt(move.to).type() != PieceType::Rook
-                )
-            {
-                return {};
-            }
+            bool isValidCastlingMove = false;
+            movegen::forEachCastlingMove(pos, [&move, &isValidCastlingMove](Move m) {
+                if (m == move) isValidCastlingMove = true;
+                });
+
+            if (!isValidCastlingMove) return {};
 
             return move;
         }
