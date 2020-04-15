@@ -544,6 +544,11 @@ public:
         return bb;
     }
 
+    [[nodiscard]] constexpr std::uint8_t pieceCount(Piece pt) const
+    {
+        return m_pieceCount[pt];
+    }
+
     [[nodiscard]] constexpr bool isPromotion(Square from, Square to) const
     {
         ASSERT(from.isOk() && to.isOk());

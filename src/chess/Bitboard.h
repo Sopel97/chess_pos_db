@@ -7,6 +7,7 @@
 
 #include "intrin/Intrinsics.h"
 
+#include "util/ArithmeticUtility.h"
 #include "util/Assert.h"
 
 struct BitboardIterator
@@ -497,6 +498,11 @@ namespace bb
     [[nodiscard]] constexpr Bitboard color(Color c)
     {
         return Bitboard::color(c);
+    }
+
+    [[nodiscard]] constexpr Bitboard before(Square sq)
+    {
+        return Bitboard::fromBits(nbitmask<std::uint64_t>[ordinal(sq)]);
     }
 
     constexpr Bitboard lightSquares = bb::color(Color::White);
