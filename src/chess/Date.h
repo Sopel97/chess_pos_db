@@ -15,7 +15,7 @@ struct Date
 
     Date(std::uint16_t year, std::uint8_t month, std::uint8_t day);
 
-    [[nodiscard]] friend bool operator<(const Date& lhs, const Date& rhs) noexcept;
+    friend bool operator<(const Date& lhs, const Date& rhs) noexcept;
 
     [[nodiscard]] std::string toString() const;
 

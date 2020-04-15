@@ -1234,10 +1234,11 @@ public:
 
     constexpr CompressedReverseMove(const ReverseMove& rm) noexcept :
         m_move(rm.move.compress()),
-        m_oldState{
+        m_oldState{ static_cast<uint16_t>(
             ((ordinal(rm.capturedPiece) & pieceMask) << 11)
             | ((ordinal(rm.oldCastlingRights) & castlingRightsMask) << 7)
             | (ordinal(rm.oldEpSquare) & squareMask)
+            )
         }
     {
     }

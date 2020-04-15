@@ -242,7 +242,7 @@ namespace persistence
 
                 File(ext::ImmutableSpan<Entry>&& entries, Indexes&& index);
 
-                [[nodiscard]] friend bool operator<(const File& lhs, const File& rhs) noexcept;
+                friend bool operator<(const File& lhs, const File& rhs) noexcept;
 
                 [[nodiscard]] std::uint32_t id() const;
 
@@ -282,7 +282,7 @@ namespace persistence
             {
                 FutureFile(std::future<Indexes>&& future, std::filesystem::path path);
 
-                [[nodiscard]] friend bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept;
+                friend bool operator<(const FutureFile& lhs, const FutureFile& rhs) noexcept;
 
                 [[nodiscard]] std::uint32_t id() const;
 

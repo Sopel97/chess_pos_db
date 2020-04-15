@@ -186,7 +186,7 @@ namespace ext
 
             ~PooledFile() override;
 
-            [[nodiscard]] friend bool operator==(const PooledFile& lhs, const PooledFile& rhs) noexcept;
+            friend bool operator==(const PooledFile& lhs, const PooledFile& rhs) noexcept;
 
             [[nodiscard]] const std::filesystem::path& path() const override;
 
@@ -234,7 +234,7 @@ namespace ext
 
             ~File() override;
 
-            [[nodiscard]] friend bool operator==(const File& lhs, const File& rhs) noexcept;
+            friend bool operator==(const File& lhs, const File& rhs) noexcept;
 
             [[nodiscard]] const std::filesystem::path& path() const override;
 
@@ -346,7 +346,7 @@ namespace ext
         ImmutableBinaryFile& operator=(const ImmutableBinaryFile&) = default;
         ImmutableBinaryFile& operator=(ImmutableBinaryFile&&) = default;
 
-        [[nodiscard]] friend bool operator==(const ImmutableBinaryFile& lhs, const ImmutableBinaryFile& rhs) noexcept;
+        friend bool operator==(const ImmutableBinaryFile& lhs, const ImmutableBinaryFile& rhs) noexcept;
 
         [[nodiscard]] bool isOpen() const;
 
@@ -441,7 +441,7 @@ namespace ext
         BinaryInputOutputFile& operator=(const BinaryInputOutputFile&) = delete;
         BinaryInputOutputFile& operator=(BinaryInputOutputFile&&) = default;
 
-        [[nodiscard]] friend bool operator==(const BinaryInputOutputFile& lhs, const BinaryInputOutputFile& rhs) noexcept;
+        friend bool operator==(const BinaryInputOutputFile& lhs, const BinaryInputOutputFile& rhs) noexcept;
 
         [[nodiscard]] bool isOpen() const;
 

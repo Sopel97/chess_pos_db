@@ -20,12 +20,18 @@ private:
 
 public:
 
-    constexpr Board() noexcept
+    constexpr Board() noexcept :
+        m_pieces{},
+        m_pieceBB{},
+        m_piecesByColorBB{},
+        m_pieceCount{}
     {
         m_pieces.fill(Piece::none());
         m_pieceBB.fill(Bitboard::none());
         m_pieceBB[Piece::none()] = Bitboard::all();
         m_piecesByColorBB.fill(Bitboard::none());
+        m_pieceCount.fill(0);
+        m_pieceCount[Piece::none()] = 64;
     }
 
     [[nodiscard]] INTRIN_CONSTEXPR bool isValid() const
@@ -266,6 +272,8 @@ public:
         m_pieces[sq] = piece;
         m_pieceBB[piece] |= sq;
         m_piecesByColorBB[piece.color()] |= sq;
+        --m_pieceCount[oldPiece];
+        ++m_pieceCount[piece];
     }
 
     // returns captured piece
@@ -291,6 +299,8 @@ public:
             if (capturedPiece != Piece::none())
             {
                 m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+                --m_pieceCount[capturedPiece];
+                ++m_pieceCount[Piece::none()];
             }
 
             return capturedPiece;
@@ -317,7 +327,12 @@ public:
             if (capturedPiece != Piece::none())
             {
                 m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+                --m_pieceCount[capturedPiece];
+                ++m_pieceCount[Piece::none()];
             }
+
+            --m_pieceCount[fromPiece];
+            ++m_pieceCount[toPiece];
 
             return capturedPiece;
         }
@@ -344,6 +359,9 @@ public:
             m_piecesByColorBB[movedPiece.color()] ^= move.to;
             m_piecesByColorBB[movedPiece.color()] ^= move.from;
             m_piecesByColorBB[capturedPiece.color()] ^= capturedPieceSq;
+
+            --m_pieceCount[capturedPiece];
+            ++m_pieceCount[Piece::none()];
 
             return capturedPiece;
         }
@@ -408,6 +426,14 @@ public:
             if (capturedPiece != Piece::none())
             {
                 m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+                ++m_pieceCount[capturedPiece];
+                --m_pieceCount[Piece::none()];
+            }
+
+            if (move.type == MoveType::Promotion)
+            {
+                --m_pieceCount[toPiece];
+                ++m_pieceCount[fromPiece];
             }
         }
         else if (move.type == MoveType::EnPassant)
@@ -433,6 +459,9 @@ public:
             m_piecesByColorBB[movedPiece.color()] ^= move.to;
             m_piecesByColorBB[movedPiece.color()] ^= move.from;
             m_piecesByColorBB[capturedPiece.color()] ^= capturedPieceSq;
+
+            ++m_pieceCount[capturedPiece];
+            --m_pieceCount[Piece::none()];
         }
         else // if (move.type == MoveType::Castle)
         {
@@ -528,6 +557,7 @@ private:
     EnumArray<Square, Piece> m_pieces;
     EnumArray<Piece, Bitboard> m_pieceBB;
     EnumArray<Color, Bitboard> m_piecesByColorBB;
+    EnumArray<Piece, uint8_t> m_pieceCount;
 
     // NOTE: currently we don't track it because it's not 
     // required to perform ep if we don't need to check validity
@@ -680,8 +710,7 @@ private:
 
     void nullifyEpSquareIfNotPossible();
 };
-
-static_assert(sizeof(Position) == 192);
+static_assert(sizeof(Position) == 208);
 
 
 struct CompressedPosition

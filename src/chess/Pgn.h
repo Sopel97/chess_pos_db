@@ -41,9 +41,9 @@ namespace pgn
 
             const UnparsedPositionsIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator==(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator!=(const UnparsedPositionsIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const Position& operator*() const;
 
@@ -83,9 +83,9 @@ namespace pgn
 
             const UnparsedMovesIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator==(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator!=(const UnparsedMovesIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const std::string_view& operator*() const;
 
@@ -125,9 +125,9 @@ namespace pgn
 
             const UnparsedTagsIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator==(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator!=(const UnparsedTagsIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const TagView& operator*() const;
 
@@ -229,9 +229,9 @@ namespace pgn
 
             const LazyPgnFileReaderIterator& operator++();
 
-            [[nodiscard]] bool friend operator==(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator==(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept;
 
-            [[nodiscard]] bool friend operator!=(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator!=(const LazyPgnFileReaderIterator& lhs, Sentinel rhs) noexcept;
 
             [[nodiscard]] const UnparsedGame& operator*() const;
 
