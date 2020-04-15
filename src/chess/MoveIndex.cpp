@@ -90,7 +90,7 @@ namespace move_index
         ASSERT(to.isOk());
 
         // 0 - king side, 1 - queen side
-        return to.file() != fileA;
+        return to.file() == fileA;
     }
 
     [[nodiscard]] std::uint8_t pawnDestinationIndex(Square from, Square to, Color sideToMove, PieceType promotedPieceType)
@@ -239,11 +239,12 @@ namespace move_index
 
         case PieceType::King:
             // 2 to 9
+            break;
         }
 
         // Say we have N knights, then all these knights fall into the same range.
         // We have to narrow down this range to properly encode the knight that was moved.
-        unsigned numPiecesBefore = pos.piecesBB(fromPiece) & bb::before(from);
+        unsigned numPiecesBefore = (pos.piecesBB(fromPiece) & bb::before(from)).count();
         unsigned localOffset = maxDestinationCount(fromPieceType) * numPiecesBefore;
         offset += localOffset;
 
@@ -385,6 +386,7 @@ namespace move_index
         // If it's reached it means that the index was too high
         // and doesn't correspond to any piece.
         ASSERT(false); 
+        return Move::null();
     }
 
     [[nodiscard]] Move longIndexToMove(const Position& pos, std::uint16_t index)

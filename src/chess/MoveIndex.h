@@ -11,6 +11,55 @@
 
 namespace move_index
 {
+    /*
+    #include <iostream>
+    #include <cstdlib>
+    #include "chess/San.h"
+    #include "chess/MoveGenerator.h"
+
+    void fuzzTestMoveIndex(int iterations)
+    {
+        // Last test:
+        //     Iterations: 100000
+        //     Moves: 35817734
+
+        int movecount = 0;
+        for (int i = 0; i < iterations; ++i)
+        {
+            auto pos = Position::startPosition();
+            int movecountInThisGame = 0;
+            for (;;)
+            {
+                if (movecountInThisGame > 400) break;
+
+                const auto moves = movegen::generateLegalMoves(pos);
+                if (moves.empty()) break;
+
+                ++movecountInThisGame;
+                const auto move = moves[rand() % moves.size()];
+                const auto idx = move_index::moveToShortIndex(pos, move);
+                const auto decoded = move_index::shortIndexToMove(pos, idx);
+                if (move != decoded)
+                {
+                    std::cout << "Incorrect result:\n";
+                    std::cout << pos.fen() << '\n';
+                    std::cout << san::moveToSan<san::SanSpec::None>(pos, move) << '\n';
+                    std::cout << "Index: " << (int)idx << '\n';
+                    std::cout << "Decoded: " << ordinal(move.from) << ' ' << ordinal(move.to) << ' ' << ordinal(move.type) << ' ' << ordinal(move.promotedPiece) << '\n';
+                    return;
+                }
+
+                pos.doMove(move);
+            }
+
+            movecount += movecountInThisGame;
+        }
+
+        std::cout << "Iterations: " << iterations << '\n';
+        std::cout << "Moves: " << movecount << '\n';
+    }
+    */
+
     namespace detail
     {
         [[nodiscard]] constexpr EnumArray<PieceType, std::uint8_t> makeMaxDestinationCounts()
