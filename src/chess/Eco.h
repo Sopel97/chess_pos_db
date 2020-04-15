@@ -17,6 +17,9 @@ struct Eco
 
     [[nodiscard]] std::string toString() const;
 
+    [[nodiscard]] char category() const;
+    [[nodiscard]] std::uint8_t index() const;
+
 private:
     char m_category;
     std::uint8_t m_index;

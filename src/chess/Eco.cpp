@@ -41,3 +41,13 @@ Eco::Eco(std::string_view sv) :
     s += std::to_string(m_index);
     return s;
 }
+
+[[nodiscard]] char Eco::category() const
+{
+    return m_category;
+}
+
+[[nodiscard]] std::uint8_t Eco::index() const
+{
+    return m_index;
+}

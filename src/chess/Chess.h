@@ -1004,6 +1004,11 @@ public:
         }
     }
 
+    [[nodiscard]] constexpr std::uint16_t packed() const
+    {
+        return m_packed;
+    }
+
     [[nodiscard]] constexpr MoveType type() const
     {
         return fromOrdinal<MoveType>(m_packed >> (16 - 2));

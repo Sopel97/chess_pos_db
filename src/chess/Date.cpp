@@ -141,3 +141,18 @@ Date::Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :
 
     return std::string(buf, 10);
 }
+
+[[nodiscard]] std::uint16_t Date::year() const
+{
+    return m_year;
+}
+
+[[nodiscard]] std::uint8_t Date::month() const
+{
+    return m_month;
+}
+
+[[nodiscard]] std::uint8_t Date::day() const
+{
+    return m_day;
+}

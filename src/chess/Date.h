@@ -19,6 +19,10 @@ struct Date
 
     [[nodiscard]] std::string toString() const;
 
+    [[nodiscard]] std::uint16_t year() const;
+    [[nodiscard]] std::uint8_t month() const;
+    [[nodiscard]] std::uint8_t day() const;
+
 private:
     // A value of 0 signifies an unknown
     std::uint16_t m_year;
