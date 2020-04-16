@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -14,6 +16,8 @@
 #include "San.h"
 
 #include "enum/EnumArray.h"
+
+#include "external_storage/External.h"
 
 namespace bcgn
 {
@@ -113,9 +117,42 @@ namespace bcgn
     //     short move index and write it.
     //
 
+    enum struct BcgnVersion
+    {
+        Version_0 = 0
+    };
+
+    enum struct BcgnCompressionLevel
+    {
+        Level_0 = 0,
+        Level_1 = 1
+    };
+
+    enum struct BcgnAuxCompression
+    {
+        None = 0
+    };
+
+    struct BcgnOptions
+    {
+        BcgnVersion version = BcgnVersion::Version_0;
+        BcgnCompressionLevel compressionLevel = BcgnCompressionLevel::Level_0;
+        BcgnAuxCompression auxCompression = BcgnAuxCompression::None;
+    };
+
     struct BcgnWriter
     {
+        static constexpr std::size_t maxGameLength = 256 * 256 - 1;
         static constexpr std::size_t maxStringLength = 255;
+        static constexpr std::size_t minBufferSize = 128ull * 1024ull;
+        static constexpr std::size_t bcgnFileHeaderLength = 32;
+
+        // Because we always ensure the buffer can take another game
+        // even if it would be the longest possible we don't want
+        // to flush at every game being written. It would happen any time a
+        // game is written when the buffer size was too small because it would
+        // be easly pushed past maxGameLength of free space.
+        static_assert(minBufferSize > 2 * maxGameLength);
 
         struct BcgnGameEntryBuffer
         {
@@ -218,25 +255,25 @@ namespace bcgn
 
             void setWhitePlayer(const std::string_view sv)
             {
-                m_whiteLength = std::min(maxStringLength, sv.size());
+                m_whiteLength = (std::uint8_t)std::min(maxStringLength, sv.size());
                 std::memcpy(m_white, sv.data(), m_whiteLength);
             }
 
             void setBlackPlayer(const std::string_view sv)
             {
-                m_blackLength = std::min(maxStringLength, sv.size());
+                m_blackLength = (std::uint8_t)std::min(maxStringLength, sv.size());
                 std::memcpy(m_black, sv.data(), m_blackLength);
             }
 
             void setEventPlayer(const std::string_view sv)
             {
-                m_eventLength = std::min(maxStringLength, sv.size());
+                m_eventLength = (std::uint8_t)std::min(maxStringLength, sv.size());
                 std::memcpy(m_event, sv.data(), m_eventLength);
             }
 
             void setSitePlayer(const std::string_view sv)
             {
-                m_siteLength = std::min(maxStringLength, sv.size());
+                m_siteLength = (std::uint8_t)std::min(maxStringLength, sv.size());
                 std::memcpy(m_site, sv.data(), m_siteLength);
             }
 
@@ -269,8 +306,8 @@ namespace bcgn
                     throw std::runtime_error("Game text must not be longer than 65535 bytes.");
                 }
 
-                writeBigEndian(buffer, totalLength);
-                writeBigEndian(buffer, headerLength);
+                writeBigEndian(buffer, (std::uint16_t)totalLength);
+                writeBigEndian(buffer, (std::uint16_t)headerLength);
 
                 *buffer++ = m_numPlies << 6; // 8 highest (of 14) bits
                 *buffer++ = (m_numPlies << 2) | mapResultToInt();
@@ -333,7 +370,7 @@ namespace bcgn
             void writeString(unsigned char*& buffer, const std::string& str) const
             {
                 const std::size_t length = std::min(maxStringLength, str.size());
-                *buffer++ = length;
+                *buffer++ = (std::uint8_t)length;
                 std::memcpy(buffer, str.c_str(), length);
                 buffer += length;
             }
@@ -411,5 +448,132 @@ namespace bcgn
                 return length;
             }
         };
+
+        enum struct FileOpenMode
+        {
+            Truncate,
+            Append
+        };
+
+        BcgnWriter(
+            const std::filesystem::path& path, 
+            BcgnOptions options, 
+            FileOpenMode mode = FileOpenMode::Truncate, 
+            std::size_t bufferSize = minBufferSize
+            ) :
+            m_options(options),
+            m_game(std::make_unique<BcgnGameEntryBuffer>()),
+            m_file(nullptr, &std::fclose),
+            m_path(path),
+            m_buffer(std::max(bufferSize, minBufferSize)),
+            m_numBytesUsedInFrontBuffer(0),
+            m_numBytesBeingWritten(0),
+            m_future{}
+        {
+            const bool needsHeader = (mode != FileOpenMode::Append) || !std::filesystem::exists(path);
+
+            auto strPath = path.string();
+            m_file.reset(std::fopen(
+                strPath.c_str(),
+                mode == FileOpenMode::Append ? "ab" : "wb"
+                ));
+
+            writeHeader();
+        }
+
+        void beginGame()
+        {
+            m_game.reset();
+        }
+
+        // TODO: member function to set the stuff related to the current game.
+
+        void endGame()
+        {
+            writeCurrentGame();
+
+            // We don't know how much the next game will take
+            // and we don't want to compute the size before writing.
+            // So we ensure that we always have enough space in the buffer.
+            // The buffer is not big anyway so this shouldn't be an issue.
+            if (!enoughSpaceForNextGame())
+            {
+                swapAndPersistFrontBuffer();
+            }
+        }
+
+        void flush()
+        {
+            swapAndPersistFrontBuffer();
+
+            if (m_future.valid())
+            {
+                m_future.get();
+            }
+        }
+
+        ~BcgnWriter()
+        {
+            flush();
+        }
+
+    private:
+        BcgnOptions m_options;
+        std::unique_ptr<BcgnGameEntryBuffer> m_game;
+        std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
+        std::filesystem::path m_path;
+        ext::DoubleBuffer<unsigned char> m_buffer;
+        std::size_t m_numBytesUsedInFrontBuffer;
+        std::size_t m_numBytesBeingWritten;
+        std::future<std::size_t> m_future;
+
+        void writeHeader()
+        {
+            unsigned char* data = m_buffer.data();
+
+            std::memset(data, 0, bcgnFileHeaderLength);
+
+            *data++ = 'B';
+            *data++ = 'C';
+            *data++ = 'G';
+            *data++ = 'N';
+            *data++ = static_cast<unsigned char>(m_options.version);
+            *data++ = static_cast<unsigned char>(m_options.compressionLevel);
+            *data++ = static_cast<unsigned char>(m_options.auxCompression);
+
+            m_numBytesUsedInFrontBuffer = bcgnFileHeaderLength;
+        }
+
+        void writeCurrentGame()
+        {
+            const auto bytesWritten = m_game->writeTo(m_buffer.data() + m_numBytesUsedInFrontBuffer);
+            m_numBytesUsedInFrontBuffer += bytesWritten;
+        }
+
+        [[nodiscard]] bool enoughSpaceForNextGame() const
+        {
+            return m_buffer.size() - m_numBytesUsedInFrontBuffer >= maxGameLength;
+        }
+
+        void swapAndPersistFrontBuffer()
+        {
+            if (!m_numBytesUsedInFrontBuffer)
+            {
+                return;
+            }
+
+            if (m_future.valid())
+            {
+                m_future.get();
+            }
+
+            m_buffer.swap();
+            m_numBytesBeingWritten = m_numBytesUsedInFrontBuffer;
+            m_numBytesUsedInFrontBuffer = 0;
+
+            m_future = std::async(std::launch::async, [this]() {
+                return std::fwrite(m_buffer.back_data(), 1, m_numBytesBeingWritten, m_file.get());
+                });
+        }
     };
 }
