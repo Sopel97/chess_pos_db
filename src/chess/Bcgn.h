@@ -117,6 +117,23 @@ namespace bcgn
     //     short move index and write it.
     //
 
+    namespace traits
+    {
+        constexpr std::size_t maxGameLength = 256 * 256 - 1;
+        constexpr std::size_t maxStringLength = 255;
+        constexpr std::size_t minBufferSize = 128ull * 1024ull;
+        constexpr std::size_t bcgnFileHeaderLength = 32;
+
+        // Because we always ensure the buffer can take another game
+        // even if it would be the longest possible we don't want
+        // to flush at every game being written. It would happen any time a
+        // game is written when the buffer size was too small because it would
+        // be easly pushed past maxGameLength of free space.
+        static_assert(minBufferSize > 2 * maxGameLength);
+
+
+    }
+
     enum struct BcgnVersion
     {
         Version_0 = 0
@@ -140,20 +157,8 @@ namespace bcgn
         BcgnAuxCompression auxCompression = BcgnAuxCompression::None;
     };
 
-    struct BcgnWriter
+    namespace detail
     {
-        static constexpr std::size_t maxGameLength = 256 * 256 - 1;
-        static constexpr std::size_t maxStringLength = 255;
-        static constexpr std::size_t minBufferSize = 128ull * 1024ull;
-        static constexpr std::size_t bcgnFileHeaderLength = 32;
-
-        // Because we always ensure the buffer can take another game
-        // even if it would be the longest possible we don't want
-        // to flush at every game being written. It would happen any time a
-        // game is written when the buffer size was too small because it would
-        // be easly pushed past maxGameLength of free space.
-        static_assert(minBufferSize > 2 * maxGameLength);
-
         struct BcgnGameEntryBuffer
         {
             BcgnGameEntryBuffer() :
@@ -255,25 +260,25 @@ namespace bcgn
 
             void setWhitePlayer(const std::string_view sv)
             {
-                m_whiteLength = (std::uint8_t)std::min(maxStringLength, sv.size());
+                m_whiteLength = (std::uint8_t)std::min(traits::maxStringLength, sv.size());
                 std::memcpy(m_white, sv.data(), m_whiteLength);
             }
 
             void setBlackPlayer(const std::string_view sv)
             {
-                m_blackLength = (std::uint8_t)std::min(maxStringLength, sv.size());
+                m_blackLength = (std::uint8_t)std::min(traits::maxStringLength, sv.size());
                 std::memcpy(m_black, sv.data(), m_blackLength);
             }
 
             void setEventPlayer(const std::string_view sv)
             {
-                m_eventLength = (std::uint8_t)std::min(maxStringLength, sv.size());
+                m_eventLength = (std::uint8_t)std::min(traits::maxStringLength, sv.size());
                 std::memcpy(m_event, sv.data(), m_eventLength);
             }
 
             void setSitePlayer(const std::string_view sv)
             {
-                m_siteLength = (std::uint8_t)std::min(maxStringLength, sv.size());
+                m_siteLength = (std::uint8_t)std::min(traits::maxStringLength, sv.size());
                 std::memcpy(m_site, sv.data(), m_siteLength);
             }
 
@@ -369,7 +374,7 @@ namespace bcgn
 
             void writeString(unsigned char*& buffer, const std::string& str) const
             {
-                const std::size_t length = std::min(maxStringLength, str.size());
+                const std::size_t length = std::min(traits::maxStringLength, str.size());
                 *buffer++ = (std::uint8_t)length;
                 std::memcpy(buffer, str.c_str(), length);
                 buffer += length;
@@ -384,8 +389,8 @@ namespace bcgn
 
             [[nodiscard]] std::uint8_t gatherFlags() const
             {
-                return 
-                    (m_customStartPos.has_value() << 1) 
+                return
+                    (m_customStartPos.has_value() << 1)
                     | (!m_additionalTags.empty());
             }
 
@@ -417,7 +422,7 @@ namespace bcgn
 
             [[nodiscard]] std::size_t computeHeaderLength() const
             {
-                constexpr std::size_t lengthOfMandatoryFixedLengthFields = 
+                constexpr std::size_t lengthOfMandatoryFixedLengthFields =
                     2 + 2 + // lengths
                     2 + // ply + result
                     4 + // date
@@ -441,14 +446,17 @@ namespace bcgn
                 for (auto&& [name, value] : m_additionalTags)
                 {
                     length += 2; // for two length specifications
-                    length += std::min(maxStringLength, name.size());
-                    length += std::min(maxStringLength, value.size());
+                    length += std::min(traits::maxStringLength, name.size());
+                    length += std::min(traits::maxStringLength, value.size());
                 }
 
                 return length;
             }
         };
+    }
 
+    struct BcgnWriter
+    {
         enum struct FileOpenMode
         {
             Truncate,
@@ -459,13 +467,13 @@ namespace bcgn
             const std::filesystem::path& path, 
             BcgnOptions options, 
             FileOpenMode mode = FileOpenMode::Truncate, 
-            std::size_t bufferSize = minBufferSize
+            std::size_t bufferSize = traits::minBufferSize
             ) :
             m_options(options),
-            m_game(std::make_unique<BcgnGameEntryBuffer>()),
+            m_game(std::make_unique<detail::BcgnGameEntryBuffer>()),
             m_file(nullptr, &std::fclose),
             m_path(path),
-            m_buffer(std::max(bufferSize, minBufferSize)),
+            m_buffer(std::max(bufferSize, traits::minBufferSize)),
             m_numBytesUsedInFrontBuffer(0),
             m_numBytesBeingWritten(0),
             m_future{}
@@ -519,7 +527,7 @@ namespace bcgn
 
     private:
         BcgnOptions m_options;
-        std::unique_ptr<BcgnGameEntryBuffer> m_game;
+        std::unique_ptr<detail::BcgnGameEntryBuffer> m_game;
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
         std::filesystem::path m_path;
         ext::DoubleBuffer<unsigned char> m_buffer;
@@ -531,7 +539,7 @@ namespace bcgn
         {
             unsigned char* data = m_buffer.data();
 
-            std::memset(data, 0, bcgnFileHeaderLength);
+            std::memset(data, 0, traits::bcgnFileHeaderLength);
 
             *data++ = 'B';
             *data++ = 'C';
@@ -541,7 +549,7 @@ namespace bcgn
             *data++ = static_cast<unsigned char>(m_options.compressionLevel);
             *data++ = static_cast<unsigned char>(m_options.auxCompression);
 
-            m_numBytesUsedInFrontBuffer = bcgnFileHeaderLength;
+            m_numBytesUsedInFrontBuffer = traits::bcgnFileHeaderLength;
         }
 
         void writeCurrentGame()
@@ -552,7 +560,7 @@ namespace bcgn
 
         [[nodiscard]] bool enoughSpaceForNextGame() const
         {
-            return m_buffer.size() - m_numBytesUsedInFrontBuffer >= maxGameLength;
+            return m_buffer.size() - m_numBytesUsedInFrontBuffer >= traits::maxGameLength;
         }
 
         void swapAndPersistFrontBuffer()
