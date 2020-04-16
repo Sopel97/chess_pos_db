@@ -494,7 +494,107 @@ namespace bcgn
             m_game.reset();
         }
 
-        // TODO: member function to set the stuff related to the current game.
+        void resetGame()
+        {
+            m_game.reset();
+        }
+
+        void setDate(const Date& date)
+        {
+            m_game->setDate(date);
+        }
+
+        void setWhiteElo(std::uint16_t elo)
+        {
+            m_game->setWhiteElo(elo);
+        }
+
+        void setBlackElo(std::uint16_t elo)
+        {
+            m_game->setBlackElo(elo);
+        }
+
+        void setRound(std::uint16_t round)
+        {
+            m_game->setRound(round);
+        }
+
+        void setEco(Eco eco)
+        {
+            m_game->setEco(eco);
+        }
+
+        void setCustomStartPos(const Position& pos)
+        {
+            m_game->setCustomStartPos(pos);
+        }
+
+        void resetCustomStartPos()
+        {
+            m_game->resetCustomStartPos();
+        }
+
+        void setResult(GameResult result)
+        {
+            m_game->setResult(result);
+        }
+
+        void resetResult()
+        {
+            m_game->resetResult();
+        }
+
+        void setAdditionalTag(std::string&& name, std::string&& value)
+        {
+            m_game->setAdditionalTag(std::move(name), std::move(value));
+        }
+
+        void setAdditionalTag(const std::string& name, const std::string& value)
+        {
+            m_game->setAdditionalTag(name, value);
+        }
+
+        void setWhitePlayer(const std::string_view sv)
+        {
+            m_game->setWhitePlayer(sv);
+        }
+
+        void setBlackPlayer(const std::string_view sv)
+        {
+            m_game->setBlackPlayer(sv);
+        }
+
+        void setEventPlayer(const std::string_view sv)
+        {
+            m_game->setEventPlayer(sv);
+        }
+
+        void setSitePlayer(const std::string_view sv)
+        {
+            m_game->setSitePlayer(sv);
+        }
+
+        void addMove(const Position& pos, const Move& move)
+        {
+            switch (m_options.compressionLevel)
+            {
+            case BcgnCompressionLevel::Level_0:
+                m_game->addCompressedMove(move.compress());
+                break;
+
+            case BcgnCompressionLevel::Level_1:
+                if (move_index::requiresLongMoveIndex(pos))
+                {
+                    m_game->addLongMove(move_index::moveToLongIndex(pos, move));
+                }
+                else
+                {
+                    m_game->addShortMove(move_index::moveToShortIndex(pos, move));
+                }
+
+                break;
+            }
+        }
 
         void endGame()
         {
