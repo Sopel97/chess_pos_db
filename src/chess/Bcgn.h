@@ -297,6 +297,8 @@ namespace bcgn
 
             void addCompressedMove(const CompressedMove& move)
             {
+                m_movetext.push_back(move.packed() >> 8);
+                m_movetext.push_back(move.packed() & 0xFF);
                 ++m_numPlies;
             }
 
