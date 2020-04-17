@@ -807,6 +807,150 @@ namespace bcgn
         }
     };
 
+    struct UnparsedBcgnGameMoves
+    {
+        UnparsedBcgnGameMoves(BcgnHeader options, std::string_view movetext) noexcept :
+            m_options(options),
+            m_encodedMovetext(movetext)
+        {
+        }
+
+        [[nodiscard]] bool hasNext() const
+        {
+            return !m_encodedMovetext.empty();
+        }
+
+        [[nodiscard]] Move next(const Position& pos)
+        {
+            switch (m_options.compressionLevel)
+            {
+            case BcgnCompressionLevel::Level_0:
+            {
+                const std::uint16_t packed = (m_encodedMovetext[0] << 8) | m_encodedMovetext[1];
+                const CompressedMove compressedMove = CompressedMove::fromBits(packed);
+                m_encodedMovetext.remove_prefix(2);
+                return compressedMove.decompress();
+            }
+
+            case BcgnCompressionLevel::Level_1:
+            {
+                if (move_index::requiresLongMoveIndex(pos))
+                {
+                    const std::uint16_t index = (m_encodedMovetext[0] << 8) | m_encodedMovetext[1];
+                    const Move move = move_index::longIndexToMove(pos, index);
+                    m_encodedMovetext.remove_prefix(2);
+                    return move;
+                }
+                else
+                {
+                    const std::uint8_t index = m_encodedMovetext[0];
+                    const Move move = move_index::shortIndexToMove(pos, index);
+                    m_encodedMovetext.remove_prefix(1);
+                    return move;
+                }
+            }
+            }
+
+            ASSERT(false);
+            return Move::null();
+        }
+
+    private:
+        BcgnHeader m_options;
+        std::string_view m_encodedMovetext;
+    };
+
+    struct UnparsedBcgnGamePositions
+    {
+        struct UnparsedBcgnGamePositionsIterator
+        {
+            struct Sentinel {};
+
+            using value_type = Position;
+            using difference_type = std::ptrdiff_t;
+            using reference = const Position&;
+            using iterator_category = std::input_iterator_tag;
+            using pointer = const Position*;
+
+            UnparsedBcgnGamePositionsIterator(BcgnHeader options, std::string_view movetext) noexcept :
+                m_position(Position::startPosition()),
+                m_moveProvider(options, movetext)
+            {
+            }
+
+            UnparsedBcgnGamePositionsIterator(BcgnHeader options, const Position& pos, std::string_view movetext) noexcept :
+                m_position(pos),
+                m_moveProvider(options, movetext)
+            {
+            }
+
+            const UnparsedBcgnGamePositionsIterator& operator++()
+            {
+                const auto move = m_moveProvider.next(m_position);
+                m_position.doMove(move);
+                return *this;
+            }
+
+            bool friend operator==(const UnparsedBcgnGamePositionsIterator& lhs, Sentinel rhs) noexcept
+            {
+                return !lhs.m_moveProvider.hasNext();
+            }
+
+            bool friend operator!=(const UnparsedBcgnGamePositionsIterator& lhs, Sentinel rhs) noexcept
+            {
+                return lhs.m_moveProvider.hasNext();
+            }
+
+            [[nodiscard]] const Position& operator*() const
+            {
+                return m_position;
+            }
+
+            [[nodiscard]] const Position* operator->() const
+            {
+                return &m_position;
+            }
+
+        private:
+            Position m_position;
+            UnparsedBcgnGameMoves m_moveProvider;
+        };
+
+        using iterator = UnparsedBcgnGamePositionsIterator;
+        using const_iterator = UnparsedBcgnGamePositionsIterator;
+
+        UnparsedBcgnGamePositions(BcgnHeader options, std::string_view movetext) noexcept :
+            m_options(options),
+            m_startpos(Position::startPosition()),
+            m_encodedMovetext(movetext)
+        {
+
+        }
+
+        UnparsedBcgnGamePositions(BcgnHeader options, const Position& startpos, std::string_view movetext) noexcept :
+            m_options(options),
+            m_startpos(startpos),
+            m_encodedMovetext(movetext)
+        {
+
+        }
+
+        [[nodiscard]] UnparsedBcgnGamePositionsIterator begin()
+        {
+            return UnparsedBcgnGamePositionsIterator(m_options, m_startpos, m_encodedMovetext);
+        }
+
+        [[nodiscard]] UnparsedBcgnGamePositionsIterator::Sentinel end() const
+        {
+            return {};
+        }
+
+    private:
+        BcgnHeader m_options;
+        Position m_startpos;
+        std::string_view m_encodedMovetext;
+    };
+
     struct UnparsedBcgnGame
     {
         UnparsedBcgnGame() = default;
@@ -1036,6 +1180,7 @@ namespace bcgn
             const LazyBcgnReaderIterator& operator++()
             {
                 prepareNextGame();
+                return *this;
             }
 
             bool friend operator==(const LazyBcgnReaderIterator& lhs, Sentinel rhs) noexcept
@@ -1189,6 +1334,33 @@ namespace bcgn
                 return (m_bufferView[0] << 8) | m_bufferView[1];
             }
         };
+
+        using iterator = LazyBcgnReaderIterator;
+        using const_iterator = LazyBcgnReaderIterator;
+
+        BcgnReader(const std::filesystem::path& path, std::size_t bufferSize = traits::minBufferSize) :
+            m_file(nullptr, &std::fclose),
+            m_path(path),
+            m_bufferSize(bufferSize)
+        {
+            auto strPath = path.string();
+            m_file.reset(std::fopen(strPath.c_str(), "r"));
+        }
+
+        [[nodiscard]] bool isOpen() const
+        {
+            return m_file != nullptr;
+        }
+
+        [[nodiscard]] LazyBcgnReaderIterator begin()
+        {
+            return LazyBcgnReaderIterator(m_path, m_bufferSize);
+        }
+
+        [[nodiscard]] LazyBcgnReaderIterator::Sentinel end() const
+        {
+            return {};
+        }
 
     private:
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;

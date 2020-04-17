@@ -73,11 +73,11 @@ namespace pgn
         {
             struct Sentinel {};
 
-            using value_type = Position;
+            using value_type = std::string_view;
             using difference_type = std::ptrdiff_t;
-            using reference = const Position &;
+            using reference = const std::string_view&;
             using iterator_category = std::input_iterator_tag;
-            using pointer = const Position*;
+            using pointer = const std::string_view*;
 
             UnparsedMovesIterator(std::string_view moveSection) noexcept;
 

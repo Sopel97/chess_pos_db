@@ -971,6 +971,11 @@ private:
     static constexpr std::uint16_t moveTypeMask = 0b11u;
 
 public:
+    [[nodiscard]] constexpr static CompressedMove fromBits(std::uint16_t bits)
+    {
+        return CompressedMove(bits);
+    }
+
     constexpr CompressedMove() noexcept :
         m_packed(0)
     {
@@ -1076,6 +1081,11 @@ public:
 
 private:
     std::uint16_t m_packed;
+
+    constexpr CompressedMove(std::uint16_t packed) noexcept :
+        m_packed(packed)
+    {
+    }
 };
 
 static_assert(sizeof(CompressedMove) == 2);
