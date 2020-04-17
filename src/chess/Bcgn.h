@@ -927,9 +927,9 @@ namespace bcgn
             static_assert(IndexV < 4);
 
             std::size_t offset = 19;
-            if constexpr (IndexV > 0) offset += m_data[offset] + 1;
-            if constexpr (IndexV > 1) offset += m_data[offset] + 1;
-            if constexpr (IndexV > 2) offset += m_data[offset] + 1;
+            if constexpr (IndexV > 0) offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
+            if constexpr (IndexV > 1) offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
+            if constexpr (IndexV > 2) offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
 
             const std::uint8_t length = m_data[offset];
 
@@ -939,9 +939,9 @@ namespace bcgn
         [[nodiscard]] std::size_t getAdditionalTagSectionOffset() const
         {
             std::size_t offset = 19;
-            offset += m_data[offset] + 1;
-            offset += m_data[offset] + 1;
-            offset += m_data[offset] + 1;
+            offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
+            offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
+            offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             return offset;
         }
 
