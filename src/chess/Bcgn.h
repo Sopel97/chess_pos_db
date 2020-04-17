@@ -942,6 +942,7 @@ namespace bcgn
             offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
+            offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             return offset;
         }
 
