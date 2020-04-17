@@ -122,6 +122,7 @@ namespace bcgn
         constexpr std::size_t maxGameLength = 256 * 256 - 1;
         constexpr std::size_t maxStringLength = 255;
         constexpr std::size_t minBufferSize = 128ull * 1024ull;
+        constexpr std::size_t minHeaderLength = 23;
         constexpr std::size_t bcgnFileHeaderLength = 32;
 
         // Because we always ensure the buffer can take another game
@@ -136,25 +137,83 @@ namespace bcgn
 
     enum struct BcgnVersion
     {
-        Version_0 = 0
+        Version_0 = 0,
+        SIZE
     };
 
     enum struct BcgnCompressionLevel
     {
         Level_0 = 0,
-        Level_1 = 1
+        Level_1 = 1,
+        SIZE
     };
 
     enum struct BcgnAuxCompression
     {
-        None = 0
+        None = 0,
+        SIZE
     };
 
-    struct BcgnOptions
+    struct BcgnHeader
     {
         BcgnVersion version = BcgnVersion::Version_0;
         BcgnCompressionLevel compressionLevel = BcgnCompressionLevel::Level_0;
         BcgnAuxCompression auxCompression = BcgnAuxCompression::None;
+
+        void readFrom(const char* str)
+        {
+            if (str[0] != 'B'
+                || str[1] != 'C'
+                || str[2] != 'G'
+                || str[3] != 'N')
+            {
+                invalidHeader();
+            }
+
+            const std::uint8_t version_ = str[4];
+            const std::uint8_t compressionLevel_ = str[5];
+            const std::uint8_t auxCompression_ = str[6];
+
+            if (version_ >= static_cast<unsigned>(BcgnVersion::SIZE)
+                || compressionLevel_ >= static_cast<unsigned>(BcgnCompressionLevel::SIZE)
+                || auxCompression_ >= static_cast<unsigned>(BcgnAuxCompression::SIZE))
+            {
+                invalidHeader();
+            }
+
+            for (int i = 7; i < traits::bcgnFileHeaderLength; ++i)
+            {
+                if (str[i] != '\0')
+                {
+                    invalidHeader();
+                }
+            }
+
+            version = static_cast<BcgnVersion>(version_);
+            compressionLevel = static_cast<BcgnCompressionLevel>(compressionLevel_);
+            auxCompression = static_cast<BcgnAuxCompression>(auxCompression_);
+        }
+
+        [[nodiscard]] std::size_t writeTo(unsigned char* data)
+        {
+            std::memset(data, 0, traits::bcgnFileHeaderLength);
+
+            *data++ = 'B';
+            *data++ = 'C';
+            *data++ = 'G';
+            *data++ = 'N';
+            *data++ = static_cast<unsigned char>(version);
+            *data++ = static_cast<unsigned char>(compressionLevel);
+            *data++ = static_cast<unsigned char>(auxCompression);
+
+            return traits::bcgnFileHeaderLength;
+        }
+
+    private:
+        [[noreturn]] void invalidHeader() const
+        {
+            throw std::runtime_error("Invalid header.");
+        }
     };
 
     namespace detail
@@ -470,7 +529,7 @@ namespace bcgn
 
         BcgnWriter(
             const std::filesystem::path& path, 
-            BcgnOptions options, 
+            BcgnHeader options, 
             FileOpenMode mode = FileOpenMode::Truncate, 
             std::size_t bufferSize = traits::minBufferSize
             ) :
@@ -631,7 +690,7 @@ namespace bcgn
         }
 
     private:
-        BcgnOptions m_options;
+        BcgnHeader m_options;
         std::unique_ptr<detail::BcgnGameEntryBuffer> m_game;
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
         std::filesystem::path m_path;
@@ -643,18 +702,7 @@ namespace bcgn
         void writeHeader()
         {
             unsigned char* data = m_buffer.data();
-
-            std::memset(data, 0, traits::bcgnFileHeaderLength);
-
-            *data++ = 'B';
-            *data++ = 'C';
-            *data++ = 'G';
-            *data++ = 'N';
-            *data++ = static_cast<unsigned char>(m_options.version);
-            *data++ = static_cast<unsigned char>(m_options.compressionLevel);
-            *data++ = static_cast<unsigned char>(m_options.auxCompression);
-
-            m_numBytesUsedInFrontBuffer = traits::bcgnFileHeaderLength;
+            m_numBytesUsedInFrontBuffer += m_options.writeTo(data);
         }
 
         void writeCurrentGame()
@@ -688,5 +736,226 @@ namespace bcgn
                 return std::fwrite(m_buffer.back_data(), 1, m_numBytesBeingWritten, m_file.get());
                 });
         }
+    };
+
+    struct UnparsedBcgnGame
+    {
+        UnparsedBcgnGame() :
+            m_game{}
+        {
+        }
+
+        UnparsedBcgnGame(std::string_view sv) :
+            m_game(sv)
+        {
+
+        }
+
+    private:
+        std::string_view m_game;
+    };
+
+    struct BcgnReader
+    {
+        struct LazyBcgnReaderIterator
+        {
+            struct Sentinel {};
+
+            using value_type = UnparsedBcgnGame;
+            using difference_type = std::ptrdiff_t;
+            using reference = const UnparsedBcgnGame&;
+            using iterator_category = std::input_iterator_tag;
+            using pointer = const UnparsedBcgnGame*;
+
+            LazyBcgnReaderIterator(const std::filesystem::path& path, std::size_t bufferSize) :
+                m_options{},
+                m_file(nullptr, &std::fclose),
+                m_path(path),
+                m_buffer(bufferSize),
+                m_bufferView{},
+                m_numBytesLeftInAuxBuffer(0),
+                m_future{},
+                m_game{},
+                m_isEnd(false)
+            {
+                auto strPath = path.string();
+                m_file.reset(std::fopen(strPath.c_str(), "r"));
+
+                if (m_file == nullptr)
+                {
+                    m_isEnd = true;
+                    return;
+                }
+
+                refillBuffer();
+
+                if (!isEnd())
+                {
+                    fillOptions();
+                    prepareFirstGame();
+                }
+            }
+
+            const LazyBcgnReaderIterator& operator++()
+            {
+                prepareNextGame();
+            }
+
+            bool friend operator==(const LazyBcgnReaderIterator& lhs, Sentinel rhs) noexcept
+            {
+                return lhs.isEnd();
+            }
+
+            bool friend operator!=(const LazyBcgnReaderIterator& lhs, Sentinel rhs) noexcept 
+            {
+                return !lhs.isEnd();
+            }
+
+            [[nodiscard]] const UnparsedBcgnGame& operator*() const
+            {
+                return m_game;
+            }
+
+            [[nodiscard]] const UnparsedBcgnGame* operator->() const
+            {
+                return &m_game;
+            }
+
+        private:
+            BcgnHeader m_options;
+            std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
+            std::filesystem::path m_path;
+            ext::DoubleBuffer<char> m_buffer;
+            std::string_view m_bufferView;
+            std::size_t m_numBytesLeftInAuxBuffer;
+            std::future<std::size_t> m_future;
+            UnparsedBcgnGame m_game;
+            bool m_isEnd;
+
+            void refillBuffer()
+            {
+                // We know that the biggest possible unprocessed amount of bytes is traits::maxGameLength - 1.
+                // Using this information we can only fill the buffer starting from 
+                // position traits::maxGameLength and prepend any unprocessed data
+                // in front of it.
+                // This way we minimize copying between buffers.
+
+                const std::size_t usableReadBufferSpace = m_buffer.size() - traits::maxGameLength;
+
+                const std::size_t numUnprocessedBytes = m_bufferView.size();
+                if (numUnprocessedBytes >= traits::maxGameLength)
+                {
+                    // This should never happen. There should always be a game in there.
+                    throw std::runtime_error("Unprocessed block longer than maxGameLength.");
+                }
+
+                const std::size_t freeSpace = traits::maxGameLength - numUnprocessedBytes;
+                if (numUnprocessedBytes)
+                {
+                    // memcpy is safe because the buffers are disjoint.
+                    std::memcpy(m_buffer.back_data() + freeSpace, m_bufferView.data(), numUnprocessedBytes);
+                }
+
+                // If this is the first read then we read data to back_data,
+                // swap the buffers, and schedule async read to new back_data.
+                // If this is a subsequent read then we wait for write to back_data
+                // to finish, swap the buffers, and scherule a read to the new back_data.
+
+                const auto numBytesRead = 
+                    m_future.valid()
+                    ? m_future.get()
+                    : std::fread(m_buffer.back_data() + traits::maxGameLength, 1, usableReadBufferSpace, m_file.get());
+
+                if (numBytesRead == 0)
+                {
+                    m_isEnd = true;
+                    return;
+                }
+
+                m_buffer.swap();
+
+                m_future = std::async(std::launch::async, [this, usableReadBufferSpace]() {
+                    return std::fread(m_buffer.back_data() + traits::maxGameLength, 1, usableReadBufferSpace, m_file.get());
+                    });
+
+                m_bufferView = std::string_view(m_buffer.data() + freeSpace, numBytesRead + numUnprocessedBytes);
+            }
+
+            void fillOptions()
+            {
+                if (m_bufferView.size() < traits::bcgnFileHeaderLength)
+                {
+                    m_isEnd = true;
+                }
+                else
+                {
+                    m_options.readFrom(m_bufferView.data());
+                    m_bufferView.remove_prefix(traits::bcgnFileHeaderLength);
+                }
+            }
+
+            void prepareFirstGame()
+            {
+                // If we fail here we can just set isEnd and don't bother.
+                // The buffer should always be big enough to have at least one game.
+
+                if (m_bufferView.size() < traits::minHeaderLength)
+                {
+                    m_isEnd = true;
+                    return;
+                }
+
+                const auto size = readNextGameEntrySize();
+                if (m_bufferView.size() < size)
+                {
+                    m_isEnd = true;
+                    return;
+                }
+
+                m_game = UnparsedBcgnGame(m_bufferView.substr(0, size));
+                m_bufferView.remove_prefix(size);
+            }
+
+            void prepareNextGame()
+            {
+                while(!isEnd())
+                {
+                    if (m_bufferView.size() < 2)
+                    {
+                        // we cannot read the entry size, request more data
+                        refillBuffer();
+                        continue;
+                    }
+
+                    const auto size = readNextGameEntrySize();
+                    if (m_bufferView.size() < size)
+                    {
+                        refillBuffer();
+                        continue;
+                    }
+
+                    // Here we are guaranteed to have the whole game in the buffer.
+                    m_game = UnparsedBcgnGame(m_bufferView.substr(0, size));
+                    m_bufferView.remove_prefix(size);
+                    return;
+                }
+            }
+
+            [[nodiscard]] bool isEnd() const
+            {
+                return m_isEnd;
+            }
+
+            [[nodiscard]] std::size_t readNextGameEntrySize() const
+            {
+                // We assume here that there are 2 bytes in the buffer.
+                return (m_bufferView[0] << 8) | m_bufferView[1];
+            }
+        };
+
+    private:
+        std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
+        std::filesystem::path m_path;
+        std::size_t m_bufferSize;
     };
 }

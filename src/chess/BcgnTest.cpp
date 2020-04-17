@@ -3,7 +3,7 @@
 
 #include <cstdlib>
 
-void testBcgnWriter(std::string filename, bcgn::BcgnOptions options, int numGames, bcgn::BcgnWriter::FileOpenMode mode = bcgn::BcgnWriter::FileOpenMode::Truncate)
+void testBcgnWriter(std::string filename, bcgn::BcgnHeader options, int numGames, bcgn::BcgnWriter::FileOpenMode mode = bcgn::BcgnWriter::FileOpenMode::Truncate)
 {
     srand(12345);
 
@@ -65,7 +65,7 @@ void testBcgnWriter()
     constexpr int numGames = 256 * 32;
 
     {
-        auto options = bcgn::BcgnOptions{};
+        auto options = bcgn::BcgnHeader{};
         options.auxCompression = bcgn::BcgnAuxCompression::None;
         options.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
         options.version = bcgn::BcgnVersion::Version_0;
@@ -73,7 +73,7 @@ void testBcgnWriter()
     }
 
     {
-        auto options = bcgn::BcgnOptions{};
+        auto options = bcgn::BcgnHeader{};
         options.auxCompression = bcgn::BcgnAuxCompression::None;
         options.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
         options.version = bcgn::BcgnVersion::Version_0;
@@ -81,7 +81,7 @@ void testBcgnWriter()
     }
 
     {
-        auto options = bcgn::BcgnOptions{};
+        auto options = bcgn::BcgnHeader{};
         options.auxCompression = bcgn::BcgnAuxCompression::None;
         options.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
         options.version = bcgn::BcgnVersion::Version_0;
