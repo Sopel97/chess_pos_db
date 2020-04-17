@@ -462,11 +462,14 @@ namespace bcgn
                 writeString(buffer, m_event, m_eventLength);
                 writeString(buffer, m_site, m_siteLength);
 
-                *buffer++ = m_additionalTags.size();
-                for (auto&& [name, value] : m_additionalTags)
+                if (!m_additionalTags.empty())
                 {
-                    writeString(buffer, name);
-                    writeString(buffer, value);
+                    *buffer++ = m_additionalTags.size();
+                    for (auto&& [name, value] : m_additionalTags)
+                    {
+                        writeString(buffer, name);
+                        writeString(buffer, value);
+                    }
                 }
 
                 writeMovetext(buffer);
