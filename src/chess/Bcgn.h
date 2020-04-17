@@ -572,11 +572,15 @@ namespace bcgn
                 length += m_eventLength;
                 length += m_siteLength;
 
-                for (auto&& [name, value] : m_additionalTags)
+                if (!m_additionalTags.empty())
                 {
-                    length += 2; // for two length specifications
-                    length += std::min(traits::maxStringLength, name.size());
-                    length += std::min(traits::maxStringLength, value.size());
+                    length += 1;
+                    for (auto&& [name, value] : m_additionalTags)
+                    {
+                        length += 2; // for two length specifications
+                        length += std::min(traits::maxStringLength, name.size());
+                        length += std::min(traits::maxStringLength, value.size());
+                    }
                 }
 
                 return length;
