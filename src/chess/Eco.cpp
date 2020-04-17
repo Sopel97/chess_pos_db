@@ -31,6 +31,13 @@ Eco::Eco(std::string_view sv) :
 {
 }
 
+[[nodiscard]] bool operator==(const Eco& lhs, const Eco& rhs) noexcept
+{
+    return
+        lhs.m_category == rhs.m_category
+        && lhs.m_index == rhs.m_index;
+}
+
 [[nodiscard]] std::string Eco::toString() const
 {
     auto s = std::string(1, m_category);

@@ -98,6 +98,14 @@ Date::Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :
     else return false;
 }
 
+[[nodiscard]] bool operator==(const Date& lhs, const Date& rhs) noexcept
+{
+    return 
+        lhs.m_year == rhs.m_year
+        && lhs.m_month == rhs.m_month
+        && lhs.m_day == rhs.m_day;
+}
+
 [[nodiscard]] std::string Date::toString() const
 {
     char buf[10];
