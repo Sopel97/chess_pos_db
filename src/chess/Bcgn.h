@@ -809,13 +809,76 @@ namespace bcgn
         void setGameData(std::string_view sv)
         {
             m_data = sv;
-            m_headerLength = readHeaderLength();
+            prereadData();
+        }
+
+        [[nodiscard]] std::uint16_t numPlies() const
+        {
+            return m_numPlies;
+        }
+
+        [[nodiscard]] std::optional<GameResult> result() const
+        {
+            return m_result;
+        }
+
+        [[nodiscard]] const Date& date() const
+        {
+            return m_date;
+        }
+
+        [[nodiscard]] std::uint16_t whiteElo() const
+        {
+            return m_whiteElo;
+        }
+
+        [[nodiscard]] std::uint16_t blackElo() const
+        {
+            return m_blackElo;
+        }
+
+        [[nodiscard]] std::uint16_t round() const
+        {
+            return m_round;
+        }
+
+        [[nodiscard]] Eco eco() const
+        {
+            return m_eco;
         }
 
     private:
         BcgnHeader m_options;
         std::string_view m_data;
+
+        // We read and store the mandatory data that's cheap to decode.
+        // Everything else is lazy.
         std::uint16_t m_headerLength;
+        std::uint16_t m_numPlies;
+        std::optional<GameResult> m_result;
+        Date m_date;
+        std::uint16_t m_whiteElo;
+        std::uint16_t m_blackElo;
+        std::uint16_t m_round;
+        Eco m_eco;
+        BcgnFlags m_flags;
+
+        void prereadData()
+        {
+            m_headerLength = readHeaderLength();
+            // we convert to unsigned char to prevent sign extension.
+            m_numPlies = (m_data[4] << 6) | (((std::uint8_t)m_data[5]) >> 2);
+            m_result = mapIntToResult(m_data[5] & 3);
+            m_date = Date((m_data[6] << 8) | m_data[7], m_data[8], m_data[9]);
+
+            m_whiteElo = (m_data[10] << 8) | m_data[11];
+            m_blackElo = (m_data[12] << 8) | m_data[13];
+            m_round = (m_data[14] << 8) | m_data[15];
+
+            m_eco = Eco(m_data[16], m_data[17]);
+
+            m_flags = BcgnFlags::decode(m_data[18]);
+        }
 
         [[nodiscard]] std::string_view encodedMovetext() const
         {
@@ -825,6 +888,24 @@ namespace bcgn
         [[nodiscard]] std::uint16_t readHeaderLength() const
         {
             return (m_data[2] << 8) | m_data[3];
+        }
+
+        [[nodiscard]] std::optional<GameResult> mapIntToResult(unsigned v) const
+        {
+            switch (v)
+            {
+            case 0:
+                return {};
+            case 1:
+                return GameResult::WhiteWin;
+            case 2:
+                return GameResult::BlackWin;
+            case 3:
+                return GameResult::Draw;
+            }
+
+            ASSERT(false);
+            return {};
         }
     };
 
