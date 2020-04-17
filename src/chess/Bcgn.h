@@ -261,8 +261,8 @@ namespace bcgn
         [[nodiscard]] std::uint8_t encode() const
         {
             return
-                (m_hasCustomStartPos << 1)
-                | m_hasAdditionalTags;
+                ((std::uint8_t)m_hasCustomStartPos << 1)
+                | (std::uint8_t)m_hasAdditionalTags;
         }
 
     private:
@@ -464,7 +464,7 @@ namespace bcgn
 
                 if (!m_additionalTags.empty())
                 {
-                    *buffer++ = m_additionalTags.size();
+                    *buffer++ = (std::uint8_t)m_additionalTags.size();
                     for (auto&& [name, value] : m_additionalTags)
                     {
                         writeString(buffer, name);
@@ -853,6 +853,54 @@ namespace bcgn
             return m_eco;
         }
 
+        [[nodiscard]] std::string_view whitePlayer() const
+        {
+            return getMandatoryString<0>();
+        }
+
+        [[nodiscard]] std::string_view blackPlayer() const
+        {
+            return getMandatoryString<1>();
+        }
+
+        [[nodiscard]] std::string_view event() const
+        {
+            return getMandatoryString<2>();
+        }
+
+        [[nodiscard]] std::string_view site() const
+        {
+            return getMandatoryString<3>();
+        }
+
+        [[nodiscard]] std::string_view getAdditionalTagValue(std::string_view name) const
+        {
+            if (!m_flags.hasAdditionalTags())
+            {
+                return {};
+            }
+            
+            std::size_t offset = getAdditionalTagSectionOffset();
+            std::uint8_t numAdditionalTags = m_data[offset];
+            ++offset;
+            for (int i = 0; i < numAdditionalTags; ++i)
+            {
+                const std::uint8_t nameLength = m_data[offset];
+                offset += 1;
+                const auto currentName = m_data.substr(offset, nameLength);
+                offset += nameLength;
+                const auto valueLength = m_data[offset];
+                offset += 1;
+                
+                if (currentName == name)
+                {
+                    return m_data.substr(offset, valueLength);
+                }
+
+                offset += valueLength;
+            }
+        }
+
     private:
         BcgnHeader m_options;
         std::string_view m_data;
@@ -868,6 +916,30 @@ namespace bcgn
         std::uint16_t m_round;
         Eco m_eco;
         BcgnFlags m_flags;
+
+        template <std::size_t IndexV>
+        [[nodiscard]] std::string_view getMandatoryString() const
+        {
+            static_assert(IndexV < 4);
+
+            std::size_t offset = 19;
+            if constexpr (IndexV > 0) offset += m_data[offset] + 1;
+            if constexpr (IndexV > 1) offset += m_data[offset] + 1;
+            if constexpr (IndexV > 2) offset += m_data[offset] + 1;
+
+            const std::uint8_t length = m_data[offset];
+
+            return m_data.substr(offset + 1, length);
+        }
+
+        [[nodiscard]] std::size_t getAdditionalTagSectionOffset() const
+        {
+            std::size_t offset = 19;
+            offset += m_data[offset] + 1;
+            offset += m_data[offset] + 1;
+            offset += m_data[offset] + 1;
+            return offset;
+        }
 
         void prereadData()
         {
