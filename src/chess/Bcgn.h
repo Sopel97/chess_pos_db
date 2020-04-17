@@ -371,11 +371,13 @@ namespace bcgn
 
             void setAdditionalTag(std::string&& name, std::string&& value)
             {
+                if (m_additionalTags.size() >= 255) return;
                 m_additionalTags.emplace_back(std::move(name), std::move(value));
             }
 
             void setAdditionalTag(const std::string& name, const std::string& value)
             {
+                if (m_additionalTags.size() >= 255) return;
                 m_additionalTags.emplace_back(name, value);
             }
 
@@ -460,6 +462,7 @@ namespace bcgn
                 writeString(buffer, m_event, m_eventLength);
                 writeString(buffer, m_site, m_siteLength);
 
+                *buffer++ = m_additionalTags.size();
                 for (auto&& [name, value] : m_additionalTags)
                 {
                     writeString(buffer, name);
