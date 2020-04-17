@@ -420,8 +420,10 @@ namespace bcgn
 
             void addCompressedMove(const CompressedMove& move)
             {
-                m_movetext.push_back(move.packed() >> 8);
-                m_movetext.push_back(move.packed() & 0xFF);
+                unsigned char c[2];
+                move.writeToBigEndian(c);
+                m_movetext.push_back(c[0]);
+                m_movetext.push_back(c[1]);
                 ++m_numPlies;
             }
 
@@ -832,8 +834,7 @@ namespace bcgn
             {
             case BcgnCompressionLevel::Level_0:
             {
-                const std::uint16_t packed = (at(0) << 8) | at(1);
-                const CompressedMove compressedMove = CompressedMove::fromBits(packed);
+                const CompressedMove compressedMove = CompressedMove::readFromBigEndian(m_encodedMovetext.data());
                 m_encodedMovetext.remove_prefix(2);
                 return compressedMove.decompress();
             }
@@ -1114,7 +1115,7 @@ namespace bcgn
 
         [[nodiscard]] Position getCustomStartPos() const
         {
-            CompressedPosition pos = CompressedPosition::fromBits(m_data.data() + 19);
+            CompressedPosition pos = CompressedPosition::readFromBigEndian(m_data.data() + 19);
             return pos.decompress();
         }
 

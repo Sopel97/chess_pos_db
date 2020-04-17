@@ -971,9 +971,11 @@ private:
     static constexpr std::uint16_t moveTypeMask = 0b11u;
 
 public:
-    [[nodiscard]] constexpr static CompressedMove fromBits(std::uint16_t bits)
+    [[nodiscard]] constexpr static CompressedMove readFromBigEndian(const char* data)
     {
-        return CompressedMove(bits);
+        CompressedMove move{};
+        move.m_packed = ((std::uint8_t)data[0] << 8) | (std::uint8_t)data[1];
+        return move;
     }
 
     constexpr CompressedMove() noexcept :
@@ -1007,6 +1009,12 @@ public:
                 ASSERT(move.promotedPiece == Piece::none());
             }
         }
+    }
+
+    void writeToBigEndian(unsigned char* data) const
+    {
+        *data++ = m_packed >> 8;
+        *data++ = m_packed & 0xFF;
     }
 
     [[nodiscard]] constexpr std::uint16_t packed() const
@@ -1081,11 +1089,6 @@ public:
 
 private:
     std::uint16_t m_packed;
-
-    constexpr CompressedMove(std::uint16_t packed) noexcept :
-        m_packed(packed)
-    {
-    }
 };
 
 static_assert(sizeof(CompressedMove) == 2);
