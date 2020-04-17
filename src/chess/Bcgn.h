@@ -740,19 +740,33 @@ namespace bcgn
 
     struct UnparsedBcgnGame
     {
-        UnparsedBcgnGame() :
-            m_game{}
+        UnparsedBcgnGame() = default;
+
+        void setOptions(BcgnHeader header)
         {
+            m_options = header;
         }
 
-        UnparsedBcgnGame(std::string_view sv) :
-            m_game(sv)
+        void setGameData(std::string_view sv)
         {
-
+            m_data = sv;
+            m_headerLength = readHeaderLength();
         }
 
     private:
-        std::string_view m_game;
+        BcgnHeader m_options;
+        std::string_view m_data;
+        std::uint16_t m_headerLength;
+
+        [[nodiscard]] std::string_view encodedMovetext() const
+        {
+            return m_data.substr(m_headerLength);
+        }
+
+        [[nodiscard]] std::uint16_t readHeaderLength() const
+        {
+            return (m_data[2] << 8) | m_data[3];
+        }
     };
 
     struct BcgnReader
@@ -792,6 +806,9 @@ namespace bcgn
                 if (!isEnd())
                 {
                     fillOptions();
+
+                    m_game.setOptions(m_options);
+
                     prepareFirstGame();
                 }
             }
@@ -912,7 +929,7 @@ namespace bcgn
                     return;
                 }
 
-                m_game = UnparsedBcgnGame(m_bufferView.substr(0, size));
+                m_game.setGameData(m_bufferView.substr(0, size));
                 m_bufferView.remove_prefix(size);
             }
 
@@ -935,7 +952,7 @@ namespace bcgn
                     }
 
                     // Here we are guaranteed to have the whole game in the buffer.
-                    m_game = UnparsedBcgnGame(m_bufferView.substr(0, size));
+                    m_game.setGameData(m_bufferView.substr(0, size));
                     m_bufferView.remove_prefix(size);
                     return;
                 }
