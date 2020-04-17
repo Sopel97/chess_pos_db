@@ -216,6 +216,66 @@ namespace bcgn
         }
     };
 
+    struct BcgnFlags
+    {
+        BcgnFlags() :
+            m_hasCustomStartPos(false),
+            m_hasAdditionalTags(false)
+        {
+        }
+
+        [[nodiscard]] static BcgnFlags decode(std::uint8_t v)
+        {
+            return BcgnFlags(
+                (v >> 1) & 1,
+                v & 1
+                );
+        }
+
+        void clear()
+        {
+            m_hasCustomStartPos = false;
+            m_hasAdditionalTags = false;
+        }
+
+        void setHasCustomStartPos(bool v)
+        {
+            m_hasCustomStartPos = v;
+        }
+
+        void setHasAdditionalTags(bool v)
+        {
+            m_hasAdditionalTags = v;
+        }
+
+        [[nodiscard]] bool hasCustomStartPos() const
+        {
+            return m_hasCustomStartPos;
+        }
+
+        [[nodiscard]] bool hasAdditionalTags() const
+        {
+            return m_hasAdditionalTags;
+        }
+
+        [[nodiscard]] std::uint8_t encode() const
+        {
+            return
+                (m_hasCustomStartPos << 1)
+                | m_hasAdditionalTags;
+        }
+
+    private:
+        bool m_hasCustomStartPos;
+        bool m_hasAdditionalTags;
+
+        BcgnFlags(bool hasCustomStartPos, bool hasAdditionalTags) :
+            m_hasCustomStartPos(hasCustomStartPos),
+            m_hasAdditionalTags(hasAdditionalTags)
+        {
+        }
+    };
+
     namespace detail
     {
         struct BcgnGameEntryBuffer
@@ -238,6 +298,7 @@ namespace bcgn
                 m_siteLength{},
                 m_site{},
                 m_numPlies{},
+                m_flags{},
                 m_movetext{}
             {
                 m_additionalTags.reserve(8);
@@ -259,6 +320,7 @@ namespace bcgn
                 m_eventLength = 0;
                 m_siteLength = 0;
                 m_numPlies = 0;
+                m_flags.clear();
                 m_movetext.clear();
             }
 
@@ -372,6 +434,9 @@ namespace bcgn
                     throw std::runtime_error("Game text must not be longer than 65535 bytes.");
                 }
 
+                m_flags.setHasAdditionalTags(!m_additionalTags.empty());
+                m_flags.setHasCustomStartPos(m_customStartPos.has_value());
+
                 writeBigEndian(buffer, (std::uint16_t)totalLength);
                 writeBigEndian(buffer, (std::uint16_t)headerLength);
 
@@ -388,7 +453,7 @@ namespace bcgn
                 *buffer++ = m_eco.category();
                 *buffer++ = m_eco.index();
 
-                *buffer++ = gatherFlags();
+                *buffer++ = m_flags.encode();
 
                 writeString(buffer, m_white, m_whiteLength);
                 writeString(buffer, m_black, m_blackLength);
@@ -424,6 +489,7 @@ namespace bcgn
             std::uint8_t m_siteLength;
             char m_site[256];
             std::uint16_t m_numPlies;
+            BcgnFlags m_flags;
             std::vector<unsigned char> m_movetext;
 
             void writeMovetext(unsigned char*& buffer)
@@ -446,13 +512,6 @@ namespace bcgn
                 *buffer++ = length;
                 std::memcpy(buffer, str, length);
                 buffer += length;
-            }
-
-            [[nodiscard]] std::uint8_t gatherFlags() const
-            {
-                return
-                    (m_customStartPos.has_value() << 1)
-                    | (!m_additionalTags.empty());
             }
 
             [[nodiscard]] unsigned mapResultToInt() const
