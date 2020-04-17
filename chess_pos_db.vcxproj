@@ -83,6 +83,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess\Bcgn.cpp" />
+    <ClCompile Include="src\chess\BcgnTest.cpp" />
     <ClCompile Include="src\chess\Bitboard.cpp" />
     <ClCompile Include="src\chess\Date.cpp" />
     <ClCompile Include="src\chess\Eco.cpp" />
