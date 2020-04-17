@@ -885,23 +885,20 @@ namespace bcgn
             }
             
             std::size_t offset = getAdditionalTagSectionOffset();
-            std::uint8_t numAdditionalTags = m_data[offset];
-            ++offset;
+            const std::uint8_t numAdditionalTags = m_data[offset];
+            offset += 1;
             for (int i = 0; i < numAdditionalTags; ++i)
             {
                 const std::uint8_t nameLength = m_data[offset];
-                offset += 1;
-                const auto currentName = m_data.substr(offset, nameLength);
-                offset += nameLength;
-                const auto valueLength = m_data[offset];
-                offset += 1;
+                const auto currentName = m_data.substr(offset + 1, nameLength);
+                const auto valueLength = m_data[offset + 1 + nameLength];
                 
                 if (currentName == name)
                 {
-                    return m_data.substr(offset, valueLength);
+                    return m_data.substr(offset + 1 + nameLength + 1, valueLength);
                 }
 
-                offset += valueLength;
+                offset += 2 + nameLength + valueLength;
             }
         }
 
