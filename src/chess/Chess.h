@@ -431,7 +431,7 @@ struct EnumTraits<File>
 
     [[nodiscard]] static constexpr std::string_view toString(EnumType c) noexcept
     {
-        ASSERT(c.isOk());
+        ASSERT(ordinal(c) >= 0 && ordinal(c) < 8);
 
         return std::string_view("abcdefgh" + ordinal(c), 1);
     }
@@ -473,7 +473,7 @@ struct EnumTraits<Rank>
 
     [[nodiscard]] static constexpr std::string_view toString(EnumType c) noexcept
     {
-        ASSERT(c.isOk());
+        ASSERT(ordinal(c) >= 0 && ordinal(c) < 8);
 
         return std::string_view("12345678" + ordinal(c), 1);
     }
@@ -634,7 +634,7 @@ public:
 
     constexpr friend Square& operator+=(Square& sq, FlatSquareOffset offset)
     {
-        ASSERT(sq.m_id + offset.value >= 0 && sq.m_id + offset.value < m_noneId);
+        ASSERT(sq.m_id + offset.value >= 0 && sq.m_id + offset.value < Square::m_noneId);
         sq.m_id += offset.value;
         return sq;
     }

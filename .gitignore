@@ -77,4 +77,8 @@ Temporary Items
 .apdisk
 
 # Project specific
+
+# Test input/output
 .tmp
+.pgn
+.bcgn

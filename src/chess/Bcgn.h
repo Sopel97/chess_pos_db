@@ -270,13 +270,13 @@ namespace bcgn
                 std::memcpy(m_black, sv.data(), m_blackLength);
             }
 
-            void setEventPlayer(const std::string_view sv)
+            void setEvent(const std::string_view sv)
             {
                 m_eventLength = (std::uint8_t)std::min(traits::maxStringLength, sv.size());
                 std::memcpy(m_event, sv.data(), m_eventLength);
             }
 
-            void setSitePlayer(const std::string_view sv)
+            void setSite(const std::string_view sv)
             {
                 m_siteLength = (std::uint8_t)std::min(traits::maxStringLength, sv.size());
                 std::memcpy(m_site, sv.data(), m_siteLength);
@@ -412,6 +412,9 @@ namespace bcgn
                         return 3;
                     }
                 }
+
+                ASSERT(false);
+                return 0;
             }
 
             FORCEINLINE void writeBigEndian(unsigned char*& buffer, std::uint16_t value)
@@ -491,12 +494,12 @@ namespace bcgn
 
         void beginGame()
         {
-            m_game.reset();
+            m_game->clear();
         }
 
         void resetGame()
         {
-            m_game.reset();
+            m_game->clear();
         }
 
         void setDate(const Date& date)
@@ -564,14 +567,14 @@ namespace bcgn
             m_game->setBlackPlayer(sv);
         }
 
-        void setEventPlayer(const std::string_view sv)
+        void setEvent(const std::string_view sv)
         {
-            m_game->setEventPlayer(sv);
+            m_game->setEvent(sv);
         }
 
-        void setSitePlayer(const std::string_view sv)
+        void setSite(const std::string_view sv)
         {
-            m_game->setSitePlayer(sv);
+            m_game->setSite(sv);
         }
 
         void addMove(const Position& pos, const Move& move)

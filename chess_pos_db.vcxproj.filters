@@ -216,6 +216,12 @@
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h">
       <Filter>Header Files\src\persistence\pos_db\delta</Filter>
     </ClInclude>
+    <ClInclude Include="src\chess\Bcgn.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
+    <ClInclude Include="src\chess\MoveIndex.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -292,6 +298,12 @@
     </ClCompile>
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp">
       <Filter>Source Files\src\persistence\pos_db\delta</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\MoveIndex.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\Bcgn.cpp">
+      <Filter>Source Files\src\chess</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

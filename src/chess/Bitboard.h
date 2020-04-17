@@ -447,7 +447,7 @@ public:
 
     constexpr void popFirst()
     {
-        ASSERT(m_square != 0);
+        ASSERT(m_squares != 0);
 
         m_squares &= m_squares - 1;
     }

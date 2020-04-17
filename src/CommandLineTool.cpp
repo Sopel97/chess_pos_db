@@ -1,3 +1,5 @@
+#define _SILENCE_CXX17_C_HEADER_DEPRECATION_WARNING
+
 #include "CommandLineTool.h"
 
 
@@ -1065,7 +1067,7 @@ namespace command_line_app
 
         auto makeBuffers = [](std::size_t numBuffers)
         {
-            ASSERT(size > 0);
+            ASSERT(numBuffers > 0);
 
             const std::size_t size = ext::numObjectsPerBufferUnit<CompressedPosition>(importMemory, numBuffers);
 
