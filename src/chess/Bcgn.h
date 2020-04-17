@@ -457,6 +457,12 @@ namespace bcgn
 
                 *buffer++ = m_flags.encode();
 
+                if (m_customStartPos.has_value())
+                {
+                    m_customStartPos->writeToBigEndian(buffer);
+                    buffer += sizeof(CompressedPosition);
+                }
+
                 writeString(buffer, m_white, m_whiteLength);
                 writeString(buffer, m_black, m_blackLength);
                 writeString(buffer, m_event, m_eventLength);
@@ -1046,6 +1052,28 @@ namespace bcgn
             }
         }
 
+        [[nodiscard]] Position startPosition() const
+        {
+            if (m_flags.hasCustomStartPos())
+            {
+                return getCustomStartPos();
+            }
+            else
+            {
+                return Position::startPosition();
+            }
+        }
+
+        [[nodiscard]] UnparsedBcgnGameMoves moves() const
+        {
+            return UnparsedBcgnGameMoves(m_options, encodedMovetext());
+        }
+
+        [[nodiscard]] UnparsedBcgnGamePositions positions() const
+        {
+            return UnparsedBcgnGamePositions(m_options, encodedMovetext());
+        }
+
     private:
         BcgnHeader m_options;
         std::string_view m_data;
@@ -1062,12 +1090,23 @@ namespace bcgn
         Eco m_eco;
         BcgnFlags m_flags;
 
+        [[nodiscard]] std::size_t getStringsOffset() const
+        {
+            return 19 + 24 * m_flags.hasCustomStartPos();
+        }
+
+        [[nodiscard]] Position getCustomStartPos() const
+        {
+            CompressedPosition pos = CompressedPosition::fromBits(m_data.data() + 19);
+            return pos.decompress();
+        }
+
         template <std::size_t IndexV>
         [[nodiscard]] std::string_view getMandatoryString() const
         {
             static_assert(IndexV < 4);
 
-            std::size_t offset = 19;
+            std::size_t offset = getStringsOffset();
             if constexpr (IndexV > 0) offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             if constexpr (IndexV > 1) offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             if constexpr (IndexV > 2) offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
@@ -1079,7 +1118,7 @@ namespace bcgn
 
         [[nodiscard]] std::size_t getAdditionalTagSectionOffset() const
         {
-            std::size_t offset = 19;
+            std::size_t offset = getStringsOffset();
             offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;
             offset += (std::size_t)(std::uint8_t)m_data[offset] + 1;

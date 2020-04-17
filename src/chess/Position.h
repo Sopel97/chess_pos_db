@@ -753,6 +753,11 @@ struct CompressedPosition
     // Let N be the number of bits set in occupied bitboard.
     // Only N nibbles are present. (N+1)/2 bytes are initialized.
 
+    static CompressedPosition fromBits(const char* data)
+    {
+        return CompressedPosition(data);
+    }
+
     constexpr CompressedPosition() :
         m_occupied{},
         m_packedState{}
@@ -780,12 +785,32 @@ struct CompressedPosition
         return m_occupied;
     }
 
+    [[nodiscard]] void writeToBigEndian(unsigned char* data)
+    {
+        const auto occupied = m_occupied.bits();
+        *data++ = occupied >> 56;
+        *data++ = (occupied >> 48) & 0xFF;
+        *data++ = (occupied >> 40) & 0xFF;
+        *data++ = (occupied >> 32) & 0xFF;
+        *data++ = (occupied >> 24) & 0xFF;
+        *data++ = (occupied >> 16) & 0xFF;
+        *data++ = (occupied >> 8) & 0xFF;
+        *data++ = occupied & 0xFF;
+        std::memcpy(data, m_packedState, 16);
+    }
+
 private:
     Bitboard m_occupied;
     std::uint8_t m_packedState[16];
+
+    CompressedPosition(const char* data)
+    {
+        std::memcpy(this, data, sizeof(CompressedPosition));
+    }
 };
 
 static_assert(sizeof(CompressedPosition) == 24);
+static_assert(std::is_trivially_copyable_v<CompressedPosition>);
 
 namespace detail
 {
