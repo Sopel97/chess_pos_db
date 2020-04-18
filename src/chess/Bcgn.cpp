@@ -467,7 +467,10 @@ namespace bcgn
             mode == FileOpenMode::Append ? "ab" : "wb"
             ));
 
-        writeHeader();
+        if (needsHeader)
+        {
+            writeHeader();
+        }
     }
 
     void BcgnWriter::beginGame()
@@ -1083,7 +1086,6 @@ namespace bcgn
         m_path(path),
         m_buffer(bufferSize),
         m_bufferView{},
-        m_numBytesLeftInAuxBuffer(0),
         m_future{},
         m_game{},
         m_isEnd(false)

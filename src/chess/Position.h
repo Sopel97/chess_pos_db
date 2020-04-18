@@ -797,7 +797,7 @@ struct CompressedPosition
         return m_occupied;
     }
 
-    [[nodiscard]] void writeToBigEndian(unsigned char* data)
+    void writeToBigEndian(unsigned char* data)
     {
         const auto occupied = m_occupied.bits();
         *data++ = occupied >> 56;
@@ -988,7 +988,6 @@ namespace detail::lookup
         case 12:
         {
             const Rank rank = sq.rank();
-            const File file = sq.file();
             if (rank == rank4)
             {
                 pos.place(whitePawn, sq);

@@ -578,7 +578,6 @@ namespace bcgn
             std::filesystem::path m_path;
             ext::DoubleBuffer<unsigned char> m_buffer;
             util::UnsignedCharBufferView m_bufferView;
-            std::size_t m_numBytesLeftInAuxBuffer;
             std::future<std::size_t> m_future;
             UnparsedBcgnGame m_game;
             bool m_isEnd;
