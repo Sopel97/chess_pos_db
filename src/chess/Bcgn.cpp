@@ -671,41 +671,41 @@ namespace bcgn
         return Move::null();
     }
 
-    UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::UnparsedBcgnGamePositionsIterator(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
+    UnparsedBcgnGamePositions::iterator::iterator(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
         m_position(Position::startPosition()),
         m_moveProvider(options, movetext)
     {
     }
 
-    UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::UnparsedBcgnGamePositionsIterator(BcgnHeader options, const Position& pos, util::UnsignedCharBufferView movetext) noexcept :
+    UnparsedBcgnGamePositions::iterator::iterator(BcgnHeader options, const Position& pos, util::UnsignedCharBufferView movetext) noexcept :
         m_position(pos),
         m_moveProvider(options, movetext)
     {
     }
 
-    const UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator& UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::operator++()
+    const UnparsedBcgnGamePositions::iterator& UnparsedBcgnGamePositions::iterator::operator++()
     {
         const auto move = m_moveProvider.next(m_position);
         m_position.doMove(move);
         return *this;
     }
 
-    bool operator==(const UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator& lhs, UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::Sentinel rhs) noexcept
+    bool operator==(const UnparsedBcgnGamePositions::iterator& lhs, UnparsedBcgnGamePositions::iterator::sentinel rhs) noexcept
     {
         return !lhs.m_moveProvider.hasNext();
     }
 
-    bool operator!=(const UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator& lhs, UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::Sentinel rhs) noexcept
+    bool operator!=(const UnparsedBcgnGamePositions::iterator& lhs, UnparsedBcgnGamePositions::iterator::sentinel rhs) noexcept
     {
         return lhs.m_moveProvider.hasNext();
     }
 
-    [[nodiscard]] const Position& UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::operator*() const
+    [[nodiscard]] const Position& UnparsedBcgnGamePositions::iterator::operator*() const
     {
         return m_position;
     }
 
-    [[nodiscard]] const Position* UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::operator->() const
+    [[nodiscard]] const Position* UnparsedBcgnGamePositions::iterator::operator->() const
     {
         return &m_position;
     }
@@ -726,12 +726,12 @@ namespace bcgn
 
     }
 
-    [[nodiscard]] UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator UnparsedBcgnGamePositions::begin()
+    [[nodiscard]] UnparsedBcgnGamePositions::iterator UnparsedBcgnGamePositions::begin()
     {
-        return UnparsedBcgnGamePositionsIterator(m_options, m_startpos, m_encodedMovetext);
+        return iterator(m_options, m_startpos, m_encodedMovetext);
     }
 
-    [[nodiscard]] UnparsedBcgnGamePositions::UnparsedBcgnGamePositionsIterator::Sentinel UnparsedBcgnGamePositions::end() const
+    [[nodiscard]] UnparsedBcgnGamePositions::iterator::sentinel UnparsedBcgnGamePositions::end() const
     {
         return {};
     }
@@ -995,7 +995,7 @@ namespace bcgn
         return {};
     }
 
-    BcgnReader::LazyBcgnReaderIterator::LazyBcgnReaderIterator(const std::filesystem::path& path, std::size_t bufferSize) :
+    BcgnReader::iterator::iterator(const std::filesystem::path& path, std::size_t bufferSize) :
         m_options{},
         m_file(nullptr, &std::fclose),
         m_path(path),
@@ -1027,33 +1027,33 @@ namespace bcgn
         }
     }
 
-    const BcgnReader::LazyBcgnReaderIterator& BcgnReader::LazyBcgnReaderIterator::operator++()
+    const BcgnReader::iterator& BcgnReader::iterator::operator++()
     {
         prepareNextGame();
         return *this;
     }
 
-    bool operator==(const BcgnReader::LazyBcgnReaderIterator& lhs, BcgnReader::LazyBcgnReaderIterator::Sentinel rhs) noexcept
+    bool operator==(const BcgnReader::iterator& lhs, BcgnReader::iterator::sentinel rhs) noexcept
     {
         return lhs.isEnd();
     }
 
-    bool operator!=(const BcgnReader::LazyBcgnReaderIterator& lhs, BcgnReader::LazyBcgnReaderIterator::Sentinel rhs) noexcept
+    bool operator!=(const BcgnReader::iterator& lhs, BcgnReader::iterator::sentinel rhs) noexcept
     {
         return !lhs.isEnd();
     }
 
-    [[nodiscard]] const UnparsedBcgnGame& BcgnReader::LazyBcgnReaderIterator::operator*() const
+    [[nodiscard]] const UnparsedBcgnGame& BcgnReader::iterator::operator*() const
     {
         return m_game;
     }
 
-    [[nodiscard]] const UnparsedBcgnGame* BcgnReader::LazyBcgnReaderIterator::operator->() const
+    [[nodiscard]] const UnparsedBcgnGame* BcgnReader::iterator::operator->() const
     {
         return &m_game;
     }
 
-    void BcgnReader::LazyBcgnReaderIterator::refillBuffer()
+    void BcgnReader::iterator::refillBuffer()
     {
         // We know that the biggest possible unprocessed amount of bytes is traits::maxGameLength - 1.
         // Using this information we can only fill the buffer starting from 
@@ -1102,7 +1102,7 @@ namespace bcgn
         m_bufferView = util::UnsignedCharBufferView(m_buffer.data() + freeSpace, numBytesRead + numUnprocessedBytes);
     }
 
-    void BcgnReader::LazyBcgnReaderIterator::fillOptions()
+    void BcgnReader::iterator::fillOptions()
     {
         if (m_bufferView.size() < traits::bcgnFileHeaderLength)
         {
@@ -1115,7 +1115,7 @@ namespace bcgn
         }
     }
 
-    void BcgnReader::LazyBcgnReaderIterator::prepareFirstGame()
+    void BcgnReader::iterator::prepareFirstGame()
     {
         // If we fail here we can just set isEnd and don't bother.
         // The buffer should always be big enough to have at least one game.
@@ -1137,7 +1137,7 @@ namespace bcgn
         m_bufferView.remove_prefix(size);
     }
 
-    void BcgnReader::LazyBcgnReaderIterator::prepareNextGame()
+    void BcgnReader::iterator::prepareNextGame()
     {
         while (!isEnd())
         {
@@ -1162,12 +1162,12 @@ namespace bcgn
         }
     }
 
-    [[nodiscard]] bool BcgnReader::LazyBcgnReaderIterator::isEnd() const
+    [[nodiscard]] bool BcgnReader::iterator::isEnd() const
     {
         return m_isEnd;
     }
 
-    [[nodiscard]] std::size_t BcgnReader::LazyBcgnReaderIterator::readNextGameEntrySize() const
+    [[nodiscard]] std::size_t BcgnReader::iterator::readNextGameEntrySize() const
     {
         // We assume here that there are 2 bytes in the buffer.
         return (m_bufferView[0] << 8) | m_bufferView[1];
@@ -1187,12 +1187,12 @@ namespace bcgn
         return m_file != nullptr;
     }
 
-    [[nodiscard]] BcgnReader::LazyBcgnReaderIterator BcgnReader::begin()
+    [[nodiscard]] BcgnReader::iterator BcgnReader::begin()
     {
-        return LazyBcgnReaderIterator(m_path, m_bufferSize);
+        return iterator(m_path, m_bufferSize);
     }
 
-    [[nodiscard]] BcgnReader::LazyBcgnReaderIterator::Sentinel BcgnReader::end() const
+    [[nodiscard]] BcgnReader::iterator::sentinel BcgnReader::end() const
     {
         return {};
     }

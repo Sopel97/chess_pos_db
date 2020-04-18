@@ -368,9 +368,9 @@ namespace bcgn
 
     struct UnparsedBcgnGamePositions
     {
-        struct UnparsedBcgnGamePositionsIterator
+        struct iterator
         {
-            struct Sentinel {};
+            struct sentinel {};
 
             using value_type = Position;
             using difference_type = std::ptrdiff_t;
@@ -378,15 +378,15 @@ namespace bcgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const Position*;
 
-            UnparsedBcgnGamePositionsIterator(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept;
+            iterator(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept;
 
-            UnparsedBcgnGamePositionsIterator(BcgnHeader options, const Position& pos, util::UnsignedCharBufferView movetext) noexcept;
+            iterator(BcgnHeader options, const Position& pos, util::UnsignedCharBufferView movetext) noexcept;
 
-            const UnparsedBcgnGamePositionsIterator& operator++();
+            const iterator& operator++();
 
-            bool friend operator==(const UnparsedBcgnGamePositionsIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator==(const iterator& lhs, sentinel rhs) noexcept;
 
-            bool friend operator!=(const UnparsedBcgnGamePositionsIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator!=(const iterator& lhs, sentinel rhs) noexcept;
 
             [[nodiscard]] const Position& operator*() const;
 
@@ -397,16 +397,15 @@ namespace bcgn
             UnparsedBcgnGameMoves m_moveProvider;
         };
 
-        using iterator = UnparsedBcgnGamePositionsIterator;
-        using const_iterator = UnparsedBcgnGamePositionsIterator;
+        using const_iterator = iterator;
 
         UnparsedBcgnGamePositions(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept;
 
         UnparsedBcgnGamePositions(BcgnHeader options, const Position& startpos, util::UnsignedCharBufferView movetext) noexcept;
 
-        [[nodiscard]] UnparsedBcgnGamePositionsIterator begin();
+        [[nodiscard]] iterator begin();
 
-        [[nodiscard]] UnparsedBcgnGamePositionsIterator::Sentinel end() const;
+        [[nodiscard]] iterator::sentinel end() const;
 
     private:
         BcgnHeader m_options;
@@ -445,6 +444,8 @@ namespace bcgn
             std::size_t m_countLeft;
             std::pair<std::string_view, std::string_view> m_kv;
         };
+
+        using const_iterator = iterator;
 
         UnparsedBcgnAdditionalTags(const unsigned char* data);
         
@@ -534,9 +535,9 @@ namespace bcgn
 
     struct BcgnReader
     {
-        struct LazyBcgnReaderIterator
+        struct iterator
         {
-            struct Sentinel {};
+            struct sentinel {};
 
             using value_type = UnparsedBcgnGame;
             using difference_type = std::ptrdiff_t;
@@ -544,13 +545,13 @@ namespace bcgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const UnparsedBcgnGame*;
 
-            LazyBcgnReaderIterator(const std::filesystem::path& path, std::size_t bufferSize);
+            iterator(const std::filesystem::path& path, std::size_t bufferSize);
 
-            const LazyBcgnReaderIterator& operator++();
+            const iterator& operator++();
 
-            bool friend operator==(const LazyBcgnReaderIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator==(const iterator& lhs, sentinel rhs) noexcept;
 
-            bool friend operator!=(const LazyBcgnReaderIterator& lhs, Sentinel rhs) noexcept;
+            bool friend operator!=(const iterator& lhs, sentinel rhs) noexcept;
 
             [[nodiscard]] const UnparsedBcgnGame& operator*() const;
 
@@ -580,16 +581,15 @@ namespace bcgn
             [[nodiscard]] std::size_t readNextGameEntrySize() const;
         };
 
-        using iterator = LazyBcgnReaderIterator;
-        using const_iterator = LazyBcgnReaderIterator;
+        using const_iterator = iterator;
 
         BcgnReader(const std::filesystem::path& path, std::size_t bufferSize = traits::minBufferSize);
 
         [[nodiscard]] bool isOpen() const;
 
-        [[nodiscard]] LazyBcgnReaderIterator begin();
+        [[nodiscard]] iterator begin();
 
-        [[nodiscard]] LazyBcgnReaderIterator::Sentinel end() const;
+        [[nodiscard]] iterator::sentinel end() const;
 
     private:
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
