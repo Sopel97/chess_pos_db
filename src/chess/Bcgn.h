@@ -1097,22 +1097,22 @@ namespace bcgn
 
         [[nodiscard]] std::string_view whitePlayer() const
         {
-            return getMandatoryString<0>();
+            return m_whitePlayer;
         }
 
         [[nodiscard]] std::string_view blackPlayer() const
         {
-            return getMandatoryString<1>();
+            return m_blackPlayer;
         }
 
         [[nodiscard]] std::string_view event() const
         {
-            return getMandatoryString<2>();
+            return m_event;
         }
 
         [[nodiscard]] std::string_view site() const
         {
-            return getMandatoryString<3>();
+            return m_site;
         }
 
         [[nodiscard]] bool hasCustomStartPosition() const
@@ -1129,7 +1129,7 @@ namespace bcgn
                 return {};
             }
             
-            std::size_t offset = getAdditionalTagSectionOffset();
+            std::size_t offset = m_additionalTagsOffset;
             const std::uint8_t numAdditionalTags = m_data[offset];
             offset += 1;
             for (int i = 0; i < numAdditionalTags; ++i)
@@ -1175,7 +1175,7 @@ namespace bcgn
         {
             return UnparsedBcgnAdditionalTags(
                 m_flags.hasAdditionalTags()
-                ? m_data.data() + getAdditionalTagSectionOffset()
+                ? m_data.data() + m_additionalTagsOffset
                 : nullptr
                 );
         }
@@ -1195,6 +1195,11 @@ namespace bcgn
         std::uint16_t m_round;
         Eco m_eco;
         BcgnFlags m_flags;
+        std::string_view m_whitePlayer;
+        std::string_view m_blackPlayer;
+        std::string_view m_event;
+        std::string_view m_site;
+        std::size_t m_additionalTagsOffset;
 
         [[nodiscard]] std::size_t getStringsOffset() const
         {
@@ -1205,31 +1210,6 @@ namespace bcgn
         {
             CompressedPosition pos = CompressedPosition::readFromBigEndian(m_data.data() + 19);
             return pos.decompress();
-        }
-
-        template <std::size_t IndexV>
-        [[nodiscard]] std::string_view getMandatoryString() const
-        {
-            static_assert(IndexV < 4);
-
-            std::size_t offset = getStringsOffset();
-            if constexpr (IndexV > 0) offset += m_data[offset] + 1;
-            if constexpr (IndexV > 1) offset += m_data[offset] + 1;
-            if constexpr (IndexV > 2) offset += m_data[offset] + 1;
-
-            const std::uint8_t length = m_data[offset];
-
-            return m_data.substr(offset + 1, length).toStringView();
-        }
-
-        [[nodiscard]] std::size_t getAdditionalTagSectionOffset() const
-        {
-            std::size_t offset = getStringsOffset();
-            offset += m_data[offset] + 1;
-            offset += m_data[offset] + 1;
-            offset += m_data[offset] + 1;
-            offset += m_data[offset] + 1;
-            return offset;
         }
 
         void prereadData()
@@ -1247,6 +1227,17 @@ namespace bcgn
             m_eco = Eco(m_data[16], m_data[17]);
 
             m_flags = BcgnFlags::decode(m_data[18]);
+
+            std::size_t offset = getStringsOffset();
+            m_whitePlayer = m_data.substr(offset + 1, m_data[offset]).toStringView();
+            offset += m_data[offset] + 1;
+            m_blackPlayer = m_data.substr(offset + 1, m_data[offset]).toStringView();
+            offset += m_data[offset] + 1;
+            m_event = m_data.substr(offset + 1, m_data[offset]).toStringView();
+            offset += m_data[offset] + 1;
+            m_site =  m_data.substr(offset + 1, m_data[offset]).toStringView();
+
+            m_additionalTagsOffset = offset + m_data[offset] + 1;
         }
 
         [[nodiscard]] util::UnsignedCharBufferView encodedMovetext() const
