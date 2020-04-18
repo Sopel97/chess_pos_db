@@ -2,10 +2,11 @@
 
 #include "Bitboard.h"
 #include "Chess.h"
+#include "Date.h"
+#include "Eco.h"
+#include "GameClassification.h"
 #include "MoveIndex.h"
-#include "Pgn.h"
 #include "Position.h"
-#include "San.h"
 
 #include "enum/EnumArray.h"
 

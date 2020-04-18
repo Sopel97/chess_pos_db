@@ -2,10 +2,10 @@
 
 #include "Bitboard.h"
 #include "Chess.h"
-#include "MoveIndex.h"
-#include "Pgn.h"
+#include "Date.h"
+#include "Eco.h"
+#include "GameClassification.h"
 #include "Position.h"
-#include "San.h"
 
 #include "enum/EnumArray.h"
 
@@ -13,7 +13,6 @@
 
 #include "util/UnsignedCharBufferView.h"
 
-#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
