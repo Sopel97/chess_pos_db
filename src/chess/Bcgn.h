@@ -845,14 +845,14 @@ namespace bcgn
             {
                 if (move_index::requiresLongMoveIndex(pos))
                 {
-                    const std::uint16_t index = ((at(0)) << 8) | at(1);
+                    const std::uint16_t index = ((m_encodedMovetext[0]) << 8) | m_encodedMovetext[1];
                     const Move move = move_index::longIndexToMove(pos, index);
                     m_encodedMovetext.remove_prefix(2);
                     return move;
                 }
                 else
                 {
-                    const std::uint8_t index = at(0);
+                    const std::uint8_t index = m_encodedMovetext[0];
                     const Move move = move_index::shortIndexToMove(pos, index);
                     m_encodedMovetext.remove_prefix(1);
                     return move;
@@ -867,11 +867,6 @@ namespace bcgn
     private:
         BcgnHeader m_options;
         util::UnsignedCharBufferView m_encodedMovetext;
-
-        [[nodiscard]] FORCEINLINE std::uint8_t at(std::size_t i) const
-        {
-            return m_encodedMovetext[i];
-        }
     };
 
     struct UnparsedBcgnGamePositions
@@ -1050,13 +1045,13 @@ namespace bcgn
             }
             
             std::size_t offset = getAdditionalTagSectionOffset();
-            const std::uint8_t numAdditionalTags = at(offset);
+            const std::uint8_t numAdditionalTags = m_data[offset];
             offset += 1;
             for (int i = 0; i < numAdditionalTags; ++i)
             {
-                const std::uint8_t nameLength = at(offset);
+                const std::uint8_t nameLength = m_data[offset];
                 const auto currentName = m_data.substr(offset + 1, nameLength);
-                const auto valueLength = at(offset + 1 + nameLength);
+                const auto valueLength = m_data[offset + 1 + nameLength];
                 
                 if (currentName == name)
                 {
@@ -1107,11 +1102,6 @@ namespace bcgn
         Eco m_eco;
         BcgnFlags m_flags;
 
-        [[nodiscard]] FORCEINLINE std::uint8_t at(std::size_t i) const
-        {
-            return m_data[i];
-        }
-
         [[nodiscard]] std::size_t getStringsOffset() const
         {
             return 19 + 24 * m_flags.hasCustomStartPos();
@@ -1129,11 +1119,11 @@ namespace bcgn
             static_assert(IndexV < 4);
 
             std::size_t offset = getStringsOffset();
-            if constexpr (IndexV > 0) offset += at(offset) + 1;
-            if constexpr (IndexV > 1) offset += at(offset) + 1;
-            if constexpr (IndexV > 2) offset += at(offset) + 1;
+            if constexpr (IndexV > 0) offset += m_data[offset] + 1;
+            if constexpr (IndexV > 1) offset += m_data[offset] + 1;
+            if constexpr (IndexV > 2) offset += m_data[offset] + 1;
 
-            const std::uint8_t length = at(offset);
+            const std::uint8_t length = m_data[offset];
 
             return m_data.substr(offset + 1, length).toStringView();
         }
@@ -1141,10 +1131,10 @@ namespace bcgn
         [[nodiscard]] std::size_t getAdditionalTagSectionOffset() const
         {
             std::size_t offset = getStringsOffset();
-            offset += at(offset) + 1;
-            offset += at(offset) + 1;
-            offset += at(offset) + 1;
-            offset += at(offset) + 1;
+            offset += m_data[offset] + 1;
+            offset += m_data[offset] + 1;
+            offset += m_data[offset] + 1;
+            offset += m_data[offset] + 1;
             return offset;
         }
 
@@ -1152,17 +1142,17 @@ namespace bcgn
         {
             m_headerLength = readHeaderLength();
             // we convert to unsigned char to prevent sign extension.
-            m_numPlies = (at(4) << 6) | (at(5) >> 2);
-            m_result = mapIntToResult(at(5) & 3);
-            m_date = Date((at(6) << 8) | at(7), at(8), at(9));
+            m_numPlies = (m_data[4] << 6) | (m_data[5] >> 2);
+            m_result = mapIntToResult(m_data[5] & 3);
+            m_date = Date((m_data[6] << 8) | m_data[7], m_data[8], m_data[9]);
 
-            m_whiteElo = (at(10) << 8) | at(11);
-            m_blackElo = (at(12) << 8) | at(13);
-            m_round = (at(14) << 8) | at(15);
+            m_whiteElo = (m_data[10] << 8) | m_data[11];
+            m_blackElo = (m_data[12] << 8) | m_data[13];
+            m_round = (m_data[14] << 8) | m_data[15];
 
-            m_eco = Eco(at(16), at(17));
+            m_eco = Eco(m_data[16], m_data[17]);
 
-            m_flags = BcgnFlags::decode(at(18));
+            m_flags = BcgnFlags::decode(m_data[18]);
         }
 
         [[nodiscard]] util::UnsignedCharBufferView encodedMovetext() const
@@ -1172,7 +1162,7 @@ namespace bcgn
 
         [[nodiscard]] std::uint16_t readHeaderLength() const
         {
-            return (at(2) << 8) | at(3);
+            return (m_data[2] << 8) | m_data[3];
         }
 
         [[nodiscard]] std::optional<GameResult> mapIntToResult(unsigned v) const
@@ -1392,7 +1382,7 @@ namespace bcgn
             [[nodiscard]] std::size_t readNextGameEntrySize() const
             {
                 // We assume here that there are 2 bytes in the buffer.
-                return ((std::uint8_t)m_bufferView[0] << 8) | (std::uint8_t)m_bufferView[1];
+                return (m_bufferView[0] << 8) | m_bufferView[1];
             }
         };
 

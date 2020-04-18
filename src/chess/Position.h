@@ -757,14 +757,14 @@ struct CompressedPosition
     {
         CompressedPosition pos{};
         pos.m_occupied = Bitboard::fromBits(
-            (std::uint64_t)(std::uint8_t)data[0] << 56
-            | (std::uint64_t)(std::uint8_t)data[1] << 48
-            | (std::uint64_t)(std::uint8_t)data[2] << 40
-            | (std::uint64_t)(std::uint8_t)data[3] << 32
-            | (std::uint64_t)(std::uint8_t)data[4] << 24
-            | (std::uint64_t)(std::uint8_t)data[5] << 16
-            | (std::uint64_t)(std::uint8_t)data[6] << 8
-            | (std::uint64_t)(std::uint8_t)data[7]
+            (std::uint64_t)data[0] << 56
+            | (std::uint64_t)data[1] << 48
+            | (std::uint64_t)data[2] << 40
+            | (std::uint64_t)data[3] << 32
+            | (std::uint64_t)data[4] << 24
+            | (std::uint64_t)data[5] << 16
+            | (std::uint64_t)data[6] << 8
+            | (std::uint64_t)data[7]
             );
         std::memcpy(pos.m_packedState, data + 8, 16);
         return pos;

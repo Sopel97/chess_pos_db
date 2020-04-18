@@ -974,7 +974,7 @@ public:
     [[nodiscard]] constexpr static CompressedMove readFromBigEndian(const unsigned char* data)
     {
         CompressedMove move{};
-        move.m_packed = ((std::uint8_t)data[0] << 8) | (std::uint8_t)data[1];
+        move.m_packed = (data[0] << 8) | data[1];
         return move;
     }
 
