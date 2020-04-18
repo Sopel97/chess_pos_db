@@ -4,11 +4,11 @@
 #include <cstdlib>
 #include <iostream>
 
-void testBcgnWriter(int seed, std::string filename, bcgn::BcgnHeader options, int numGames, bcgn::BcgnWriter::FileOpenMode mode = bcgn::BcgnWriter::FileOpenMode::Truncate)
+void testBcgnWriter(int seed, std::string filename, bcgn::BcgnFileHeader header, int numGames, bcgn::BcgnFileWriter::FileOpenMode mode = bcgn::BcgnFileWriter::FileOpenMode::Truncate)
 {
     srand(seed);
 
-    bcgn::BcgnWriter writer(filename, options, mode);
+    bcgn::BcgnFileWriter writer(filename, header, mode);
 
     for (int i = 0; i < numGames; ++i)
     {
@@ -61,11 +61,11 @@ void testBcgnWriter(int seed, std::string filename, bcgn::BcgnHeader options, in
     }
 }
 
-void testBcgnReader(int seed, std::string filename, bcgn::BcgnHeader options, int numGames, bcgn::BcgnWriter::FileOpenMode mode = bcgn::BcgnWriter::FileOpenMode::Truncate)
+void testBcgnReader(int seed, std::string filename, bcgn::BcgnFileHeader header, int numGames, bcgn::BcgnFileWriter::FileOpenMode mode = bcgn::BcgnFileWriter::FileOpenMode::Truncate)
 {
     srand(seed);
 
-    bcgn::BcgnReader reader(filename);
+    bcgn::BcgnFileReader reader(filename);
 
     int i = 0;
     for (auto& game : reader)
@@ -134,35 +134,35 @@ void testBcgnWriter()
     constexpr int seed = 12345;
 
     {
-        auto options = bcgn::BcgnHeader{};
-        options.auxCompression = bcgn::BcgnAuxCompression::None;
-        options.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
-        options.version = bcgn::BcgnVersion::Version_0;
+        auto header = bcgn::BcgnFileHeader{};
+        header.auxCompression = bcgn::BcgnAuxCompression::None;
+        header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
+        header.version = bcgn::BcgnVersion::Version_0;
         std::cerr << "write test_out/test_v0_c0_ac0.bcgn\n";
-        testBcgnWriter(seed, "test_out/test_v0_c0_ac0.bcgn", options, numGames);
+        testBcgnWriter(seed, "test_out/test_v0_c0_ac0.bcgn", header, numGames);
         std::cerr << "read test_out/test_v0_c0_ac0.bcgn\n";
-        testBcgnReader(seed, "test_out/test_v0_c0_ac0.bcgn", options, numGames);
+        testBcgnReader(seed, "test_out/test_v0_c0_ac0.bcgn", header, numGames);
     }
 
     {
-        auto options = bcgn::BcgnHeader{};
-        options.auxCompression = bcgn::BcgnAuxCompression::None;
-        options.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
-        options.version = bcgn::BcgnVersion::Version_0;
+        auto header = bcgn::BcgnFileHeader{};
+        header.auxCompression = bcgn::BcgnAuxCompression::None;
+        header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
+        header.version = bcgn::BcgnVersion::Version_0;
         std::cerr << "write test_out/test_v0_c1_ac0.bcgn\n";
-        testBcgnWriter(seed, "test_out/test_v0_c1_ac0.bcgn", options, numGames);
+        testBcgnWriter(seed, "test_out/test_v0_c1_ac0.bcgn", header, numGames);
         std::cerr << "read test_out/test_v0_c1_ac0.bcgn\n";
-        testBcgnReader(seed, "test_out/test_v0_c1_ac0.bcgn", options, numGames);
+        testBcgnReader(seed, "test_out/test_v0_c1_ac0.bcgn", header, numGames);
     }
 
     {
-        auto options = bcgn::BcgnHeader{};
-        options.auxCompression = bcgn::BcgnAuxCompression::None;
-        options.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
-        options.version = bcgn::BcgnVersion::Version_0;
+        auto header = bcgn::BcgnFileHeader{};
+        header.auxCompression = bcgn::BcgnAuxCompression::None;
+        header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
+        header.version = bcgn::BcgnVersion::Version_0;
         std::cerr << "write test_out/test_append.bcgn\n";
-        testBcgnWriter(seed, "test_out/test_append.bcgn", options, numGames);
+        testBcgnWriter(seed, "test_out/test_append.bcgn", header, numGames);
         std::cerr << "append test_out/test_append.bcgn\n";
-        testBcgnWriter(seed, "test_out/test_append.bcgn", options, numGames, bcgn::BcgnWriter::FileOpenMode::Append);
+        testBcgnWriter(seed, "test_out/test_append.bcgn", header, numGames, bcgn::BcgnFileWriter::FileOpenMode::Append);
     }
 }

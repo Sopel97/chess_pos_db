@@ -154,7 +154,7 @@ namespace bcgn
         SIZE
     };
 
-    struct BcgnHeader
+    struct BcgnFileHeader
     {
         BcgnVersion version = BcgnVersion::Version_0;
         BcgnCompressionLevel compressionLevel = BcgnCompressionLevel::Level_0;
@@ -275,7 +275,7 @@ namespace bcgn
         };
     }
 
-    struct BcgnWriter
+    struct BcgnFileWriter
     {
         enum struct FileOpenMode
         {
@@ -283,9 +283,9 @@ namespace bcgn
             Append
         };
 
-        BcgnWriter(
+        BcgnFileWriter(
             const std::filesystem::path& path,
-            BcgnHeader options,
+            BcgnFileHeader header,
             FileOpenMode mode = FileOpenMode::Truncate,
             std::size_t bufferSize = traits::minBufferSize
             );
@@ -330,10 +330,10 @@ namespace bcgn
 
         void flush();
 
-        ~BcgnWriter();
+        ~BcgnFileWriter();
 
     private:
-        BcgnHeader m_options;
+        BcgnFileHeader m_header;
         std::unique_ptr<detail::BcgnGameEntryBuffer> m_game;
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
         std::filesystem::path m_path;
@@ -354,7 +354,7 @@ namespace bcgn
     struct UnparsedBcgnGameMoves
     {
         UnparsedBcgnGameMoves(
-            BcgnHeader options, 
+            BcgnFileHeader header, 
             util::UnsignedCharBufferView movetext
             ) noexcept;
 
@@ -363,7 +363,7 @@ namespace bcgn
         [[nodiscard]] Move next(const Position& pos);
 
     private:
-        BcgnHeader m_options;
+        BcgnFileHeader m_header;
         util::UnsignedCharBufferView m_encodedMovetext;
     };
 
@@ -380,12 +380,12 @@ namespace bcgn
             using pointer = const Position*;
 
             iterator(
-                BcgnHeader options, 
+                BcgnFileHeader header, 
                 util::UnsignedCharBufferView movetext
                 ) noexcept;
 
             iterator(
-                BcgnHeader options, 
+                BcgnFileHeader header, 
                 const Position& pos, 
                 util::UnsignedCharBufferView movetext
                 ) noexcept;
@@ -408,12 +408,12 @@ namespace bcgn
         using const_iterator = iterator;
 
         UnparsedBcgnGamePositions(
-            BcgnHeader options, 
+            BcgnFileHeader header, 
             util::UnsignedCharBufferView movetext
             ) noexcept;
 
         UnparsedBcgnGamePositions(
-            BcgnHeader options, 
+            BcgnFileHeader header,
             const Position& startpos, 
             util::UnsignedCharBufferView movetext
             ) noexcept;
@@ -423,7 +423,7 @@ namespace bcgn
         [[nodiscard]] iterator::sentinel end() const;
 
     private:
-        BcgnHeader m_options;
+        BcgnFileHeader m_header;
         Position m_startpos;
         util::UnsignedCharBufferView m_encodedMovetext;
     };
@@ -476,7 +476,7 @@ namespace bcgn
     {
         UnparsedBcgnGame() = default;
 
-        void setOptions(BcgnHeader header);
+        void setFileHeader(BcgnFileHeader header);
 
         void setGameData(util::UnsignedCharBufferView sv);
 
@@ -515,7 +515,7 @@ namespace bcgn
         [[nodiscard]] UnparsedBcgnAdditionalTags additionalTags() const;
 
     private:
-        BcgnHeader m_options;
+        BcgnFileHeader m_header;
         util::UnsignedCharBufferView m_data;
 
         // We read and store the mandatory data that's cheap to decode.
@@ -548,7 +548,7 @@ namespace bcgn
         [[nodiscard]] std::optional<GameResult> mapIntToResult(unsigned v) const;
     };
 
-    struct BcgnReader
+    struct BcgnFileReader
     {
         struct iterator
         {
@@ -573,7 +573,7 @@ namespace bcgn
             [[nodiscard]] const UnparsedBcgnGame* operator->() const;
 
         private:
-            BcgnHeader m_options;
+            BcgnFileHeader m_header;
             std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
             std::filesystem::path m_path;
             ext::DoubleBuffer<unsigned char> m_buffer;
@@ -584,7 +584,7 @@ namespace bcgn
 
             void refillBuffer();
 
-            void fillOptions();
+            void fileFileHeader();
 
             void prepareFirstGame();
 
@@ -597,7 +597,7 @@ namespace bcgn
 
         using const_iterator = iterator;
 
-        BcgnReader(
+        BcgnFileReader(
             const std::filesystem::path& path, 
             std::size_t bufferSize = traits::minBufferSize
             );

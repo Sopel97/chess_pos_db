@@ -23,7 +23,7 @@
 
 namespace bcgn
 {
-    void BcgnHeader::readFrom(const unsigned char* str)
+    void BcgnFileHeader::readFrom(const unsigned char* str)
     {
         if (str[0] != 'B'
             || str[1] != 'C'
@@ -57,7 +57,7 @@ namespace bcgn
         auxCompression = static_cast<BcgnAuxCompression>(auxCompression_);
     }
 
-    [[nodiscard]] std::size_t BcgnHeader::writeTo(unsigned char* data)
+    [[nodiscard]] std::size_t BcgnFileHeader::writeTo(unsigned char* data)
     {
         std::memset(data, 0, traits::bcgnFileHeaderLength);
 
@@ -72,7 +72,7 @@ namespace bcgn
         return traits::bcgnFileHeaderLength;
     }
 
-    [[noreturn]] void BcgnHeader::invalidHeader() const
+    [[noreturn]] void BcgnFileHeader::invalidHeader() const
     {
         throw std::runtime_error("Invalid header.");
     }
@@ -442,13 +442,13 @@ namespace bcgn
         }
     }
 
-    BcgnWriter::BcgnWriter(
+    BcgnFileWriter::BcgnFileWriter(
         const std::filesystem::path& path,
-        BcgnHeader options,
+        BcgnFileHeader header,
         FileOpenMode mode,
         std::size_t bufferSize
         ) :
-        m_options(options),
+        m_header(header),
         m_game(std::make_unique<detail::BcgnGameEntryBuffer>()),
         m_file(nullptr, &std::fclose),
         m_path(path),
@@ -473,62 +473,62 @@ namespace bcgn
         }
     }
 
-    void BcgnWriter::beginGame()
+    void BcgnFileWriter::beginGame()
     {
         m_game->clear();
     }
 
-    void BcgnWriter::resetGame()
+    void BcgnFileWriter::resetGame()
     {
         m_game->clear();
     }
 
-    void BcgnWriter::setDate(const Date& date)
+    void BcgnFileWriter::setDate(const Date& date)
     {
         m_game->setDate(date);
     }
 
-    void BcgnWriter::setWhiteElo(std::uint16_t elo)
+    void BcgnFileWriter::setWhiteElo(std::uint16_t elo)
     {
         m_game->setWhiteElo(elo);
     }
 
-    void BcgnWriter::setBlackElo(std::uint16_t elo)
+    void BcgnFileWriter::setBlackElo(std::uint16_t elo)
     {
         m_game->setBlackElo(elo);
     }
 
-    void BcgnWriter::setRound(std::uint16_t round)
+    void BcgnFileWriter::setRound(std::uint16_t round)
     {
         m_game->setRound(round);
     }
 
-    void BcgnWriter::setEco(Eco eco)
+    void BcgnFileWriter::setEco(Eco eco)
     {
         m_game->setEco(eco);
     }
 
-    void BcgnWriter::setCustomStartPos(const Position& pos)
+    void BcgnFileWriter::setCustomStartPos(const Position& pos)
     {
         m_game->setCustomStartPos(pos);
     }
 
-    void BcgnWriter::resetCustomStartPos()
+    void BcgnFileWriter::resetCustomStartPos()
     {
         m_game->resetCustomStartPos();
     }
 
-    void BcgnWriter::setResult(GameResult result)
+    void BcgnFileWriter::setResult(GameResult result)
     {
         m_game->setResult(result);
     }
 
-    void BcgnWriter::resetResult()
+    void BcgnFileWriter::resetResult()
     {
         m_game->resetResult();
     }
 
-    void BcgnWriter::setAdditionalTag(
+    void BcgnFileWriter::setAdditionalTag(
         std::string&& name, 
         std::string&& value
         )
@@ -536,7 +536,7 @@ namespace bcgn
         m_game->setAdditionalTag(std::move(name), std::move(value));
     }
 
-    void BcgnWriter::setAdditionalTag(
+    void BcgnFileWriter::setAdditionalTag(
         const std::string& name, 
         const std::string& value
         )
@@ -544,29 +544,29 @@ namespace bcgn
         m_game->setAdditionalTag(name, value);
     }
 
-    void BcgnWriter::setWhitePlayer(const std::string_view sv)
+    void BcgnFileWriter::setWhitePlayer(const std::string_view sv)
     {
         m_game->setWhitePlayer(sv);
     }
 
-    void BcgnWriter::setBlackPlayer(const std::string_view sv)
+    void BcgnFileWriter::setBlackPlayer(const std::string_view sv)
     {
         m_game->setBlackPlayer(sv);
     }
 
-    void BcgnWriter::setEvent(const std::string_view sv)
+    void BcgnFileWriter::setEvent(const std::string_view sv)
     {
         m_game->setEvent(sv);
     }
 
-    void BcgnWriter::setSite(const std::string_view sv)
+    void BcgnFileWriter::setSite(const std::string_view sv)
     {
         m_game->setSite(sv);
     }
 
-    void BcgnWriter::addMove(const Position& pos, const Move& move)
+    void BcgnFileWriter::addMove(const Position& pos, const Move& move)
     {
-        switch (m_options.compressionLevel)
+        switch (m_header.compressionLevel)
         {
         case BcgnCompressionLevel::Level_0:
             m_game->addCompressedMove(move.compress());
@@ -586,7 +586,7 @@ namespace bcgn
         }
     }
 
-    void BcgnWriter::endGame()
+    void BcgnFileWriter::endGame()
     {
         writeCurrentGame();
 
@@ -600,7 +600,7 @@ namespace bcgn
         }
     }
 
-    void BcgnWriter::flush()
+    void BcgnFileWriter::flush()
     {
         swapAndPersistFrontBuffer();
 
@@ -610,30 +610,30 @@ namespace bcgn
         }
     }
 
-    BcgnWriter::~BcgnWriter()
+    BcgnFileWriter::~BcgnFileWriter()
     {
         flush();
     }
 
-    void BcgnWriter::writeHeader()
+    void BcgnFileWriter::writeHeader()
     {
         unsigned char* data = m_buffer.data();
-        m_numBytesUsedInFrontBuffer += m_options.writeTo(data);
+        m_numBytesUsedInFrontBuffer += m_header.writeTo(data);
     }
 
-    void BcgnWriter::writeCurrentGame()
+    void BcgnFileWriter::writeCurrentGame()
     {
         const auto bytesWritten = 
             m_game->writeTo(m_buffer.data() + m_numBytesUsedInFrontBuffer);
         m_numBytesUsedInFrontBuffer += bytesWritten;
     }
 
-    [[nodiscard]] bool BcgnWriter::enoughSpaceForNextGame() const
+    [[nodiscard]] bool BcgnFileWriter::enoughSpaceForNextGame() const
     {
         return m_buffer.size() - m_numBytesUsedInFrontBuffer >= traits::maxGameLength;
     }
 
-    void BcgnWriter::swapAndPersistFrontBuffer()
+    void BcgnFileWriter::swapAndPersistFrontBuffer()
     {
         if (!m_numBytesUsedInFrontBuffer)
         {
@@ -660,10 +660,10 @@ namespace bcgn
     }
 
     UnparsedBcgnGameMoves::UnparsedBcgnGameMoves(
-        BcgnHeader options, 
+        BcgnFileHeader header, 
         util::UnsignedCharBufferView movetext
         ) noexcept :
-        m_options(options),
+        m_header(header),
         m_encodedMovetext(movetext)
     {
     }
@@ -675,7 +675,7 @@ namespace bcgn
 
     [[nodiscard]] Move UnparsedBcgnGameMoves::next(const Position& pos)
     {
-        switch (m_options.compressionLevel)
+        switch (m_header.compressionLevel)
         {
         case BcgnCompressionLevel::Level_0:
         {
@@ -711,21 +711,21 @@ namespace bcgn
     }
 
     UnparsedBcgnGamePositions::iterator::iterator(
-        BcgnHeader options, 
+        BcgnFileHeader header, 
         util::UnsignedCharBufferView movetext
         ) noexcept :
         m_position(Position::startPosition()),
-        m_moveProvider(options, movetext)
+        m_moveProvider(header, movetext)
     {
     }
 
     UnparsedBcgnGamePositions::iterator::iterator(
-        BcgnHeader options, 
+        BcgnFileHeader header, 
         const Position& pos, 
         util::UnsignedCharBufferView movetext
         ) noexcept :
         m_position(pos),
-        m_moveProvider(options, movetext)
+        m_moveProvider(header, movetext)
     {
     }
 
@@ -764,10 +764,10 @@ namespace bcgn
     }
 
     UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(
-        BcgnHeader options, 
+        BcgnFileHeader header, 
         util::UnsignedCharBufferView movetext
         ) noexcept :
-        m_options(options),
+        m_header(header),
         m_startpos(Position::startPosition()),
         m_encodedMovetext(movetext)
     {
@@ -775,11 +775,11 @@ namespace bcgn
     }
 
     UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(
-        BcgnHeader options, 
+        BcgnFileHeader header, 
         const Position& startpos, 
         util::UnsignedCharBufferView movetext
         ) noexcept :
-        m_options(options),
+        m_header(header),
         m_startpos(startpos),
         m_encodedMovetext(movetext)
     {
@@ -789,7 +789,7 @@ namespace bcgn
     [[nodiscard]] UnparsedBcgnGamePositions::iterator 
         UnparsedBcgnGamePositions::begin()
     {
-        return iterator(m_options, m_startpos, m_encodedMovetext);
+        return iterator(m_header, m_startpos, m_encodedMovetext);
     }
 
     [[nodiscard]] UnparsedBcgnGamePositions::iterator::sentinel 
@@ -872,9 +872,9 @@ namespace bcgn
         return {};
     }
 
-    void UnparsedBcgnGame::setOptions(BcgnHeader header)
+    void UnparsedBcgnGame::setFileHeader(BcgnFileHeader header)
     {
-        m_options = header;
+        m_header = header;
     }
 
     void UnparsedBcgnGame::setGameData(util::UnsignedCharBufferView sv)
@@ -991,12 +991,12 @@ namespace bcgn
 
     [[nodiscard]] UnparsedBcgnGameMoves UnparsedBcgnGame::moves() const
     {
-        return UnparsedBcgnGameMoves(m_options, encodedMovetext());
+        return UnparsedBcgnGameMoves(m_header, encodedMovetext());
     }
 
     [[nodiscard]] UnparsedBcgnGamePositions UnparsedBcgnGame::positions() const
     {
-        return UnparsedBcgnGamePositions(m_options, encodedMovetext());
+        return UnparsedBcgnGamePositions(m_header, encodedMovetext());
     }
 
     [[nodiscard]] UnparsedBcgnAdditionalTags UnparsedBcgnGame::additionalTags() const
@@ -1077,11 +1077,11 @@ namespace bcgn
         return {};
     }
 
-    BcgnReader::iterator::iterator(
+    BcgnFileReader::iterator::iterator(
         const std::filesystem::path& path, 
         std::size_t bufferSize
         ) :
-        m_options{},
+        m_header{},
         m_file(nullptr, &std::fclose),
         m_path(path),
         m_buffer(bufferSize),
@@ -1103,47 +1103,47 @@ namespace bcgn
 
         if (!isEnd())
         {
-            fillOptions();
+            fileFileHeader();
 
-            m_game.setOptions(m_options);
+            m_game.setFileHeader(m_header);
 
             prepareFirstGame();
         }
     }
 
-    const BcgnReader::iterator& BcgnReader::iterator::operator++()
+    const BcgnFileReader::iterator& BcgnFileReader::iterator::operator++()
     {
         prepareNextGame();
         return *this;
     }
 
     bool operator==(
-        const BcgnReader::iterator& lhs, 
-        BcgnReader::iterator::sentinel rhs
+        const BcgnFileReader::iterator& lhs, 
+        BcgnFileReader::iterator::sentinel rhs
         ) noexcept
     {
         return lhs.isEnd();
     }
 
     bool operator!=(
-        const BcgnReader::iterator& lhs, 
-        BcgnReader::iterator::sentinel rhs
+        const BcgnFileReader::iterator& lhs, 
+        BcgnFileReader::iterator::sentinel rhs
         ) noexcept
     {
         return !lhs.isEnd();
     }
 
-    [[nodiscard]] const UnparsedBcgnGame& BcgnReader::iterator::operator*() const
+    [[nodiscard]] const UnparsedBcgnGame& BcgnFileReader::iterator::operator*() const
     {
         return m_game;
     }
 
-    [[nodiscard]] const UnparsedBcgnGame* BcgnReader::iterator::operator->() const
+    [[nodiscard]] const UnparsedBcgnGame* BcgnFileReader::iterator::operator->() const
     {
         return &m_game;
     }
 
-    void BcgnReader::iterator::refillBuffer()
+    void BcgnFileReader::iterator::refillBuffer()
     {
         // We know that the biggest possible unprocessed 
         // amount of bytes is traits::maxGameLength - 1.
@@ -1211,7 +1211,7 @@ namespace bcgn
             );
     }
 
-    void BcgnReader::iterator::fillOptions()
+    void BcgnFileReader::iterator::fileFileHeader()
     {
         if (m_bufferView.size() < traits::bcgnFileHeaderLength)
         {
@@ -1219,12 +1219,12 @@ namespace bcgn
         }
         else
         {
-            m_options.readFrom(m_bufferView.data());
+            m_header.readFrom(m_bufferView.data());
             m_bufferView.remove_prefix(traits::bcgnFileHeaderLength);
         }
     }
 
-    void BcgnReader::iterator::prepareFirstGame()
+    void BcgnFileReader::iterator::prepareFirstGame()
     {
         // If we fail here we can just set isEnd and don't bother.
         // The buffer should always be big enough to have at least one game.
@@ -1246,7 +1246,7 @@ namespace bcgn
         m_bufferView.remove_prefix(size);
     }
 
-    void BcgnReader::iterator::prepareNextGame()
+    void BcgnFileReader::iterator::prepareNextGame()
     {
         while (!isEnd())
         {
@@ -1271,18 +1271,18 @@ namespace bcgn
         }
     }
 
-    [[nodiscard]] bool BcgnReader::iterator::isEnd() const
+    [[nodiscard]] bool BcgnFileReader::iterator::isEnd() const
     {
         return m_isEnd;
     }
 
-    [[nodiscard]] std::size_t BcgnReader::iterator::readNextGameEntrySize() const
+    [[nodiscard]] std::size_t BcgnFileReader::iterator::readNextGameEntrySize() const
     {
         // We assume here that there are 2 bytes in the buffer.
         return (m_bufferView[0] << 8) | m_bufferView[1];
     }
 
-    BcgnReader::BcgnReader(const std::filesystem::path& path, std::size_t bufferSize) :
+    BcgnFileReader::BcgnFileReader(const std::filesystem::path& path, std::size_t bufferSize) :
         m_file(nullptr, &std::fclose),
         m_path(path),
         m_bufferSize(bufferSize)
@@ -1291,17 +1291,17 @@ namespace bcgn
         m_file.reset(std::fopen(strPath.c_str(), "rb"));
     }
 
-    [[nodiscard]] bool BcgnReader::isOpen() const
+    [[nodiscard]] bool BcgnFileReader::isOpen() const
     {
         return m_file != nullptr;
     }
 
-    [[nodiscard]] BcgnReader::iterator BcgnReader::begin()
+    [[nodiscard]] BcgnFileReader::iterator BcgnFileReader::begin()
     {
         return iterator(m_path, m_bufferSize);
     }
 
-    [[nodiscard]] BcgnReader::iterator::sentinel BcgnReader::end() const
+    [[nodiscard]] BcgnFileReader::iterator::sentinel BcgnFileReader::end() const
     {
         return {};
     }
