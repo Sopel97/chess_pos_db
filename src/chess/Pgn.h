@@ -176,6 +176,12 @@ namespace pgn
             std::uint16_t& plyCount
         ) const;
 
+        [[nodiscard]] std::int16_t whiteElo() const;
+
+        [[nodiscard]] std::int16_t blackElo() const;
+
+        [[nodiscard]] std::int16_t round() const;
+
         [[nodiscard]] std::int64_t eloDiff() const;
 
         [[nodiscard]] std::optional<GameResult> result() const;

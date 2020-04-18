@@ -34,12 +34,8 @@
     return parts;
 }
 
-extern void testBcgnWriter();
-
 int main(int argc, char* argv[])
 {
-    testBcgnWriter();
-    return 0;
     if (argc == 1)
     {
         console_app::App console_app;

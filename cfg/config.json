@@ -196,6 +196,8 @@
             For the 'beta' format individual files have size
             about 1/6 of pgn_import_memory.
         */
-        "pgn_import_memory" : "2GiB"
+        "pgn_import_memory" : "2GiB",
+        "pgn_parser_memory" : "4MiB",
+        "bcgn_parser_memory" : "4MiB"
     }
 }

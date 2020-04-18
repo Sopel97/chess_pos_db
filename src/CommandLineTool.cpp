@@ -18,7 +18,10 @@
 #include <brynet/net/Connector.h>
 #include <brynet/net/Socket.h>
 
+#include "chess/Bcgn.h"
 #include "chess/GameClassification.h"
+#include "chess/Pgn.h"
+#include "chess/San.h"
 
 #include "enum/EnumArray.h"
 
@@ -58,7 +61,9 @@ namespace command_line_app
         const TcpConnection::Ptr&,
         const nlohmann::json&);
 
-    const std::size_t importMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
+    const std::size_t pgnImportMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
+    const std::size_t pgnParserMemory = cfg::g_config["console_app"]["pgn_parser_memory"].get<MemoryAmount>();
+    const std::size_t bcgnParserMemory = cfg::g_config["console_app"]["bcgn_parser_memory"].get<MemoryAmount>();
 
     static void assertDirectoryNotEmpty(const std::filesystem::path& path)
     {
@@ -198,7 +203,7 @@ namespace command_line_app
         assertDirectoryEmpty(destination);
 
         auto db = instantiateDatabase(key, destination);
-        db->import(pgns, importMemory);
+        db->import(pgns, pgnImportMemory);
     }
 
     static void createImpl(
@@ -213,7 +218,7 @@ namespace command_line_app
 
         {
             auto db = instantiateDatabase(key, temp);
-            db->import(pgns, importMemory);
+            db->import(pgns, pgnImportMemory);
             db->replicateMergeAll(destination);
         }
 
@@ -568,7 +573,7 @@ namespace command_line_app
 
                 {
                     auto callback = makeImportProgressReportHandler(session, doReportProgress);
-                    auto stats = db->import(pgns, importMemory, callback);
+                    auto stats = db->import(pgns, pgnImportMemory, callback);
                     sendProgressFinished(session, "import", statsToJson(stats));
                 }
 
@@ -586,7 +591,7 @@ namespace command_line_app
             auto db = instantiateDatabase(key, destination);
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            auto stats = db->import(pgns, importMemory, callback);
+            auto stats = db->import(pgns, pgnImportMemory, callback);
             sendProgressFinished(session, "import", statsToJson(stats));
         }
 
@@ -610,7 +615,7 @@ namespace command_line_app
             auto db = instantiateDatabase(key, destination);
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            auto stats = db->import(pgns, importMemory, callback);
+            auto stats = db->import(pgns, pgnImportMemory, callback);
             sendProgressFinished(session, "import", statsToJson(stats));
 
             if (doMerge)
@@ -1381,13 +1386,191 @@ namespace command_line_app
         }
     }
 
+    static void convertPgnToBcgnImpl(
+        const std::filesystem::path& pgn, 
+        const std::filesystem::path& bcgn,
+        const bcgn::BcgnFileHeader& header,
+        bcgn::BcgnFileWriter::FileOpenMode mode)
+    {
+        pgn::LazyPgnFileReader pgnReader(pgn, pgnParserMemory);
+        bcgn::BcgnFileWriter bcgnWriter(bcgn, header, mode, bcgnParserMemory);
+
+        constexpr std::size_t reportEvery = 100'000;
+
+        std::size_t nextReport = 0;
+        std::size_t totalCount = 0;
+        for (auto&& game : pgnReader)
+        {
+            Position pos = Position::startPosition();
+
+            bcgnWriter.beginGame();
+
+            std::optional<GameResult> result;
+            Date date;
+            Eco eco;
+            std::string_view event;
+            std::string_view white;
+            std::string_view black;
+            game.getResultDateEcoEventWhiteBlack(
+                result,
+                date,
+                eco,
+                event,
+                white,
+                black
+                );
+
+            bcgnWriter.setWhiteElo(game.whiteElo());
+            bcgnWriter.setBlackElo(game.blackElo());
+            bcgnWriter.setDate(date);
+            bcgnWriter.setEco(eco);
+            bcgnWriter.setRound(game.round());
+            bcgnWriter.setWhitePlayer(white);
+            bcgnWriter.setBlackPlayer(black);
+            bcgnWriter.setEvent(event);
+            bcgnWriter.setSite(game.tag("Site"sv));
+            if (result.has_value())
+            {
+                bcgnWriter.setResult(*result);
+            }
+
+            for (auto&& san : game.moves())
+            {
+                const auto move = san::sanToMove(pos, san);
+
+                bcgnWriter.addMove(pos, move);
+
+                pos.doMove(move);
+            }
+
+            bcgnWriter.endGame();
+
+            ++totalCount;
+            if (totalCount >= nextReport)
+            {
+                std::cout << "Converted " << totalCount << " games...\n";
+                nextReport += reportEvery;
+            }
+        }
+        std::cout << "Converted " << totalCount << " games...\n";
+    }
+
+    static void convert(const Args& args)
+    {
+        if (args.size() < 3)
+        {
+            throwInvalidArguments();
+        }
+
+        const std::filesystem::path from = args[1];
+        const std::filesystem::path to = args[2];
+
+        if (from.extension() == ".pgn" && to.extension() == ".bcgn")
+        {
+            bcgn::BcgnFileHeader header{};
+            auto mode = bcgn::BcgnFileWriter::FileOpenMode::Truncate;
+
+            if (args.size() >= 4)
+            {
+                switch (std::stoi(args[3]))
+                {
+                case 0:
+                    header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
+                    break;
+
+                case 1:
+                    header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
+                    break;
+                }
+            }
+
+            if (args.size() >= 5)
+            {
+                if (args[4] == "a")
+                {
+                    mode = bcgn::BcgnFileWriter::FileOpenMode::Append;
+                }
+            }
+
+            convertPgnToBcgnImpl(from, to, header, mode);
+        }
+        else
+        {
+            throwInvalidArguments();
+        }
+    }
+
+    static void countPgnGames(const std::filesystem::path& path)
+    {
+        pgn::LazyPgnFileReader reader(path, pgnParserMemory);
+
+        constexpr std::size_t reportEvery = 100'000;
+
+        std::size_t nextReport = 0;
+        std::size_t totalCount = 0;
+        for (auto&& game : reader)
+        {
+            ++totalCount;
+            if (totalCount >= nextReport)
+            {
+                std::cout << "Found " << totalCount << " games...\n";
+                nextReport += reportEvery;
+            }
+        }
+        std::cout << "Found " << totalCount << " games...\n";
+    }
+
+    static void countBcgnGames(const std::filesystem::path& path)
+    {
+        bcgn::BcgnFileReader reader(path, bcgnParserMemory);
+
+        constexpr std::size_t reportEvery = 100'000;
+
+        std::size_t nextReport = 0;
+        std::size_t totalCount = 0;
+        for (auto&& game : reader)
+        {
+            ++totalCount;
+            if (totalCount >= nextReport)
+            {
+                std::cout << "Found " << totalCount << " games...\n";
+                nextReport += reportEvery;
+            }
+        }
+        std::cout << "Found " << totalCount << " games...\n";
+    }
+
+    static void countGames(const Args& args)
+    {
+        if (args.size() < 2)
+        {
+            throwInvalidArguments();
+        }
+
+        const std::filesystem::path path = args[1];
+        if (path.extension() == ".pgn")
+        {
+            countPgnGames(path);
+        }
+        else if (path.extension() == ".bcgn")
+        {
+            countBcgnGames(path);
+        }
+        else
+        {
+            throwInvalidArguments();
+        }
+    }
+
     void runCommand(int argc, char* argv[])
     {
         static const std::map<std::string, CommandHandler> s_commandHandlers = {
             { "help", help },
             { "create", create },
             { "merge", merge },
-            { "tcp", tcp }
+            { "tcp", tcp },
+            { "convert", convert },
+            { "count_games", countGames }
         };
 
         if (argc <= 0) return;

@@ -633,6 +633,39 @@ namespace pgn
         }
     }
 
+    [[nodiscard]] std::int16_t UnparsedGame::whiteElo() const
+    {
+        const std::string_view whiteEloTag = detail::findTagValue(m_tagSection, "WhiteElo"sv);
+        if (whiteEloTag.size() < 3)
+        {
+            return 0;
+        }
+
+        return parser_bits::parseUInt16(whiteEloTag);
+    }
+
+    [[nodiscard]] std::int16_t UnparsedGame::blackElo() const
+    {
+        const std::string_view blackEloTag = detail::findTagValue(m_tagSection, "BlackElo"sv);
+        if (blackEloTag.size() < 3)
+        {
+            return 0;
+        }
+
+        return parser_bits::parseUInt16(blackEloTag);
+    }
+
+    [[nodiscard]] std::int16_t UnparsedGame::round() const
+    {
+        const std::string_view roundTag = detail::findTagValue(m_tagSection, "Round"sv);
+        if (roundTag.empty())
+        {
+            return 0;
+        }
+
+        return parser_bits::parseUInt16(roundTag);
+    }
+
     [[nodiscard]] std::int64_t UnparsedGame::eloDiff() const
     {
         const std::string_view whiteEloTag = detail::findTagValue(m_tagSection, "WhiteElo"sv);
