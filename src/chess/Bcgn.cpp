@@ -221,13 +221,19 @@ namespace bcgn
             m_result = {};
         }
 
-        void BcgnGameEntryBuffer::setAdditionalTag(std::string&& name, std::string&& value)
+        void BcgnGameEntryBuffer::setAdditionalTag(
+            std::string&& name, 
+            std::string&& value
+            )
         {
             if (m_additionalTags.size() >= 255) return;
             m_additionalTags.emplace_back(std::move(name), std::move(value));
         }
 
-        void BcgnGameEntryBuffer::setAdditionalTag(const std::string& name, const std::string& value)
+        void BcgnGameEntryBuffer::setAdditionalTag(
+            const std::string& name, 
+            const std::string& value
+            )
         {
             if (m_additionalTags.size() >= 255) return;
             m_additionalTags.emplace_back(name, value);
@@ -344,7 +350,10 @@ namespace bcgn
             buffer += length;
         }
 
-        void BcgnGameEntryBuffer::writeString(unsigned char*& buffer, const std::string& str) const
+        void BcgnGameEntryBuffer::writeString(
+            unsigned char*& buffer, 
+            const std::string& str
+            ) const
         {
             const std::size_t length = std::min(traits::maxStringLength, str.size());
             *buffer++ = (std::uint8_t)length;
@@ -352,7 +361,11 @@ namespace bcgn
             buffer += length;
         }
 
-        void BcgnGameEntryBuffer::writeString(unsigned char*& buffer, const char* str, std::uint8_t length) const
+        void BcgnGameEntryBuffer::writeString(
+            unsigned char*& buffer, 
+            const char* str, 
+            std::uint8_t length
+            ) const
         {
             *buffer++ = length;
             std::memcpy(buffer, str, length);
@@ -382,7 +395,10 @@ namespace bcgn
             return 0;
         }
 
-        FORCEINLINE void BcgnGameEntryBuffer::writeBigEndian(unsigned char*& buffer, std::uint16_t value)
+        FORCEINLINE void BcgnGameEntryBuffer::writeBigEndian(
+            unsigned char*& buffer, 
+            std::uint16_t value
+            )
         {
             *buffer++ = value >> 8;
             *buffer++ = value & 0xFF;
@@ -441,7 +457,9 @@ namespace bcgn
         m_numBytesBeingWritten(0),
         m_future{}
     {
-        const bool needsHeader = (mode != FileOpenMode::Append) || !std::filesystem::exists(path);
+        const bool needsHeader = 
+            (mode != FileOpenMode::Append) 
+            || !std::filesystem::exists(path);
 
         auto strPath = path.string();
         m_file.reset(std::fopen(
@@ -507,12 +525,18 @@ namespace bcgn
         m_game->resetResult();
     }
 
-    void BcgnWriter::setAdditionalTag(std::string&& name, std::string&& value)
+    void BcgnWriter::setAdditionalTag(
+        std::string&& name, 
+        std::string&& value
+        )
     {
         m_game->setAdditionalTag(std::move(name), std::move(value));
     }
 
-    void BcgnWriter::setAdditionalTag(const std::string& name, const std::string& value)
+    void BcgnWriter::setAdditionalTag(
+        const std::string& name, 
+        const std::string& value
+        )
     {
         m_game->setAdditionalTag(name, value);
     }
@@ -596,7 +620,8 @@ namespace bcgn
 
     void BcgnWriter::writeCurrentGame()
     {
-        const auto bytesWritten = m_game->writeTo(m_buffer.data() + m_numBytesUsedInFrontBuffer);
+        const auto bytesWritten = 
+            m_game->writeTo(m_buffer.data() + m_numBytesUsedInFrontBuffer);
         m_numBytesUsedInFrontBuffer += bytesWritten;
     }
 
@@ -622,11 +647,19 @@ namespace bcgn
         m_numBytesUsedInFrontBuffer = 0;
 
         m_future = std::async(std::launch::async, [this]() {
-            return std::fwrite(m_buffer.back_data(), 1, m_numBytesBeingWritten, m_file.get());
+            return std::fwrite(
+                m_buffer.back_data(), 
+                1, 
+                m_numBytesBeingWritten, 
+                m_file.get()
+                );
             });
     }
 
-    UnparsedBcgnGameMoves::UnparsedBcgnGameMoves(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
+    UnparsedBcgnGameMoves::UnparsedBcgnGameMoves(
+        BcgnHeader options, 
+        util::UnsignedCharBufferView movetext
+        ) noexcept :
         m_options(options),
         m_encodedMovetext(movetext)
     {
@@ -643,7 +676,8 @@ namespace bcgn
         {
         case BcgnCompressionLevel::Level_0:
         {
-            const CompressedMove compressedMove = CompressedMove::readFromBigEndian(m_encodedMovetext.data());
+            const CompressedMove compressedMove = 
+                CompressedMove::readFromBigEndian(m_encodedMovetext.data());
             m_encodedMovetext.remove_prefix(2);
             return compressedMove.decompress();
         }
@@ -652,7 +686,9 @@ namespace bcgn
         {
             if (move_index::requiresLongMoveIndex(pos))
             {
-                const std::uint16_t index = ((m_encodedMovetext[0]) << 8) | m_encodedMovetext[1];
+                const std::uint16_t index = 
+                    ((m_encodedMovetext[0]) << 8) 
+                    | m_encodedMovetext[1];
                 const Move move = move_index::longIndexToMove(pos, index);
                 m_encodedMovetext.remove_prefix(2);
                 return move;
@@ -671,31 +707,45 @@ namespace bcgn
         return Move::null();
     }
 
-    UnparsedBcgnGamePositions::iterator::iterator(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
+    UnparsedBcgnGamePositions::iterator::iterator(
+        BcgnHeader options, 
+        util::UnsignedCharBufferView movetext
+        ) noexcept :
         m_position(Position::startPosition()),
         m_moveProvider(options, movetext)
     {
     }
 
-    UnparsedBcgnGamePositions::iterator::iterator(BcgnHeader options, const Position& pos, util::UnsignedCharBufferView movetext) noexcept :
+    UnparsedBcgnGamePositions::iterator::iterator(
+        BcgnHeader options, 
+        const Position& pos, 
+        util::UnsignedCharBufferView movetext
+        ) noexcept :
         m_position(pos),
         m_moveProvider(options, movetext)
     {
     }
 
-    const UnparsedBcgnGamePositions::iterator& UnparsedBcgnGamePositions::iterator::operator++()
+    const UnparsedBcgnGamePositions::iterator& 
+        UnparsedBcgnGamePositions::iterator::operator++()
     {
         const auto move = m_moveProvider.next(m_position);
         m_position.doMove(move);
         return *this;
     }
 
-    bool operator==(const UnparsedBcgnGamePositions::iterator& lhs, UnparsedBcgnGamePositions::iterator::sentinel rhs) noexcept
+    bool operator==(
+        const UnparsedBcgnGamePositions::iterator& lhs, 
+        UnparsedBcgnGamePositions::iterator::sentinel rhs
+        ) noexcept
     {
         return !lhs.m_moveProvider.hasNext();
     }
 
-    bool operator!=(const UnparsedBcgnGamePositions::iterator& lhs, UnparsedBcgnGamePositions::iterator::sentinel rhs) noexcept
+    bool operator!=(
+        const UnparsedBcgnGamePositions::iterator& lhs, 
+        UnparsedBcgnGamePositions::iterator::sentinel rhs
+        ) noexcept
     {
         return lhs.m_moveProvider.hasNext();
     }
@@ -710,7 +760,10 @@ namespace bcgn
         return &m_position;
     }
 
-    UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
+    UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(
+        BcgnHeader options, 
+        util::UnsignedCharBufferView movetext
+        ) noexcept :
         m_options(options),
         m_startpos(Position::startPosition()),
         m_encodedMovetext(movetext)
@@ -718,7 +771,11 @@ namespace bcgn
 
     }
 
-    UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(BcgnHeader options, const Position& startpos, util::UnsignedCharBufferView movetext) noexcept :
+    UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(
+        BcgnHeader options, 
+        const Position& startpos, 
+        util::UnsignedCharBufferView movetext
+        ) noexcept :
         m_options(options),
         m_startpos(startpos),
         m_encodedMovetext(movetext)
@@ -726,12 +783,14 @@ namespace bcgn
 
     }
 
-    [[nodiscard]] UnparsedBcgnGamePositions::iterator UnparsedBcgnGamePositions::begin()
+    [[nodiscard]] UnparsedBcgnGamePositions::iterator 
+        UnparsedBcgnGamePositions::begin()
     {
         return iterator(m_options, m_startpos, m_encodedMovetext);
     }
 
-    [[nodiscard]] UnparsedBcgnGamePositions::iterator::sentinel UnparsedBcgnGamePositions::end() const
+    [[nodiscard]] UnparsedBcgnGamePositions::iterator::sentinel 
+        UnparsedBcgnGamePositions::end() const
     {
         return {};
     }
@@ -746,7 +805,8 @@ namespace bcgn
         }
     }
 
-    const UnparsedBcgnAdditionalTags::iterator& UnparsedBcgnAdditionalTags::iterator::operator++()
+    const UnparsedBcgnAdditionalTags::iterator& 
+        UnparsedBcgnAdditionalTags::iterator::operator++()
     {
         const auto nameLength = m_data[0];
         const auto valueLength = m_data[1 + nameLength];
@@ -762,37 +822,49 @@ namespace bcgn
         return *this;
     }
 
-    bool operator==(const UnparsedBcgnAdditionalTags::iterator& lhs, UnparsedBcgnAdditionalTags::iterator::sentinel rhs) noexcept
+    bool operator==(
+        const UnparsedBcgnAdditionalTags::iterator& lhs, 
+        UnparsedBcgnAdditionalTags::iterator::sentinel rhs
+        ) noexcept
     {
         return lhs.m_countLeft == 0;
     }
 
-    bool operator!=(const UnparsedBcgnAdditionalTags::iterator& lhs, UnparsedBcgnAdditionalTags::iterator::sentinel rhs) noexcept
+    bool operator!=(
+        const UnparsedBcgnAdditionalTags::iterator& lhs, 
+        UnparsedBcgnAdditionalTags::iterator::sentinel rhs
+        ) noexcept
     {
         return lhs.m_countLeft != 0;
     }
 
-    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator::reference UnparsedBcgnAdditionalTags::iterator::operator*() const
+    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator::reference 
+        UnparsedBcgnAdditionalTags::iterator::operator*() const
     {
         return m_kv;
     }
 
-    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator::pointer UnparsedBcgnAdditionalTags::iterator::operator->() const
+    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator::pointer 
+        UnparsedBcgnAdditionalTags::iterator::operator->() const
     {
         return &m_kv;
     }
 
-    UnparsedBcgnAdditionalTags::UnparsedBcgnAdditionalTags(const unsigned char* data) :
+    UnparsedBcgnAdditionalTags::UnparsedBcgnAdditionalTags(
+        const unsigned char* data
+        ) :
         m_data(reinterpret_cast<const char*>(data))
     {
     }
 
-    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator UnparsedBcgnAdditionalTags::begin() const
+    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator 
+        UnparsedBcgnAdditionalTags::begin() const
     {
         return iterator(m_data);
     }
 
-    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator::sentinel UnparsedBcgnAdditionalTags::end() const
+    [[nodiscard]] UnparsedBcgnAdditionalTags::iterator::sentinel 
+        UnparsedBcgnAdditionalTags::end() const
     {
         return {};
     }
@@ -868,7 +940,9 @@ namespace bcgn
         return m_flags.hasCustomStartPos();
     }
 
-    [[nodiscard]] std::string_view UnparsedBcgnGame::getAdditionalTagValue(std::string_view namesv) const
+    [[nodiscard]] std::string_view UnparsedBcgnGame::getAdditionalTagValue(
+        std::string_view namesv
+        ) const
     {
         const auto name = util::UnsignedCharBufferView::fromStringView(namesv);
 
@@ -888,7 +962,10 @@ namespace bcgn
 
             if (currentName == name)
             {
-                return m_data.substr(offset + 1 + nameLength + 1, valueLength).toStringView();
+                return m_data.substr(
+                    offset + 1 + nameLength + 1, 
+                    valueLength
+                    ).toStringView();
             }
 
             offset += 2 + nameLength + valueLength;
@@ -935,7 +1012,7 @@ namespace bcgn
 
     [[nodiscard]] Position UnparsedBcgnGame::getCustomStartPos() const
     {
-        CompressedPosition pos = CompressedPosition::readFromBigEndian(m_data.data() + 19);
+        const auto pos = CompressedPosition::readFromBigEndian(m_data.data() + 19);
         return pos.decompress();
     }
 
@@ -967,7 +1044,8 @@ namespace bcgn
         m_additionalTagsOffset = offset + m_data[offset] + 1;
     }
 
-    [[nodiscard]] util::UnsignedCharBufferView UnparsedBcgnGame::encodedMovetext() const
+    [[nodiscard]] util::UnsignedCharBufferView 
+        UnparsedBcgnGame::encodedMovetext() const
     {
         return m_data.substr(m_headerLength);
     }
@@ -977,7 +1055,8 @@ namespace bcgn
         return (m_data[2] << 8) | m_data[3];
     }
 
-    [[nodiscard]] std::optional<GameResult> UnparsedBcgnGame::mapIntToResult(unsigned v) const
+    [[nodiscard]] std::optional<GameResult> 
+        UnparsedBcgnGame::mapIntToResult(unsigned v) const
     {
         switch (v)
         {
@@ -995,7 +1074,10 @@ namespace bcgn
         return {};
     }
 
-    BcgnReader::iterator::iterator(const std::filesystem::path& path, std::size_t bufferSize) :
+    BcgnReader::iterator::iterator(
+        const std::filesystem::path& path, 
+        std::size_t bufferSize
+        ) :
         m_options{},
         m_file(nullptr, &std::fclose),
         m_path(path),
@@ -1033,12 +1115,18 @@ namespace bcgn
         return *this;
     }
 
-    bool operator==(const BcgnReader::iterator& lhs, BcgnReader::iterator::sentinel rhs) noexcept
+    bool operator==(
+        const BcgnReader::iterator& lhs, 
+        BcgnReader::iterator::sentinel rhs
+        ) noexcept
     {
         return lhs.isEnd();
     }
 
-    bool operator!=(const BcgnReader::iterator& lhs, BcgnReader::iterator::sentinel rhs) noexcept
+    bool operator!=(
+        const BcgnReader::iterator& lhs, 
+        BcgnReader::iterator::sentinel rhs
+        ) noexcept
     {
         return !lhs.isEnd();
     }
@@ -1055,13 +1143,15 @@ namespace bcgn
 
     void BcgnReader::iterator::refillBuffer()
     {
-        // We know that the biggest possible unprocessed amount of bytes is traits::maxGameLength - 1.
+        // We know that the biggest possible unprocessed 
+        // amount of bytes is traits::maxGameLength - 1.
         // Using this information we can only fill the buffer starting from 
         // position traits::maxGameLength and prepend any unprocessed data
         // in front of it.
         // This way we minimize copying between buffers.
 
-        const std::size_t usableReadBufferSpace = m_buffer.size() - traits::maxGameLength;
+        const std::size_t usableReadBufferSpace = 
+            m_buffer.size() - traits::maxGameLength;
 
         const std::size_t numUnprocessedBytes = m_bufferView.size();
         if (numUnprocessedBytes >= traits::maxGameLength)
@@ -1074,7 +1164,11 @@ namespace bcgn
         if (numUnprocessedBytes)
         {
             // memcpy is safe because the buffers are disjoint.
-            std::memcpy(m_buffer.back_data() + freeSpace, m_bufferView.data(), numUnprocessedBytes);
+            std::memcpy(
+                m_buffer.back_data() + freeSpace, 
+                m_bufferView.data(), 
+                numUnprocessedBytes
+                );
         }
 
         // If this is the first read then we read data to back_data,
@@ -1085,7 +1179,12 @@ namespace bcgn
         const auto numBytesRead =
             m_future.valid()
             ? m_future.get()
-            : std::fread(m_buffer.back_data() + traits::maxGameLength, 1, usableReadBufferSpace, m_file.get());
+            : std::fread(
+                m_buffer.back_data() + traits::maxGameLength, 
+                1, 
+                usableReadBufferSpace, 
+                m_file.get()
+                );
 
         if (numBytesRead == 0)
         {
@@ -1096,10 +1195,18 @@ namespace bcgn
         m_buffer.swap();
 
         m_future = std::async(std::launch::async, [this, usableReadBufferSpace]() {
-            return std::fread(m_buffer.back_data() + traits::maxGameLength, 1, usableReadBufferSpace, m_file.get());
+            return std::fread(
+                m_buffer.back_data() + traits::maxGameLength, 
+                1, 
+                usableReadBufferSpace, 
+                m_file.get()
+                );
             });
 
-        m_bufferView = util::UnsignedCharBufferView(m_buffer.data() + freeSpace, numBytesRead + numUnprocessedBytes);
+        m_bufferView = util::UnsignedCharBufferView(
+            m_buffer.data() + freeSpace, 
+            numBytesRead + numUnprocessedBytes
+            );
     }
 
     void BcgnReader::iterator::fillOptions()

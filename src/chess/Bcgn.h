@@ -133,8 +133,6 @@ namespace bcgn
         // game is written when the buffer size was too small because it would
         // be easly pushed past maxGameLength of free space.
         static_assert(minBufferSize > 2 * maxGameLength);
-
-
     }
 
     enum struct BcgnVersion
@@ -355,7 +353,10 @@ namespace bcgn
 
     struct UnparsedBcgnGameMoves
     {
-        UnparsedBcgnGameMoves(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept;
+        UnparsedBcgnGameMoves(
+            BcgnHeader options, 
+            util::UnsignedCharBufferView movetext
+            ) noexcept;
 
         [[nodiscard]] bool hasNext() const;
 
@@ -378,9 +379,16 @@ namespace bcgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const Position*;
 
-            iterator(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept;
+            iterator(
+                BcgnHeader options, 
+                util::UnsignedCharBufferView movetext
+                ) noexcept;
 
-            iterator(BcgnHeader options, const Position& pos, util::UnsignedCharBufferView movetext) noexcept;
+            iterator(
+                BcgnHeader options, 
+                const Position& pos, 
+                util::UnsignedCharBufferView movetext
+                ) noexcept;
 
             const iterator& operator++();
 
@@ -399,9 +407,16 @@ namespace bcgn
 
         using const_iterator = iterator;
 
-        UnparsedBcgnGamePositions(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept;
+        UnparsedBcgnGamePositions(
+            BcgnHeader options, 
+            util::UnsignedCharBufferView movetext
+            ) noexcept;
 
-        UnparsedBcgnGamePositions(BcgnHeader options, const Position& startpos, util::UnsignedCharBufferView movetext) noexcept;
+        UnparsedBcgnGamePositions(
+            BcgnHeader options, 
+            const Position& startpos, 
+            util::UnsignedCharBufferView movetext
+            ) noexcept;
 
         [[nodiscard]] iterator begin();
 
@@ -583,7 +598,10 @@ namespace bcgn
 
         using const_iterator = iterator;
 
-        BcgnReader(const std::filesystem::path& path, std::size_t bufferSize = traits::minBufferSize);
+        BcgnReader(
+            const std::filesystem::path& path, 
+            std::size_t bufferSize = traits::minBufferSize
+            );
 
         [[nodiscard]] bool isOpen() const;
 
