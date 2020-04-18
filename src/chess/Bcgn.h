@@ -960,6 +960,91 @@ namespace bcgn
         util::UnsignedCharBufferView m_encodedMovetext;
     };
 
+    // m_data starts at the count
+    // if no tags then empty
+    struct UnparsedBcgnAdditionalTags
+    {
+        struct iterator
+        {
+            struct sentinel {};
+
+            using value_type = std::pair<std::string_view, std::string_view>;
+            using difference_type = std::ptrdiff_t;
+            using reference = const value_type&;
+            using iterator_category = std::input_iterator_tag;
+            using pointer = const value_type*;
+
+            iterator(const char* data) :
+                m_data(data),
+                m_countLeft(0)
+            {
+                if (m_data)
+                {
+                    m_countLeft = *m_data++;
+                }
+            }
+
+            const iterator& operator++()
+            {
+                const auto nameLength = m_data[0];
+                const auto valueLength = m_data[1 + nameLength];
+
+                m_kv = std::make_pair(
+                    std::string_view(m_data + 1, nameLength),
+                    std::string_view(m_data + 1 + nameLength + 1, valueLength)
+                    );
+
+                m_countLeft -= 1;
+                m_data += 1 + nameLength + 1 + valueLength;
+
+                return *this;
+            }
+
+            bool friend operator==(const iterator& lhs, sentinel rhs) noexcept
+            {
+                return lhs.m_countLeft == 0;
+            }
+
+            bool friend operator!=(const iterator& lhs, sentinel rhs) noexcept
+            {
+                return lhs.m_countLeft != 0;
+            }
+
+            [[nodiscard]] reference operator*() const
+            {
+                return m_kv;
+            }
+
+            [[nodiscard]] pointer operator->() const
+            {
+                return &m_kv;
+            }
+
+        private:
+            const char* m_data;
+            std::size_t m_countLeft;
+            std::pair<std::string_view, std::string_view> m_kv;
+        };
+
+        UnparsedBcgnAdditionalTags(const unsigned char* data) :
+            m_data(reinterpret_cast<const char*>(data))
+        {
+        }
+        
+        [[nodiscard]] iterator begin() const
+        {
+            return iterator(m_data);
+        }
+
+        [[nodiscard]] iterator::sentinel end() const
+        {
+            return {};
+        }
+
+    private:
+        const char* m_data;
+    };
+
     struct UnparsedBcgnGame
     {
         UnparsedBcgnGame() = default;
@@ -1084,6 +1169,15 @@ namespace bcgn
         [[nodiscard]] UnparsedBcgnGamePositions positions() const
         {
             return UnparsedBcgnGamePositions(m_options, encodedMovetext());
+        }
+
+        [[nodiscard]] UnparsedBcgnAdditionalTags additionalTags() const
+        {
+            return UnparsedBcgnAdditionalTags(
+                m_flags.hasAdditionalTags()
+                ? m_data.data() + getAdditionalTagSectionOffset()
+                : nullptr
+                );
         }
 
     private:

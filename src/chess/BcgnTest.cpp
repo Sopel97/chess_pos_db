@@ -80,10 +80,13 @@ void testBcgnReader(int seed, std::string filename, bcgn::BcgnHeader options, in
         TEST_ASSERT(game.event() == "eventname");
         TEST_ASSERT(game.site() == "sitesitesite");
 
-        if (rand() % 10 == 0)
+        if (rand() % 10 == 0 || true)
         {
-            TEST_ASSERT(game.getAdditionalTagValue("additionaltag1") == "additionalvalue1");
-            TEST_ASSERT(game.getAdditionalTagValue("additionaltag2") == "additionalvalue2");
+            for (auto&& [name, value] : game.additionalTags())
+            {
+                if (name == "additionaltag1") TEST_ASSERT(value == "additionalvalue1");
+                if (name == "additionaltag2") TEST_ASSERT(value == "additionalvalue2");
+            }
         }
 
         if (rand() % 10 == 0)
