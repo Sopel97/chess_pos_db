@@ -84,7 +84,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess\Bcgn.cpp" />
-    <ClCompile Include="src\chess\BcgnTest.cpp" />
     <ClCompile Include="src\chess\Bitboard.cpp" />
     <ClCompile Include="src\chess\Date.cpp" />
     <ClCompile Include="src\chess\Eco.cpp" />
@@ -108,6 +107,7 @@
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
     <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp" />
     <ClCompile Include="src\util\MemoryAmount.cpp" />
+    <ClCompile Include="test\chess\BcgnTest.cpp" />
     <ClCompile Include="test\chess\BitboardTest.cpp">
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
       </DeploymentContent>
