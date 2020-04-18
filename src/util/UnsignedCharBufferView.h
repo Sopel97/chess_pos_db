@@ -22,7 +22,8 @@ namespace util
 
         [[nodiscard]] constexpr UnsignedCharBufferView substr(size_type pos, size_type count = npos) const
         {
-            return UnsignedCharBufferView(data() + pos, count);
+            const auto s = count > size() - pos ? size() - pos : count;
+            return UnsignedCharBufferView(data() + pos, s);
         }
     };
 }

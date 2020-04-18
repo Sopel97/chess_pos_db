@@ -717,7 +717,8 @@ namespace bcgn
         util::UnsignedCharBufferView movetext
         ) noexcept :
         m_position(Position::startPosition()),
-        m_moveProvider(header, movetext)
+        m_moveProvider(header, movetext),
+        m_isEnd(false)
     {
     }
 
@@ -727,13 +728,19 @@ namespace bcgn
         util::UnsignedCharBufferView movetext
         ) noexcept :
         m_position(pos),
-        m_moveProvider(header, movetext)
+        m_moveProvider(header, movetext),
+        m_isEnd(false)
     {
     }
 
     const UnparsedBcgnGamePositions::iterator& 
         UnparsedBcgnGamePositions::iterator::operator++()
     {
+        if (!m_moveProvider.hasNext())
+        {
+            m_isEnd = true;
+            return *this;
+        }
         const auto move = m_moveProvider.next(m_position);
         m_position.doMove(move);
         return *this;
@@ -744,7 +751,7 @@ namespace bcgn
         UnparsedBcgnGamePositions::iterator::sentinel rhs
         ) noexcept
     {
-        return !lhs.m_moveProvider.hasNext();
+        return lhs.m_isEnd;
     }
 
     bool operator!=(
@@ -752,7 +759,7 @@ namespace bcgn
         UnparsedBcgnGamePositions::iterator::sentinel rhs
         ) noexcept
     {
-        return lhs.m_moveProvider.hasNext();
+        return !lhs.m_isEnd;
     }
 
     [[nodiscard]] const Position& UnparsedBcgnGamePositions::iterator::operator*() const
@@ -1105,7 +1112,7 @@ namespace bcgn
 
         if (!isEnd())
         {
-            fileFileHeader();
+            readFileHeader();
 
             m_game.setFileHeader(m_header);
 
@@ -1213,7 +1220,7 @@ namespace bcgn
             );
     }
 
-    void BcgnFileReader::iterator::fileFileHeader()
+    void BcgnFileReader::iterator::readFileHeader()
     {
         if (m_bufferView.size() < traits::bcgnFileHeaderLength)
         {

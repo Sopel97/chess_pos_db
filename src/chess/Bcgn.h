@@ -403,6 +403,7 @@ namespace bcgn
         private:
             Position m_position;
             UnparsedBcgnGameMoves m_moveProvider;
+            bool m_isEnd;
         };
 
         using const_iterator = iterator;
@@ -584,7 +585,7 @@ namespace bcgn
 
             void refillBuffer();
 
-            void fileFileHeader();
+            void readFileHeader();
 
             void prepareFirstGame();
 

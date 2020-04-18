@@ -1562,6 +1562,76 @@ namespace command_line_app
         }
     }
 
+    template <typename ReaderT>
+    static void benchReader(const std::filesystem::path& path, std::size_t memory)
+    {
+        const auto size = std::filesystem::file_size(path);
+        std::cout << "File size: " << size << '\n';
+
+        for (int i = 0; i < 2; ++i)
+        {
+            // warmup
+            ReaderT reader(path, memory);
+            for (auto&& game : reader);
+            std::cout << "warmup " << i << " finished\n";
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds{ 1 });
+
+        const auto t0 = std::chrono::high_resolution_clock::now();
+        ReaderT reader(path, memory);
+        std::size_t numGames = 0;
+        std::size_t numPositions = 0;
+        for (auto&& game : reader)
+        {
+            numGames += 1;
+            for (auto&& position : game.positions())
+            {
+                numPositions += 1;
+            }
+        }
+        const auto t1 = std::chrono::high_resolution_clock::now();
+        const double time = (t1 - t0).count() / 1e9;
+
+        std::cout << numGames << " games in " << time << "s\n";
+        std::cout << (std::uint64_t)(numGames / time) << " games/s\n";
+        std::cout << numPositions << " positions in " << time << "s\n";
+        std::cout << (std::uint64_t)(numPositions / time) << " positions/s\n";
+        std::cout << "Throughput of " << size / time / 1e6 << " MB/s\n";
+    }
+
+    static void benchPgn(const std::filesystem::path& path)
+    {
+        benchReader<pgn::LazyPgnFileReader>(path, pgnParserMemory);
+    }
+
+    static void benchBcgn(const std::filesystem::path& path)
+    {
+        benchReader<bcgn::BcgnFileReader>(path, bcgnParserMemory);
+    }
+
+    static void bench(const Args& args)
+    {
+        if (args.size() < 2)
+        {
+            throwInvalidArguments();
+        }
+
+        const std::filesystem::path path = args[1];
+        if (path.extension() == ".pgn")
+        {
+            benchPgn(path);
+        }
+        else if (path.extension() == ".bcgn")
+        {
+            benchBcgn(path);
+        }
+        else
+        {
+            throwInvalidArguments();
+        }
+    }
+
     void runCommand(int argc, char* argv[])
     {
         static const std::map<std::string, CommandHandler> s_commandHandlers = {
@@ -1570,7 +1640,8 @@ namespace command_line_app
             { "merge", merge },
             { "tcp", tcp },
             { "convert", convert },
-            { "count_games", countGames }
+            { "count_games", countGames },
+            { "bench", bench }
         };
 
         if (argc <= 0) return;
