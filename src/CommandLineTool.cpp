@@ -46,6 +46,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "json/json.hpp"
@@ -149,18 +150,6 @@ namespace command_line_app
     {
         const auto key = readKeyOfDatabase(path);
         return instantiateDatabase(key, path);
-    }
-
-    [[nodiscard]] static Args convertCommandLineArguments(int argc, char* argv[])
-    {
-        std::vector<std::string> args;
-        args.reserve(argc);
-        for (int i = 0; i < argc; ++i)
-        {
-            args.emplace_back(argv[i]);
-        }
-
-        return args;
     }
 
     [[nodiscard]] static persistence::ImportablePgnFiles parsePgnListFile(const std::filesystem::path& path)
@@ -1632,7 +1621,7 @@ namespace command_line_app
         }
     }
 
-    void runCommand(int argc, char* argv[])
+    void runCommand(const std::vector<std::string>& args)
     {
         static const std::map<std::string, CommandHandler> s_commandHandlers = {
             { "help", help },
@@ -1644,9 +1633,7 @@ namespace command_line_app
             { "bench", bench }
         };
 
-        if (argc <= 0) return;
-
-        auto args = convertCommandLineArguments(argc, argv);
+        if (args.size() <= 0) return;
 
         auto handlerIt = s_commandHandlers.find(args[0]);
         if (handlerIt == s_commandHandlers.end())

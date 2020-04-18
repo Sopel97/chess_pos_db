@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdexcept>
-#include <string_view>
+#include <vector>
 
 namespace command_line_app
 {
@@ -14,5 +14,5 @@ namespace command_line_app
         using BaseType::BaseType;
     };
 
-    void runCommand(int argc, char* argv[]);
+    void runCommand(const std::vector<std::string>& args);
 }

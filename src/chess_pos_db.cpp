@@ -34,6 +34,11 @@
     return parts;
 }
 
+void runCommand(const std::vector<std::string>& args)
+{
+    command_line_app::runCommand(args);
+}
+
 int main(int argc, char* argv[])
 {
     if (argc == 1)
@@ -45,7 +50,7 @@ int main(int argc, char* argv[])
     {
         try
         {
-            command_line_app::runCommand(argc - 1, argv + 1);
+            runCommand(std::vector<std::string>(argv + 1, argv + argc));
         }
         catch (command_line_app::Exception& e)
         {
