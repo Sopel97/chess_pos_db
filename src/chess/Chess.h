@@ -971,7 +971,7 @@ private:
     static constexpr std::uint16_t moveTypeMask = 0b11u;
 
 public:
-    [[nodiscard]] constexpr static CompressedMove readFromBigEndian(const char* data)
+    [[nodiscard]] constexpr static CompressedMove readFromBigEndian(const unsigned char* data)
     {
         CompressedMove move{};
         move.m_packed = ((std::uint8_t)data[0] << 8) | (std::uint8_t)data[1];

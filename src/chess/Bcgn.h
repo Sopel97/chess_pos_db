@@ -19,6 +19,8 @@
 
 #include "external_storage/External.h"
 
+#include "util/UnsignedCharBufferView.h"
+
 namespace bcgn
 {
     // BCGN is a binary format.
@@ -160,7 +162,7 @@ namespace bcgn
         BcgnCompressionLevel compressionLevel = BcgnCompressionLevel::Level_0;
         BcgnAuxCompression auxCompression = BcgnAuxCompression::None;
 
-        void readFrom(const char* str)
+        void readFrom(const unsigned char* str)
         {
             if (str[0] != 'B'
                 || str[1] != 'C'
@@ -817,7 +819,7 @@ namespace bcgn
 
     struct UnparsedBcgnGameMoves
     {
-        UnparsedBcgnGameMoves(BcgnHeader options, std::string_view movetext) noexcept :
+        UnparsedBcgnGameMoves(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
             m_options(options),
             m_encodedMovetext(movetext)
         {
@@ -864,7 +866,7 @@ namespace bcgn
 
     private:
         BcgnHeader m_options;
-        std::string_view m_encodedMovetext;
+        util::UnsignedCharBufferView m_encodedMovetext;
 
         [[nodiscard]] FORCEINLINE std::uint8_t at(std::size_t i) const
         {
@@ -884,13 +886,13 @@ namespace bcgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const Position*;
 
-            UnparsedBcgnGamePositionsIterator(BcgnHeader options, std::string_view movetext) noexcept :
+            UnparsedBcgnGamePositionsIterator(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
                 m_position(Position::startPosition()),
                 m_moveProvider(options, movetext)
             {
             }
 
-            UnparsedBcgnGamePositionsIterator(BcgnHeader options, const Position& pos, std::string_view movetext) noexcept :
+            UnparsedBcgnGamePositionsIterator(BcgnHeader options, const Position& pos, util::UnsignedCharBufferView movetext) noexcept :
                 m_position(pos),
                 m_moveProvider(options, movetext)
             {
@@ -931,7 +933,7 @@ namespace bcgn
         using iterator = UnparsedBcgnGamePositionsIterator;
         using const_iterator = UnparsedBcgnGamePositionsIterator;
 
-        UnparsedBcgnGamePositions(BcgnHeader options, std::string_view movetext) noexcept :
+        UnparsedBcgnGamePositions(BcgnHeader options, util::UnsignedCharBufferView movetext) noexcept :
             m_options(options),
             m_startpos(Position::startPosition()),
             m_encodedMovetext(movetext)
@@ -939,7 +941,7 @@ namespace bcgn
 
         }
 
-        UnparsedBcgnGamePositions(BcgnHeader options, const Position& startpos, std::string_view movetext) noexcept :
+        UnparsedBcgnGamePositions(BcgnHeader options, const Position& startpos, util::UnsignedCharBufferView movetext) noexcept :
             m_options(options),
             m_startpos(startpos),
             m_encodedMovetext(movetext)
@@ -960,7 +962,7 @@ namespace bcgn
     private:
         BcgnHeader m_options;
         Position m_startpos;
-        std::string_view m_encodedMovetext;
+        util::UnsignedCharBufferView m_encodedMovetext;
     };
 
     struct UnparsedBcgnGame
@@ -972,7 +974,7 @@ namespace bcgn
             m_options = header;
         }
 
-        void setGameData(std::string_view sv)
+        void setGameData(util::UnsignedCharBufferView sv)
         {
             m_data = sv;
             prereadData();
@@ -1038,8 +1040,10 @@ namespace bcgn
             return m_flags.hasCustomStartPos();
         }
 
-        [[nodiscard]] std::string_view getAdditionalTagValue(std::string_view name) const
+        [[nodiscard]] std::string_view getAdditionalTagValue(std::string_view namesv) const
         {
+            const auto name = util::UnsignedCharBufferView::fromStringView(namesv);
+
             if (!m_flags.hasAdditionalTags())
             {
                 return {};
@@ -1056,7 +1060,7 @@ namespace bcgn
                 
                 if (currentName == name)
                 {
-                    return m_data.substr(offset + 1 + nameLength + 1, valueLength);
+                    return m_data.substr(offset + 1 + nameLength + 1, valueLength).toStringView();
                 }
 
                 offset += 2 + nameLength + valueLength;
@@ -1089,7 +1093,7 @@ namespace bcgn
 
     private:
         BcgnHeader m_options;
-        std::string_view m_data;
+        util::UnsignedCharBufferView m_data;
 
         // We read and store the mandatory data that's cheap to decode.
         // Everything else is lazy.
@@ -1131,7 +1135,7 @@ namespace bcgn
 
             const std::uint8_t length = at(offset);
 
-            return m_data.substr(offset + 1, length);
+            return m_data.substr(offset + 1, length).toStringView();
         }
 
         [[nodiscard]] std::size_t getAdditionalTagSectionOffset() const
@@ -1161,7 +1165,7 @@ namespace bcgn
             m_flags = BcgnFlags::decode(at(18));
         }
 
-        [[nodiscard]] std::string_view encodedMovetext() const
+        [[nodiscard]] util::UnsignedCharBufferView encodedMovetext() const
         {
             return m_data.substr(m_headerLength);
         }
@@ -1264,8 +1268,8 @@ namespace bcgn
             BcgnHeader m_options;
             std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
             std::filesystem::path m_path;
-            ext::DoubleBuffer<char> m_buffer;
-            std::string_view m_bufferView;
+            ext::DoubleBuffer<unsigned char> m_buffer;
+            util::UnsignedCharBufferView m_bufferView;
             std::size_t m_numBytesLeftInAuxBuffer;
             std::future<std::size_t> m_future;
             UnparsedBcgnGame m_game;
@@ -1317,7 +1321,7 @@ namespace bcgn
                     return std::fread(m_buffer.back_data() + traits::maxGameLength, 1, usableReadBufferSpace, m_file.get());
                     });
 
-                m_bufferView = std::string_view(m_buffer.data() + freeSpace, numBytesRead + numUnprocessedBytes);
+                m_bufferView = util::UnsignedCharBufferView(m_buffer.data() + freeSpace, numBytesRead + numUnprocessedBytes);
             }
 
             void fillOptions()

@@ -80,6 +80,7 @@
     <ClInclude Include="src\util\Endian.h" />
     <ClInclude Include="src\util\MemoryAmount.h" />
     <ClInclude Include="src\util\TypeUtility.h" />
+    <ClInclude Include="src\util\UnsignedCharBufferView.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess\Bcgn.cpp" />

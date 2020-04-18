@@ -753,10 +753,10 @@ struct CompressedPosition
     // Let N be the number of bits set in occupied bitboard.
     // Only N nibbles are present. (N+1)/2 bytes are initialized.
 
-    static CompressedPosition readFromBigEndian(const char* data)
+    static CompressedPosition readFromBigEndian(const unsigned char* data)
     {
         CompressedPosition pos{};
-        pos.m_occupied = Bitboard::readFromBigEndian(
+        pos.m_occupied = Bitboard::fromBits(
             (std::uint64_t)(std::uint8_t)data[0] << 56
             | (std::uint64_t)(std::uint8_t)data[1] << 48
             | (std::uint64_t)(std::uint8_t)data[2] << 40

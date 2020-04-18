@@ -15,7 +15,7 @@ struct Eco
 
     Eco(std::string_view sv);
 
-    [[nodiscard]] friend bool operator==(const Eco& lhs, const Eco& rhs) noexcept;
+    friend bool operator==(const Eco& lhs, const Eco& rhs) noexcept;
 
     [[nodiscard]] std::string toString() const;
 
