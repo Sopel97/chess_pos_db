@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/Assert.h"
+#include "util/Buffer.h"
 #include "util/MemoryAmount.h"
 
 #include <atomic>
@@ -475,117 +476,6 @@ namespace ext
     };
 
     template <typename T>
-    struct Buffer
-    {
-        static_assert(std::is_trivially_copyable_v<T>);
-
-        Buffer(std::size_t size) :
-            m_data(std::make_unique<T[]>(size)),
-            m_size(size)
-        {
-            ASSERT(size > 0u);
-        }
-
-        [[nodiscard]] T* data()
-        {
-            return m_data.get();
-        }
-
-        [[nodiscard]] const T* data() const
-        {
-            return m_data.get();
-        }
-
-        [[nodiscard]] const T& operator[](std::size_t i) const
-        {
-            return m_data[i];
-        }
-
-        [[nodiscard]] T& operator[](std::size_t i)
-        {
-            return m_data[i];
-        }
-
-        [[nodiscard]] std::size_t size() const
-        {
-            return m_size;
-        }
-
-        [[nodiscard]] std::size_t size_bytes() const
-        {
-            return size() * sizeof(T);
-        }
-
-    private:
-        std::unique_ptr<T[]> m_data;
-        std::size_t m_size;
-    };
-
-    template <typename T>
-    struct DoubleBuffer
-    {
-        static_assert(std::is_trivially_copyable_v<T>);
-
-        // NOTE: total buffer volume is 2*size
-        DoubleBuffer(std::size_t size) :
-            m_front(size),
-            m_back(size)
-        {
-            ASSERT(size > 0u);
-        }
-
-        [[nodiscard]] T* back_data()
-        {
-            return m_back.data();
-        }
-
-        [[nodiscard]] const T* back_data() const
-        {
-            return m_back.data();
-        }
-
-        [[nodiscard]] T* data()
-        {
-            return m_front.data();
-        }
-
-        [[nodiscard]] const T* data() const
-        {
-            return m_front.data();
-        }
-
-        [[nodiscard]] const T& operator[](std::size_t i) const
-        {
-            return m_front[i];
-        }
-
-        [[nodiscard]] T& operator[](std::size_t i)
-        {
-            return m_front[i];
-        }
-
-        void swap()
-        {
-            std::swap(m_front, m_back);
-        }
-
-        [[nodiscard]] std::size_t size() const
-        {
-            return m_front.size();
-        }
-
-        [[nodiscard]] std::size_t size_bytes() const
-        {
-            return m_front.size_bytes();
-        }
-
-    private:
-        // TODO: maybe do one joint allocation
-        Buffer<T> m_front;
-        Buffer<T> m_back;
-    };
-
-    template <typename T>
     struct ImmutableSpan
     {
         static_assert(std::is_trivially_copyable_v<T>);
@@ -600,7 +490,7 @@ namespace ext
             using iterator_category = std::input_iterator_tag;
             using pointer = const T*;
 
-            SequentialIterator(const ImmutableBinaryFile& file, std::size_t begin, std::size_t end, DoubleBuffer<T>&& buffer) :
+            SequentialIterator(const ImmutableBinaryFile& file, std::size_t begin, std::size_t end, util::DoubleBuffer<T>&& buffer) :
                 m_file(file),
                 m_fileBegin(begin * sizeof(T)),
                 m_fileEnd(end * sizeof(T)),
@@ -658,7 +548,7 @@ namespace ext
             ImmutableBinaryFile m_file;
             std::size_t m_fileBegin;
             std::size_t m_fileEnd;
-            DoubleBuffer<T> m_buffer;
+            util::DoubleBuffer<T> m_buffer;
             T* m_bufBegin;
             T* m_bufEnd;
             std::future<std::size_t> m_future;
@@ -1000,7 +890,7 @@ namespace ext
             return operator[](m_end - 1u);
         }
 
-        [[nodiscard]] auto begin_seq(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
+        [[nodiscard]] auto begin_seq(util::DoubleBuffer<T>&& buffer = util::DoubleBuffer<T>(1024)) const
         {
             return SequentialIterator(m_file, m_begin, m_end, std::move(buffer));
         }
@@ -1010,7 +900,7 @@ namespace ext
             return typename SequentialIterator::Sentinel{};
         }
 
-        [[nodiscard]] auto cbegin_seq(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
+        [[nodiscard]] auto cbegin_seq(util::DoubleBuffer<T>&& buffer = util::DoubleBuffer<T>(1024)) const
         {
             return begin_seq(std::move(buffer));
         }
@@ -1040,7 +930,7 @@ namespace ext
             return end_rand();
         }
 
-        [[nodiscard]] auto begin(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
+        [[nodiscard]] auto begin(util::DoubleBuffer<T>&& buffer = util::DoubleBuffer<T>(1024)) const
         {
             return begin_seq(std::move(buffer));
         }
@@ -1050,7 +940,7 @@ namespace ext
             return end_seq();
         }
 
-        [[nodiscard]] auto cbegin(DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) const
+        [[nodiscard]] auto cbegin(util::DoubleBuffer<T>&& buffer = util::DoubleBuffer<T>(1024)) const
         {
             return begin(std::move(buffer));
         }
@@ -1103,7 +993,7 @@ namespace ext
         {
         }
 
-        BackInserter(BinaryOutputFile& file, DoubleBuffer<T>&& buffer) :
+        BackInserter(BinaryOutputFile& file, util::DoubleBuffer<T>&& buffer) :
             m_file(&file),
             m_buffer(std::move(buffer)),
             m_nextEmpty(m_buffer.data()),
@@ -1207,7 +1097,7 @@ namespace ext
             }
         }
 
-        [[nodiscard]] DoubleBuffer<T> buffer() &&
+        [[nodiscard]] util::DoubleBuffer<T> buffer() &&
         {
             flush();
             m_live = false;
@@ -1216,7 +1106,7 @@ namespace ext
 
     private:
         BinaryOutputFile* m_file;
-        DoubleBuffer<T> m_buffer;
+        util::DoubleBuffer<T> m_buffer;
         T* m_nextEmpty;
         bool m_live;
         std::future<std::size_t> m_future;
@@ -1272,7 +1162,7 @@ namespace ext
         using value_type = T;
 
         // it "borrows" the file, allows its later retrieval
-        Vector(BinaryInputOutputFile&& file, DoubleBuffer<T>&& buffer = DoubleBuffer<T>(1024)) :
+        Vector(BinaryInputOutputFile&& file, util::DoubleBuffer<T>&& buffer = util::DoubleBuffer<T>(1024)) :
             m_file(std::move(file)),
             m_buffer(std::move(buffer)),
             m_nextEmpty(m_buffer.data()),
@@ -1474,7 +1364,7 @@ namespace ext
 
     private:
         BinaryInputOutputFile m_file;
-        DoubleBuffer<T> m_buffer;
+        util::DoubleBuffer<T> m_buffer;
         T* m_nextEmpty;
         std::size_t m_size;
         std::future<std::size_t> m_future;
@@ -1787,7 +1677,7 @@ namespace ext
                 const std::size_t bufferSize = std::min(bufferUnitSize, size);
                 maxInputBufferSize = std::max(maxInputBufferSize, bufferSize);
 
-                iters.emplace_back(i.begin(DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
+                iters.emplace_back(i.begin(util::DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
             }
 
             ASSERT(iters.size() > 1);
@@ -1796,7 +1686,7 @@ namespace ext
             const std::size_t outputBufferSize = maxInputBufferSize * outputBufferSizeMultiplier;
 
             {
-                BackInserter<T> out(outFile, DoubleBuffer<T>((outputBufferSize + 1) / 2));
+                BackInserter<T> out(outFile, util::DoubleBuffer<T>((outputBufferSize + 1) / 2));
                 {
                     // Priority queue requires a comparator with a reversed comparison.
                     // Also we ensure that the merge is stable by forcing order of iter indices.
@@ -1953,7 +1843,7 @@ namespace ext
 
                 const std::size_t bufferSize = std::min(bufferUnitSize, size);
 
-                iters.emplace_back(i.begin(DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
+                iters.emplace_back(i.begin(util::DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
             }
 
             ASSERT(iters.size() > 1);
@@ -2365,7 +2255,7 @@ namespace ext
 
             if (numParts == 1)
             {
-                Buffer<T> buffer(inputSize);
+                util::Buffer<T> buffer(inputSize);
                 (void)in.read(buffer.data(), 0, inputSize);
                 sort(buffer.data(), buffer.data() + inputSize, cmp);
 
@@ -2382,7 +2272,7 @@ namespace ext
             TemporaryPaths temporaryFiles(tempdir);
 
             std::vector<ImmutableSpan<T>> parts;
-            Buffer<T> buffer(bufferSize);
+            util::Buffer<T> buffer(bufferSize);
 
             std::size_t offset = 0;
             for (; offset + bufferSize < inputSize; offset += bufferSize)
@@ -2785,7 +2675,7 @@ namespace ext
 
             const std::size_t end = data.size();
 
-            Buffer<EntryType> buffer(maxNumSeqReadElements);
+            util::Buffer<EntryType> buffer(maxNumSeqReadElements);
 
             auto readToBuffer = [&](std::size_t begin, std::size_t end) {
                 ASSERT(begin != end);
@@ -3590,7 +3480,7 @@ namespace ext
                                               // but only when lowValue == highValue
             CompareT cmp = CompareT{},
             KeyExtractT key = KeyExtractT{},
-            DoubleBuffer<EntryType> buffer = DoubleBuffer<EntryType>(
+            util::DoubleBuffer<EntryType> buffer = util::DoubleBuffer<EntryType>(
                 defaultIndexBuilderMemoryAmount / sizeof(EntryType)
                 )
         )

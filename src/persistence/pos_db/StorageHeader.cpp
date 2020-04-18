@@ -8,7 +8,7 @@
 #include "chess/Eco.h"
 #include "chess/Pgn.h"
 
-#include "external_storage/External.h"
+#include "util/Buffer.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -297,8 +297,8 @@ namespace persistence
         m_path((std::filesystem::create_directories(path), std::move(path))),
         m_headerPath(std::move((m_path / headerPath) += m_name)),
         m_indexPath(std::move((m_path / indexPath) += m_name)),
-        m_header({ m_headerPath, ext::OutputMode::Append }, ext::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(std::max(memory, minMemory), 4))),
-        m_index({ m_indexPath, ext::OutputMode::Append }, ext::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(std::max(memory, minMemory), 4)))
+        m_header({ m_headerPath, ext::OutputMode::Append }, util::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(std::max(memory, minMemory), 4))),
+        m_index({ m_indexPath, ext::OutputMode::Append }, util::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(std::max(memory, minMemory), 4)))
     {
     }
 

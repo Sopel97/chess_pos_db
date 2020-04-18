@@ -9,13 +9,14 @@
 
 #include "enum/EnumArray.h"
 
-#include "external_storage/External.h"
-
 #include "util/UnsignedCharBufferView.h"
+#include "util/Buffer.h"
 
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <future>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -336,7 +337,7 @@ namespace bcgn
         std::unique_ptr<detail::BcgnGameEntryBuffer> m_game;
         std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
         std::filesystem::path m_path;
-        ext::DoubleBuffer<unsigned char> m_buffer;
+        util::DoubleBuffer<unsigned char> m_buffer;
         std::size_t m_numBytesUsedInFrontBuffer;
         std::size_t m_numBytesBeingWritten;
         std::future<std::size_t> m_future;
@@ -575,7 +576,7 @@ namespace bcgn
             BcgnFileHeader m_header;
             std::unique_ptr<FILE, decltype(&std::fclose)> m_file;
             std::filesystem::path m_path;
-            ext::DoubleBuffer<unsigned char> m_buffer;
+            util::DoubleBuffer<unsigned char> m_buffer;
             util::UnsignedCharBufferView m_bufferView;
             std::future<std::size_t> m_future;
             UnparsedBcgnGame m_game;

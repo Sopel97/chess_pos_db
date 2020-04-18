@@ -225,6 +225,9 @@
     <ClInclude Include="src\util\UnsignedCharBufferView.h">
       <Filter>Header Files\src\util</Filter>
     </ClInclude>
+    <ClInclude Include="src\util\Buffer.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">

@@ -15,6 +15,7 @@
 #include "persistence/pos_db/Query.h"
 #include "persistence/pos_db/StorageHeader.h"
 
+#include "util/Buffer.h"
 #include "util/MemoryAmount.h"
 
 #include "Configuration.h"
@@ -687,7 +688,7 @@ namespace persistence
 
                     {
                         const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<Entry>(mergeMemory / 32, 2);
-                        ext::BackInserter<Entry> out(outFile, ext::DoubleBuffer<Entry>(outBufferSize));
+                        ext::BackInserter<Entry> out(outFile, util::DoubleBuffer<Entry>(outBufferSize));
 
                         auto cmp = Entry::CompareEqualFull{};
                         bool first = true;
