@@ -285,20 +285,28 @@ public:
             const Piece capturedPiece = m_pieces[move.to];
             const Piece piece = m_pieces[move.from];
 
+            const Bitboard frombb = Bitboard::square(move.from);
+            const Bitboard tobb = Bitboard::square(move.to);
+            const Bitboard xormove = frombb ^ tobb;
+
             m_pieces[move.to] = piece;
             m_pieces[move.from] = Piece::none();
 
-            m_pieceBB[piece] ^= move.from;
-            m_pieceBB[piece] ^= move.to;
+            m_pieceBB[piece] ^= xormove;
 
-            m_pieceBB[capturedPiece] ^= move.to;
-            m_pieceBB[Piece::none()] ^= move.from;
+            m_piecesByColorBB[piece.color()] ^= xormove;
 
-            m_piecesByColorBB[piece.color()] ^= move.to;
-            m_piecesByColorBB[piece.color()] ^= move.from;
-            if (capturedPiece != Piece::none())
+            if (capturedPiece == Piece::none())
             {
-                m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+                m_pieceBB[Piece::none()] ^= xormove;
+            }
+            else
+            {
+                m_pieceBB[capturedPiece] ^= tobb;
+                m_pieceBB[Piece::none()] ^= frombb;
+
+                m_piecesByColorBB[capturedPiece.color()] ^= tobb;
+
                 --m_pieceCount[capturedPiece];
                 ++m_pieceCount[Piece::none()];
             }

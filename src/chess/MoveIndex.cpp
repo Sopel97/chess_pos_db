@@ -265,6 +265,40 @@ namespace move_index
         static CastleType castleTypes[2]{ CastleType::Short, CastleType::Long };
     }
 
+    namespace detail
+    {
+        template <PieceType Pt>
+        FORCEINLINE static bool indexToMoveForPieceType(const Position& pos, unsigned index, Color sideToMove, Square& from, Square& to, unsigned& offset)
+        {
+            const Piece piece = Piece(Pt, sideToMove);
+            const unsigned nextOffset = offset + maxDestinationCount(Pt) * pos.pieceCount(piece);
+
+            if (index < nextOffset)
+            {
+                // end of the subrange for this piece
+                const unsigned localOffset = index - offset;
+                const unsigned n = localOffset / maxDestinationCount(Pt);
+                Bitboard pieceBB = pos.piecesBB(piece);
+                for (unsigned i = 0; i < n; ++i)
+                {
+                    pieceBB.popFirst();
+                }
+
+                // now the first bit in the pieces bb is our piece
+                ASSERT(pieceBB.any());
+
+                from = pieceBB.first();
+                to = destinationSquareByIndex(Pt, from, localOffset - n * maxDestinationCount(Pt));
+
+                return true;
+            }
+
+            offset = nextOffset;
+
+            return false;
+        }
+    }
+
     [[nodiscard]] static Move indexToMove(const Position& pos, unsigned index)
     {
         const auto sideToMove = pos.sideToMove();
@@ -287,79 +321,51 @@ namespace move_index
         else
         {
             unsigned offset = maxNumCastlingMoves + maxNumKingMoves;
-            unsigned nextOffset = offset + maxDestinationCount(PieceType::Pawn) * pos.pieceCount(Piece(PieceType::Pawn, sideToMove));
 
-            // pawn move
-            if (index < nextOffset)
             {
-                // end of the subrange for this piece
-                Bitboard pawnBB = pos.piecesBB(Piece(PieceType::Pawn, sideToMove));
-                unsigned localOffset = offset;
-                unsigned localNextOffset = offset;
-                for (;;)
-                {
-                    // get the upper bound for the next subrange
-                    localNextOffset += maxDestinationCount(PieceType::Pawn);
-                    if (index < localNextOffset)
-                    {
-                        // here we know the subrange of interest
-                        break;
-                    }
+                const Piece piece = Piece(PieceType::Pawn, sideToMove);
+                const unsigned nextOffset = offset + maxDestinationCount(PieceType::Pawn) * pos.pieceCount(piece);
 
-                    // we need to move to the next subrange
-                    // we also need to discard the first entry in the piece bb
-                    localOffset = localNextOffset;
-                    pawnBB.popFirst();
-                }
-                
-                // now the first bit in the pieces bb is our piece
-                ASSERT(pawnBB.any());
-
-                const auto from = pawnBB.first();
-
-                return destinationIndexToPawnMove(pos, index - localOffset, from, sideToMove);
-            }
-
-            offset = nextOffset;
-
-            // other piece types, in the same order as in spec
-            for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
-            {
-                nextOffset = offset + maxDestinationCount(pt) * pos.pieceCount(Piece(pt, sideToMove));
-
+                // pawn move
                 if (index < nextOffset)
                 {
-                    // end of the subrange for this piece
-                    Bitboard pieceBB = pos.piecesBB(Piece(pt, sideToMove));
-                    unsigned localOffset = offset;
-                    unsigned localNextOffset = offset;
-                    for (;;)
+                    const unsigned localOffset = index - offset;
+                    const unsigned n = localOffset / maxDestinationCount(PieceType::Pawn);
+                    Bitboard pieceBB = pos.piecesBB(piece);
+                    for (unsigned i = 0; i < n; ++i)
                     {
-                        // get the upper bound for the next subrange
-                        localNextOffset += maxDestinationCount(pt);
-                        if (index < localNextOffset)
-                        {
-                            // here we know the subrange of interest
-                            break;
-                        }
-
-                        // we need to move to the next subrange
-                        // we also need to discard the first entry in the piece bb
-                        localOffset = localNextOffset;
                         pieceBB.popFirst();
                     }
 
                     // now the first bit in the pieces bb is our piece
                     ASSERT(pieceBB.any());
 
-                    const auto from = pieceBB.first();
-                    const auto to = destinationSquareByIndex(pt, from, index - localOffset);
-
-                    return Move::normal(from, to);
+                    const Square from = pieceBB.first();
+                    return destinationIndexToPawnMove(
+                        pos, 
+                        localOffset - n * maxDestinationCount(PieceType::Pawn), 
+                        from, 
+                        sideToMove
+                        );
                 }
 
                 offset = nextOffset;
             }
+
+            // other piece types, in the same order as in spec
+            // Manually unrolled.
+            Move move{};
+            if (detail::indexToMoveForPieceType<PieceType::Knight>(
+                pos, index, sideToMove, move.from, move.to, offset)) return move;
+
+            if (detail::indexToMoveForPieceType<PieceType::Bishop>(
+                pos, index, sideToMove, move.from, move.to, offset)) return move;
+
+            if (detail::indexToMoveForPieceType<PieceType::Rook>(
+                pos, index, sideToMove, move.from, move.to, offset)) return move;
+
+            if (detail::indexToMoveForPieceType<PieceType::Queen>(
+                pos, index, sideToMove, move.from, move.to, offset)) return move;
         }
 
         // This should not be reachable.

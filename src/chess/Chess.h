@@ -68,7 +68,7 @@ struct EnumTraits<Color>
 
 constexpr Color operator!(Color c)
 {
-    return fromOrdinal<Color>(!ordinal(c));
+    return fromOrdinal<Color>(ordinal(c) ^ 1);
 }
 
 enum struct PieceType : std::uint8_t
