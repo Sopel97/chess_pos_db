@@ -382,10 +382,10 @@ ReverseMove Position::doMove(const Move& move)
     m_epSquare = Square::none();
     if(movedPiece == PieceType::Pawn)
     {
-        const int d = move.to.rank() - move.from.rank();
-        if (d == -2 || d == 2)
+        // for double pushes move index differs by 16 or -16;
+        if ((ordinal(move.to) ^ ordinal(move.from)) == 16)
         {
-            const Square potentialEpSquare = Square(move.from.file(), move.from.rank() + d / 2);
+            const Square potentialEpSquare = fromOrdinal<Square>((ordinal(move.to) + ordinal(move.from)) >> 1);
             // Even though the move has not yet been made we can safely call
             // this function and get the right result because the position of the
             // pawn to be captured is not really relevant.
@@ -444,12 +444,22 @@ ReverseMove Position::doMove(const Move& move)
     return arrh;
 }
 
-[[nodiscard]] bool Position::isEpPossible(Square epSquare, Color sideToMove) const
+[[nodiscard]] FORCEINLINE bool Position::isEpPossible(Square epSquare, Color sideToMove) const
 {
     const Bitboard pawnsAttackingEpSquare =
         bb::pawnAttacks(Bitboard::square(epSquare), !sideToMove)
         & piecesBB(Piece(PieceType::Pawn, sideToMove));
 
+    if (!pawnsAttackingEpSquare.any())
+    {
+        return false;
+    }
+
+    return isEpPossibleColdPath(epSquare, pawnsAttackingEpSquare, sideToMove);
+}
+
+[[nodiscard]] NOINLINE bool Position::isEpPossibleColdPath(Square epSquare, Bitboard pawnsAttackingEpSquare, Color sideToMove) const
+{
     // only set m_epSquare when it matters, ie. when
     // the opposite side can actually capture
     for (Square sq : pawnsAttackingEpSquare)

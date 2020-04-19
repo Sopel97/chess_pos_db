@@ -278,7 +278,7 @@ public:
 
     // returns captured piece
     // doesn't check validity
-    constexpr Piece doMove(Move move)
+    FORCEINLINE constexpr Piece doMove(Move move)
     {
         if (move.type == MoveType::Normal)
         {
@@ -305,7 +305,13 @@ public:
 
             return capturedPiece;
         }
-        else if (move.type == MoveType::Promotion)
+
+        return doMoveColdPath(move);
+    }
+
+    NOINLINE constexpr Piece doMoveColdPath(Move move)
+    {
+        if (move.type == MoveType::Promotion)
         {
             // We split it even though it's similar just because
             // the normal case is much more common.
@@ -711,7 +717,9 @@ private:
     Square m_epSquare;
     CastlingRights m_castlingRights;
 
-    [[nodiscard]] bool isEpPossible(Square epSquare, Color sideToMove) const;
+    [[nodiscard]] FORCEINLINE bool isEpPossible(Square epSquare, Color sideToMove) const;
+
+    [[nodiscard]] NOINLINE bool isEpPossibleColdPath(Square epSquare, Bitboard pawnsAttackingEpSquare, Color sideToMove) const;
 
     void nullifyEpSquareIfNotPossible();
 };
