@@ -881,78 +881,78 @@ namespace bcgn
         return {};
     }
 
-    void UnparsedBcgnGame::setFileHeader(BcgnFileHeader header)
+    void UnparsedBcgnGameHeader::setFileHeader(BcgnFileHeader header)
     {
         m_header = header;
     }
 
-    void UnparsedBcgnGame::setGameData(util::UnsignedCharBufferView sv)
+    UnparsedBcgnGameHeader::UnparsedBcgnGameHeader(util::UnsignedCharBufferView sv)
     {
         m_data = sv;
         prereadData();
     }
 
-    [[nodiscard]] std::uint16_t UnparsedBcgnGame::numPlies() const
+    [[nodiscard]] std::uint16_t UnparsedBcgnGameHeader::numPlies() const
     {
         return m_numPlies;
     }
 
-    [[nodiscard]] std::optional<GameResult> UnparsedBcgnGame::result() const
+    [[nodiscard]] std::optional<GameResult> UnparsedBcgnGameHeader::result() const
     {
         return m_result;
     }
 
-    [[nodiscard]] const Date& UnparsedBcgnGame::date() const
+    [[nodiscard]] const Date& UnparsedBcgnGameHeader::date() const
     {
         return m_date;
     }
 
-    [[nodiscard]] std::uint16_t UnparsedBcgnGame::whiteElo() const
+    [[nodiscard]] std::uint16_t UnparsedBcgnGameHeader::whiteElo() const
     {
         return m_whiteElo;
     }
 
-    [[nodiscard]] std::uint16_t UnparsedBcgnGame::blackElo() const
+    [[nodiscard]] std::uint16_t UnparsedBcgnGameHeader::blackElo() const
     {
         return m_blackElo;
     }
 
-    [[nodiscard]] std::uint16_t UnparsedBcgnGame::round() const
+    [[nodiscard]] std::uint16_t UnparsedBcgnGameHeader::round() const
     {
         return m_round;
     }
 
-    [[nodiscard]] Eco UnparsedBcgnGame::eco() const
+    [[nodiscard]] Eco UnparsedBcgnGameHeader::eco() const
     {
         return m_eco;
     }
 
-    [[nodiscard]] std::string_view UnparsedBcgnGame::whitePlayer() const
+    [[nodiscard]] std::string_view UnparsedBcgnGameHeader::whitePlayer() const
     {
         return m_whitePlayer;
     }
 
-    [[nodiscard]] std::string_view UnparsedBcgnGame::blackPlayer() const
+    [[nodiscard]] std::string_view UnparsedBcgnGameHeader::blackPlayer() const
     {
         return m_blackPlayer;
     }
 
-    [[nodiscard]] std::string_view UnparsedBcgnGame::event() const
+    [[nodiscard]] std::string_view UnparsedBcgnGameHeader::event() const
     {
         return m_event;
     }
 
-    [[nodiscard]] std::string_view UnparsedBcgnGame::site() const
+    [[nodiscard]] std::string_view UnparsedBcgnGameHeader::site() const
     {
         return m_site;
     }
 
-    [[nodiscard]] bool UnparsedBcgnGame::hasCustomStartPosition() const
+    [[nodiscard]] bool UnparsedBcgnGameHeader::hasCustomStartPosition() const
     {
         return m_flags.hasCustomStartPos();
     }
 
-    [[nodiscard]] std::string_view UnparsedBcgnGame::getAdditionalTagValue(
+    [[nodiscard]] std::string_view UnparsedBcgnGameHeader::getAdditionalTagValue(
         std::string_view namesv
         ) const
     {
@@ -986,7 +986,7 @@ namespace bcgn
         return {};
     }
 
-    [[nodiscard]] Position UnparsedBcgnGame::startPosition() const
+    [[nodiscard]] Position UnparsedBcgnGameHeader::startPosition() const
     {
         if (m_flags.hasCustomStartPos())
         {
@@ -998,17 +998,7 @@ namespace bcgn
         }
     }
 
-    [[nodiscard]] UnparsedBcgnGameMoves UnparsedBcgnGame::moves() const
-    {
-        return UnparsedBcgnGameMoves(m_header, encodedMovetext());
-    }
-
-    [[nodiscard]] UnparsedBcgnGamePositions UnparsedBcgnGame::positions() const
-    {
-        return UnparsedBcgnGamePositions(m_header, encodedMovetext());
-    }
-
-    [[nodiscard]] UnparsedBcgnAdditionalTags UnparsedBcgnGame::additionalTags() const
+    [[nodiscard]] UnparsedBcgnAdditionalTags UnparsedBcgnGameHeader::additionalTags() const
     {
         return UnparsedBcgnAdditionalTags(
             m_flags.hasAdditionalTags()
@@ -1017,18 +1007,18 @@ namespace bcgn
             );
     }
 
-    [[nodiscard]] std::size_t UnparsedBcgnGame::getStringsOffset() const
+    [[nodiscard]] std::size_t UnparsedBcgnGameHeader::getStringsOffset() const
     {
         return 19 + 24 * m_flags.hasCustomStartPos();
     }
 
-    [[nodiscard]] Position UnparsedBcgnGame::getCustomStartPos() const
+    [[nodiscard]] Position UnparsedBcgnGameHeader::getCustomStartPos() const
     {
         const auto pos = CompressedPosition::readFromBigEndian(m_data.data() + 19);
         return pos.decompress();
     }
 
-    void UnparsedBcgnGame::prereadData()
+    void UnparsedBcgnGameHeader::prereadData()
     {
         m_headerLength = readHeaderLength();
         // we convert to unsigned char to prevent sign extension.
@@ -1056,10 +1046,44 @@ namespace bcgn
         m_additionalTagsOffset = offset + m_data[offset] + 1;
     }
 
-    [[nodiscard]] util::UnsignedCharBufferView 
-        UnparsedBcgnGame::encodedMovetext() const
+    [[nodiscard]] std::optional<GameResult> 
+        UnparsedBcgnGameHeader::mapIntToResult(unsigned v) const
     {
-        return m_data.substr(m_headerLength);
+        switch (v)
+        {
+        case 0:
+            return {};
+        case 1:
+            return GameResult::WhiteWin;
+        case 2:
+            return GameResult::BlackWin;
+        case 3:
+            return GameResult::Draw;
+        }
+
+        ASSERT(false);
+        return {};
+    }
+
+    [[nodiscard]] std::uint16_t UnparsedBcgnGameHeader::readHeaderLength() const
+    {
+        return (m_data[2] << 8) | m_data[3];
+    }
+
+    [[nodiscard]] UnparsedBcgnGameHeader UnparsedBcgnGame::gameHeader() const
+    {
+        return UnparsedBcgnGameHeader(m_data);
+    }
+
+    void UnparsedBcgnGame::setFileHeader(BcgnFileHeader header)
+    {
+        m_header = header;
+    }
+
+    void UnparsedBcgnGame::setGameData(util::UnsignedCharBufferView sv)
+    {
+        m_data = sv;
+        prereadData();
     }
 
     [[nodiscard]] std::uint16_t UnparsedBcgnGame::readHeaderLength() const
@@ -1067,8 +1091,59 @@ namespace bcgn
         return (m_data[2] << 8) | m_data[3];
     }
 
-    [[nodiscard]] std::optional<GameResult> 
-        UnparsedBcgnGame::mapIntToResult(unsigned v) const
+    [[nodiscard]] util::UnsignedCharBufferView
+        UnparsedBcgnGame::encodedMovetext() const
+    {
+        return m_data.substr(m_headerLength);
+    }
+
+    [[nodiscard]] UnparsedBcgnGameMoves UnparsedBcgnGame::moves() const
+    {
+        return UnparsedBcgnGameMoves(m_header, encodedMovetext());
+    }
+
+    [[nodiscard]] UnparsedBcgnGamePositions UnparsedBcgnGame::positions() const
+    {
+        return UnparsedBcgnGamePositions(m_header, encodedMovetext());
+    }
+
+    [[nodiscard]] Position UnparsedBcgnGame::startPosition() const
+    {
+        if (m_flags.hasCustomStartPos())
+        {
+            return getCustomStartPos();
+        }
+        else
+        {
+            return Position::startPosition();
+        }
+    }
+
+    [[nodiscard]] std::uint16_t UnparsedBcgnGame::numPlies() const
+    {
+        return m_numPlies;
+    }
+
+    [[nodiscard]] std::optional<GameResult> UnparsedBcgnGame::result() const
+    {
+        return m_result;
+    }
+
+    [[nodiscard]] Position UnparsedBcgnGame::getCustomStartPos() const
+    {
+        const auto pos = CompressedPosition::readFromBigEndian(m_data.data() + 19);
+        return pos.decompress();
+    }
+
+    void UnparsedBcgnGame::prereadData()
+    {
+        m_headerLength = readHeaderLength();
+        m_numPlies = (m_data[4] << 6) | (m_data[5] >> 2);
+        m_result = mapIntToResult(m_data[5] & 3);
+        m_flags = BcgnFlags::decode(m_data[18]);
+    }
+
+    [[nodiscard]] std::optional<GameResult> UnparsedBcgnGame::mapIntToResult(unsigned v) const
     {
         switch (v)
         {

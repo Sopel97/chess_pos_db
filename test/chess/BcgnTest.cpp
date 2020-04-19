@@ -70,19 +70,20 @@ void testBcgnReader(int seed, std::string filename, bcgn::BcgnFileHeader header,
     int i = 0;
     for (auto& game : reader)
     {
-        TEST_ASSERT(game.blackElo() == rand() % 2000 + 1000);
-        TEST_ASSERT(game.whiteElo() == rand() % 2000 + 1000);
-        TEST_ASSERT(game.date() == Date(2020, 4, 17));
-        TEST_ASSERT(game.eco() == Eco('E', 1));
-        TEST_ASSERT(game.round() == i % 4000);
-        TEST_ASSERT(game.whitePlayer() == "whiteplayer");
-        TEST_ASSERT(game.blackPlayer() == "blackplayer");
-        TEST_ASSERT(game.event() == "eventname");
-        TEST_ASSERT(game.site() == "sitesitesite");
+        const auto header = game.gameHeader();
+        TEST_ASSERT(header.blackElo() == rand() % 2000 + 1000);
+        TEST_ASSERT(header.whiteElo() == rand() % 2000 + 1000);
+        TEST_ASSERT(header.date() == Date(2020, 4, 17));
+        TEST_ASSERT(header.eco() == Eco('E', 1));
+        TEST_ASSERT(header.round() == i % 4000);
+        TEST_ASSERT(header.whitePlayer() == "whiteplayer");
+        TEST_ASSERT(header.blackPlayer() == "blackplayer");
+        TEST_ASSERT(header.event() == "eventname");
+        TEST_ASSERT(header.site() == "sitesitesite");
 
         if (rand() % 10 == 0 || true)
         {
-            for (auto&& [name, value] : game.additionalTags())
+            for (auto&& [name, value] : header.additionalTags())
             {
                 if (name == "additionaltag1") TEST_ASSERT(value == "additionalvalue1");
                 if (name == "additionaltag2") TEST_ASSERT(value == "additionalvalue2");
@@ -91,7 +92,7 @@ void testBcgnReader(int seed, std::string filename, bcgn::BcgnFileHeader header,
 
         if (rand() % 10 == 0)
         {
-            TEST_ASSERT(game.hasCustomStartPosition());
+            TEST_ASSERT(header.hasCustomStartPosition());
         }
 
         auto pos = game.startPosition();

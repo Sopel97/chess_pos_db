@@ -473,13 +473,11 @@ namespace bcgn
         const char* m_data;
     };
 
-    struct UnparsedBcgnGame
+    struct UnparsedBcgnGameHeader
     {
-        UnparsedBcgnGame() = default;
+        UnparsedBcgnGameHeader(util::UnsignedCharBufferView sv);
 
         void setFileHeader(BcgnFileHeader header);
-
-        void setGameData(util::UnsignedCharBufferView sv);
 
         [[nodiscard]] std::uint16_t numPlies() const;
 
@@ -508,10 +506,6 @@ namespace bcgn
         [[nodiscard]] std::string_view getAdditionalTagValue(std::string_view namesv) const;
 
         [[nodiscard]] Position startPosition() const;
-
-        [[nodiscard]] UnparsedBcgnGameMoves moves() const;
-
-        [[nodiscard]] UnparsedBcgnGamePositions positions() const;
 
         [[nodiscard]] UnparsedBcgnAdditionalTags additionalTags() const;
 
@@ -542,7 +536,44 @@ namespace bcgn
 
         void prereadData();
 
+        [[nodiscard]] std::uint16_t readHeaderLength() const;
+
+        [[nodiscard]] std::optional<GameResult> mapIntToResult(unsigned v) const;
+    };
+
+    struct UnparsedBcgnGame
+    {
+        UnparsedBcgnGame() = default;
+
+        void setFileHeader(BcgnFileHeader header);
+
+        void setGameData(util::UnsignedCharBufferView sv);
+
+        [[nodiscard]] UnparsedBcgnGameHeader gameHeader() const;
+
+        [[nodiscard]] UnparsedBcgnGameMoves moves() const;
+
+        [[nodiscard]] UnparsedBcgnGamePositions positions() const;
+
+        [[nodiscard]] Position startPosition() const;
+
+        [[nodiscard]] std::uint16_t numPlies() const;
+
+        [[nodiscard]] std::optional<GameResult> result() const;
+
+    private:
+        BcgnFileHeader m_header;
+        util::UnsignedCharBufferView m_data;
+        std::uint16_t m_headerLength;
+        std::uint16_t m_numPlies;
+        std::optional<GameResult> m_result;
+        BcgnFlags m_flags;
+
+        void prereadData();
+
         [[nodiscard]] util::UnsignedCharBufferView encodedMovetext() const;
+
+        [[nodiscard]] Position getCustomStartPos() const;
 
         [[nodiscard]] std::uint16_t readHeaderLength() const;
 
