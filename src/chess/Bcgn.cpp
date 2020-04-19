@@ -46,7 +46,7 @@ namespace bcgn
             invalidHeader();
         }
 
-        for (int i = 7; i < traits::bcgnFileHeaderLength; ++i)
+        for (int i = 8; i < traits::bcgnFileHeaderLength; ++i)
         {
             if (str[i] != '\0')
             {
@@ -1122,7 +1122,14 @@ namespace bcgn
 
     [[nodiscard]] std::uint16_t UnparsedBcgnGame::readHeaderLength() const
     {
-        return (m_data[2] << 8) | m_data[3];
+        if (m_header.isHeaderless)
+        {
+            return 5 + m_flags.hasCustomStartPos() * 24;
+        }
+        else
+        {
+            return (m_data[2] << 8) | m_data[3];
+        }
     }
 
     [[nodiscard]] bool UnparsedBcgnGame::hasCustomStartPosition() const
@@ -1181,7 +1188,6 @@ namespace bcgn
 
     void UnparsedBcgnGame::prereadData()
     {
-        m_headerLength = readHeaderLength();
         if (m_header.isHeaderless)
         {
             m_numPlies = (m_data[2] << 6) | (m_data[3] >> 2);
@@ -1194,6 +1200,7 @@ namespace bcgn
             m_result = mapIntToResult(m_data[5] & 3);
             m_flags = BcgnGameFlags::decode(m_data[18]);
         }
+        m_headerLength = readHeaderLength();
     }
 
     [[nodiscard]] std::optional<GameResult> UnparsedBcgnGame::mapIntToResult(unsigned v) const

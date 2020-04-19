@@ -145,6 +145,7 @@ void testBcgnWriter()
         header.auxCompression = bcgn::BcgnAuxCompression::None;
         header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
         header.version = bcgn::BcgnVersion::Version_0;
+        header.isHeaderless = false;
         std::cerr << "write test_out/test_v0_c0_ac0.bcgn\n";
         testBcgnWriter(seed, "test_out/test_v0_c0_ac0.bcgn", header, numGames);
         std::cerr << "read test_out/test_v0_c0_ac0.bcgn\n";
@@ -156,10 +157,35 @@ void testBcgnWriter()
         header.auxCompression = bcgn::BcgnAuxCompression::None;
         header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
         header.version = bcgn::BcgnVersion::Version_0;
+        header.isHeaderless = false;
         std::cerr << "write test_out/test_v0_c1_ac0.bcgn\n";
         testBcgnWriter(seed, "test_out/test_v0_c1_ac0.bcgn", header, numGames);
         std::cerr << "read test_out/test_v0_c1_ac0.bcgn\n";
         testBcgnReader(seed, "test_out/test_v0_c1_ac0.bcgn", header, numGames);
+    }
+
+    {
+        auto header = bcgn::BcgnFileHeader{};
+        header.auxCompression = bcgn::BcgnAuxCompression::None;
+        header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
+        header.version = bcgn::BcgnVersion::Version_0;
+        header.isHeaderless = true;
+        std::cerr << "write test_out/test_v0_c0_ac0_headerless.bcgn\n";
+        testBcgnWriter(seed, "test_out/test_v0_c0_ac0_headerless.bcgn", header, numGames);
+        std::cerr << "read test_out/test_v0_c0_ac0_headerless.bcgn\n";
+        testBcgnReader(seed, "test_out/test_v0_c0_ac0_headerless.bcgn", header, numGames);
+    }
+
+    {
+        auto header = bcgn::BcgnFileHeader{};
+        header.auxCompression = bcgn::BcgnAuxCompression::None;
+        header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
+        header.version = bcgn::BcgnVersion::Version_0;
+        header.isHeaderless = true;
+        std::cerr << "write test_out/test_v0_c1_ac0_headerless.bcgn\n";
+        testBcgnWriter(seed, "test_out/test_v0_c1_ac0_headerless.bcgn", header, numGames);
+        std::cerr << "read test_out/test_v0_c1_ac0_headerless.bcgn\n";
+        testBcgnReader(seed, "test_out/test_v0_c1_ac0_headerless.bcgn", header, numGames);
     }
 
     {
