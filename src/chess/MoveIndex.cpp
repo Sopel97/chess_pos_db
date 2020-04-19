@@ -134,54 +134,34 @@ namespace move_index
         static_assert(ordinal(PieceType::Rook) == ordinal(PieceType::Knight) + 2);
         static_assert(ordinal(PieceType::Queen) == ordinal(PieceType::Knight) + 3);
 
-        const auto fromRank = from.rank();
+        const auto fromRank =
+            sideToMove == Color::White
+            ? from.rank()
+            : fromOrdinal<Rank>(rank8 - from.rank());
 
-        if (sideToMove == Color::White)
+        Piece promotedPiece = Piece::none();
+        MoveType type;
+        if (fromRank == rank7)
         {
-            if (fromRank == rank7)
-            {
-                const PieceType promotedPiece = fromOrdinal<PieceType>((index & 3) + ordinal(PieceType::Knight));
-                const unsigned offset = (index >> 2) + 7;
-                const Square to = fromOrdinal<Square>(ordinal(from) + offset);
-                return Move::promotion(from, to, Piece(promotedPiece, Color::White));
-            }
-            else
-            {
-                const unsigned offset = index + 7;
-                const Square to = fromOrdinal<Square>(ordinal(from) + offset);
-                if (to == pos.epSquare())
-                {
-                    return Move::enPassant(from, to);
-                }
-                else
-                {
-                    return Move::normal(from, to);
-                }
-            }
+            const PieceType promotedPieceType = fromOrdinal<PieceType>((index & 3) + ordinal(PieceType::Knight));
+            promotedPiece = Piece(promotedPieceType, sideToMove);
+            index >>= 2;
+            type = MoveType::Promotion;
         }
-        else
+
+        int offset = index + 7;
+        if (sideToMove == Color::Black) offset = -offset;
+        const Square to = fromOrdinal<Square>(ordinal(from) + offset);
+
+        if (fromRank != rank7)
         {
-            if (fromRank == rank2)
-            {
-                const PieceType promotedPiece = fromOrdinal<PieceType>((index & 3) + ordinal(PieceType::Knight));
-                const unsigned offset = (index >> 2) + 7;
-                const Square to = fromOrdinal<Square>(ordinal(from) - offset);
-                return Move::promotion(from, to, Piece(promotedPiece, Color::Black));
-            }
-            else
-            {
-                const unsigned offset = index + 7;
-                const Square to = fromOrdinal<Square>(ordinal(from) - offset);
-                if (to == pos.epSquare())
-                {
-                    return Move::enPassant(from, to);
-                }
-                else
-                {
-                    return Move::normal(from, to);
-                }
-            }
+            type =
+                to == pos.epSquare()
+                ? MoveType::EnPassant
+                : MoveType::Normal;
         }
+
+        return Move{ from, to, type, promotedPiece};
     }
 
     [[nodiscard]] Bitboard destinationsBB(PieceType pt, Square from)
