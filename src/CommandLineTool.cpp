@@ -1394,33 +1394,44 @@ namespace command_line_app
 
             bcgnWriter.beginGame();
 
-            std::optional<GameResult> result;
-            Date date;
-            Eco eco;
-            std::string_view event;
-            std::string_view white;
-            std::string_view black;
-            game.getResultDateEcoEventWhiteBlack(
-                result,
-                date,
-                eco,
-                event,
-                white,
-                black
-                );
-
-            bcgnWriter.setWhiteElo(game.whiteElo());
-            bcgnWriter.setBlackElo(game.blackElo());
-            bcgnWriter.setDate(date);
-            bcgnWriter.setEco(eco);
-            bcgnWriter.setRound(game.round());
-            bcgnWriter.setWhitePlayer(white);
-            bcgnWriter.setBlackPlayer(black);
-            bcgnWriter.setEvent(event);
-            bcgnWriter.setSite(game.tag("Site"sv));
-            if (result.has_value())
+            if (header.isHeaderless)
             {
-                bcgnWriter.setResult(*result);
+                const auto result = game.result();
+                if (result.has_value())
+                {
+                    bcgnWriter.setResult(*result);
+                }
+            }
+            else
+            {
+                std::optional<GameResult> result;
+                Date date;
+                Eco eco;
+                std::string_view event;
+                std::string_view white;
+                std::string_view black;
+                game.getResultDateEcoEventWhiteBlack(
+                    result,
+                    date,
+                    eco,
+                    event,
+                    white,
+                    black
+                    );
+
+                bcgnWriter.setWhiteElo(game.whiteElo());
+                bcgnWriter.setBlackElo(game.blackElo());
+                bcgnWriter.setDate(date);
+                bcgnWriter.setEco(eco);
+                bcgnWriter.setRound(game.round());
+                bcgnWriter.setWhitePlayer(white);
+                bcgnWriter.setBlackPlayer(black);
+                bcgnWriter.setEvent(event);
+                bcgnWriter.setSite(game.tag("Site"sv));
+                if (result.has_value())
+                {
+                    bcgnWriter.setResult(*result);
+                }
             }
 
             for (auto&& san : game.moves())
@@ -1475,9 +1486,14 @@ namespace command_line_app
 
             if (args.size() >= 5)
             {
-                if (args[4] == "a")
+                if (args[4].find('a') != std::string::npos)
                 {
                     mode = bcgn::BcgnFileWriter::FileOpenMode::Append;
+                }
+
+                if (args[4].find('h') != std::string::npos)
+                {
+                    header.isHeaderless = true;
                 }
             }
 
