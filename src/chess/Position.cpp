@@ -380,11 +380,9 @@ ReverseMove Position::doMove(const Move& move)
     m_castlingRights &= detail::lookup::preservedCastlingRights[move.to];
 
     m_epSquare = Square::none();
-    if(movedPiece == PieceType::Pawn)
+    if((movedPiece == PieceType::Pawn) & ((ordinal(move.to) ^ ordinal(move.from)) == 16))
     {
         // for double pushes move index differs by 16 or -16;
-        if ((ordinal(move.to) ^ ordinal(move.from)) == 16)
-        {
             const Square potentialEpSquare = fromOrdinal<Square>((ordinal(move.to) + ordinal(move.from)) >> 1);
             // Even though the move has not yet been made we can safely call
             // this function and get the right result because the position of the
@@ -393,7 +391,6 @@ ReverseMove Position::doMove(const Move& move)
             {
                 m_epSquare = potentialEpSquare;
             }
-        }
     }
 
     const Piece captured = BaseType::doMove(move);
