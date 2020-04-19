@@ -44,7 +44,12 @@ namespace bcgn
     //     - 0 = none
     //     - 1 = lz4, for compression used after, on the whole file
     //     - 2 = lz4_DC, for compression used after, on the whole file
-    // - RESERVED          : 25 bytes
+    // - flags             : 1 byte
+    //     - headerless     : 1 bit
+    //     If headerless then game header includes only total_length, 
+    //     ply_count, result, flags, custom_start_pos (if set in flags).
+    //     So at least a total of 2 + 2 + 1 == 5 bytes.
+    // - RESERVED          : 24 bytes
     // - TOTAL             : 32 bytes
     //
     //
@@ -78,6 +83,7 @@ namespace bcgn
     //         Going from least significant bit to most significant:
     //         - has_custom_start_position   : 1 bit
     //         - has_additional_tags         : 1 bit
+    //         This flag has no effect if it's a headerless entry.
     //         - RESERVED                    : 6 bits
     //
     //     If flags[has_custom_start_position]:
@@ -124,7 +130,7 @@ namespace bcgn
         constexpr std::size_t maxGameLength = 256 * 256 - 1;
         constexpr std::size_t maxStringLength = 255;
         constexpr std::size_t minBufferSize = 128ull * 1024ull;
-        constexpr std::size_t minHeaderLength = 23;
+        constexpr std::size_t minHeaderLength = 5; // in headerless
         constexpr std::size_t bcgnFileHeaderLength = 32;
 
         // Because we always ensure the buffer can take another game
@@ -159,6 +165,7 @@ namespace bcgn
         BcgnVersion version = BcgnVersion::Version_0;
         BcgnCompressionLevel compressionLevel = BcgnCompressionLevel::Level_0;
         BcgnAuxCompression auxCompression = BcgnAuxCompression::None;
+        bool isHeaderless = false;
 
         void readFrom(const unsigned char* str);
 
@@ -168,11 +175,11 @@ namespace bcgn
         [[noreturn]] void invalidHeader() const;
     };
 
-    struct BcgnFlags
+    struct BcgnGameFlags
     {
-        BcgnFlags();
+        BcgnGameFlags();
 
-        [[nodiscard]] static BcgnFlags decode(std::uint8_t v);
+        [[nodiscard]] static BcgnGameFlags decode(std::uint8_t v);
 
         void clear();
 
@@ -190,14 +197,14 @@ namespace bcgn
         bool m_hasCustomStartPos;
         bool m_hasAdditionalTags;
 
-        BcgnFlags(bool hasCustomStartPos, bool hasAdditionalTags);
+        BcgnGameFlags(bool hasCustomStartPos, bool hasAdditionalTags);
     };
 
     namespace detail
     {
         struct BcgnGameEntryBuffer
         {
-            BcgnGameEntryBuffer();
+            BcgnGameEntryBuffer(BcgnFileHeader header);
 
             void clear();
 
@@ -241,6 +248,7 @@ namespace bcgn
             [[nodiscard]] std::size_t writeTo(unsigned char* buffer);
 
         private:
+            BcgnFileHeader m_header;
             Date m_date;
             std::uint16_t m_whiteElo;
             std::uint16_t m_blackElo;
@@ -258,7 +266,7 @@ namespace bcgn
             std::uint8_t m_siteLength;
             char m_site[256];
             std::uint16_t m_numPlies;
-            BcgnFlags m_flags;
+            BcgnGameFlags m_flags;
             std::vector<unsigned char> m_movetext;
 
             void writeMovetext(unsigned char*& buffer);
@@ -342,7 +350,7 @@ namespace bcgn
         std::size_t m_numBytesBeingWritten;
         std::future<std::size_t> m_future;
 
-        void writeHeader();
+        void writeFileHeader();
 
         void writeCurrentGame();
 
@@ -523,7 +531,7 @@ namespace bcgn
         std::uint16_t m_blackElo;
         std::uint16_t m_round;
         Eco m_eco;
-        BcgnFlags m_flags;
+        BcgnGameFlags m_flags;
         std::string_view m_whitePlayer;
         std::string_view m_blackPlayer;
         std::string_view m_event;
@@ -551,11 +559,15 @@ namespace bcgn
 
         [[nodiscard]] UnparsedBcgnGameHeader gameHeader() const;
 
+        [[nodiscard]] bool hasGameHeader() const;
+
         [[nodiscard]] UnparsedBcgnGameMoves moves() const;
 
         [[nodiscard]] UnparsedBcgnGamePositions positions() const;
 
         [[nodiscard]] Position startPosition() const;
+
+        [[nodiscard]] bool hasCustomStartPosition() const;
 
         [[nodiscard]] std::uint16_t numPlies() const;
 
@@ -567,7 +579,7 @@ namespace bcgn
         std::uint16_t m_headerLength;
         std::uint16_t m_numPlies;
         std::optional<GameResult> m_result;
-        BcgnFlags m_flags;
+        BcgnGameFlags m_flags;
 
         void prereadData();
 

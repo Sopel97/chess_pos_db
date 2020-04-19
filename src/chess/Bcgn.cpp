@@ -57,6 +57,7 @@ namespace bcgn
         version = static_cast<BcgnVersion>(version_);
         compressionLevel = static_cast<BcgnCompressionLevel>(compressionLevel_);
         auxCompression = static_cast<BcgnAuxCompression>(auxCompression_);
+        isHeaderless = str[7] & 0x80;
     }
 
     [[nodiscard]] std::size_t BcgnFileHeader::writeTo(unsigned char* data)
@@ -70,6 +71,7 @@ namespace bcgn
         *data++ = static_cast<unsigned char>(version);
         *data++ = static_cast<unsigned char>(compressionLevel);
         *data++ = static_cast<unsigned char>(auxCompression);
+        *data++ = ((std::uint8_t)isHeaderless) << 7;
 
         return traits::bcgnFileHeaderLength;
     }
@@ -79,54 +81,54 @@ namespace bcgn
         throw std::runtime_error("Invalid header.");
     }
 
-    BcgnFlags::BcgnFlags() :
+    BcgnGameFlags::BcgnGameFlags() :
         m_hasCustomStartPos(false),
         m_hasAdditionalTags(false)
     {
     }
 
-    [[nodiscard]] BcgnFlags BcgnFlags::decode(std::uint8_t v)
+    [[nodiscard]] BcgnGameFlags BcgnGameFlags::decode(std::uint8_t v)
     {
-        return BcgnFlags(
+        return BcgnGameFlags(
         (v >> 1) & 1,
             v & 1
             );
     }
 
-    void BcgnFlags::clear()
+    void BcgnGameFlags::clear()
     {
         m_hasCustomStartPos = false;
         m_hasAdditionalTags = false;
     }
 
-    void BcgnFlags::setHasCustomStartPos(bool v)
+    void BcgnGameFlags::setHasCustomStartPos(bool v)
     {
         m_hasCustomStartPos = v;
     }
 
-    void BcgnFlags::setHasAdditionalTags(bool v)
+    void BcgnGameFlags::setHasAdditionalTags(bool v)
     {
         m_hasAdditionalTags = v;
     }
 
-    [[nodiscard]] bool BcgnFlags::hasCustomStartPos() const
+    [[nodiscard]] bool BcgnGameFlags::hasCustomStartPos() const
     {
         return m_hasCustomStartPos;
     }
 
-    [[nodiscard]] bool BcgnFlags::hasAdditionalTags() const
+    [[nodiscard]] bool BcgnGameFlags::hasAdditionalTags() const
     {
         return m_hasAdditionalTags;
     }
 
-    [[nodiscard]] std::uint8_t BcgnFlags::encode() const
+    [[nodiscard]] std::uint8_t BcgnGameFlags::encode() const
     {
         return
             ((std::uint8_t)m_hasCustomStartPos << 1)
             | (std::uint8_t)m_hasAdditionalTags;
     }
 
-    BcgnFlags::BcgnFlags(bool hasCustomStartPos, bool hasAdditionalTags) :
+    BcgnGameFlags::BcgnGameFlags(bool hasCustomStartPos, bool hasAdditionalTags) :
         m_hasCustomStartPos(hasCustomStartPos),
         m_hasAdditionalTags(hasAdditionalTags)
     {
@@ -134,7 +136,8 @@ namespace bcgn
 
     namespace detail
     {
-        BcgnGameEntryBuffer::BcgnGameEntryBuffer() :
+        BcgnGameEntryBuffer::BcgnGameEntryBuffer(BcgnFileHeader header) :
+            m_header(header),
             m_date{},
             m_whiteElo{},
             m_blackElo{},
@@ -302,20 +305,27 @@ namespace bcgn
             m_flags.setHasCustomStartPos(m_customStartPos.has_value());
 
             writeBigEndian(buffer, (std::uint16_t)totalLength);
-            writeBigEndian(buffer, (std::uint16_t)headerLength);
+
+            if (!m_header.isHeaderless)
+            {
+                writeBigEndian(buffer, (std::uint16_t)headerLength);
+            }
 
             *buffer++ = m_numPlies >> 6; // 8 highest (of 14) bits
             *buffer++ = (m_numPlies << 2) | mapResultToInt();
 
-            writeBigEndian(buffer, m_date.year());
-            *buffer++ = m_date.month();
-            *buffer++ = m_date.day();
+            if (!m_header.isHeaderless)
+            {
+                writeBigEndian(buffer, m_date.year());
+                *buffer++ = m_date.month();
+                *buffer++ = m_date.day();
 
-            writeBigEndian(buffer, m_whiteElo);
-            writeBigEndian(buffer, m_blackElo);
-            writeBigEndian(buffer, m_round);
-            *buffer++ = m_eco.category();
-            *buffer++ = m_eco.index();
+                writeBigEndian(buffer, m_whiteElo);
+                writeBigEndian(buffer, m_blackElo);
+                writeBigEndian(buffer, m_round);
+                *buffer++ = m_eco.category();
+                *buffer++ = m_eco.index();
+            }
 
             *buffer++ = m_flags.encode();
 
@@ -325,18 +335,21 @@ namespace bcgn
                 buffer += sizeof(CompressedPosition);
             }
 
-            writeString(buffer, m_white, m_whiteLength);
-            writeString(buffer, m_black, m_blackLength);
-            writeString(buffer, m_event, m_eventLength);
-            writeString(buffer, m_site, m_siteLength);
-
-            if (!m_additionalTags.empty())
+            if (!m_header.isHeaderless)
             {
-                *buffer++ = (std::uint8_t)m_additionalTags.size();
-                for (auto&& [name, value] : m_additionalTags)
+                writeString(buffer, m_white, m_whiteLength);
+                writeString(buffer, m_black, m_blackLength);
+                writeString(buffer, m_event, m_eventLength);
+                writeString(buffer, m_site, m_siteLength);
+
+                if (!m_additionalTags.empty())
                 {
-                    writeString(buffer, name);
-                    writeString(buffer, value);
+                    *buffer++ = (std::uint8_t)m_additionalTags.size();
+                    for (auto&& [name, value] : m_additionalTags)
+                    {
+                        writeString(buffer, name);
+                        writeString(buffer, value);
+                    }
                 }
             }
 
@@ -416,7 +429,15 @@ namespace bcgn
                 1 + // flags
                 4; // lengths of 4 mandatory strings
 
-            std::size_t length = lengthOfMandatoryFixedLengthFields;
+            constexpr std::size_t lengthOfHeaderlessMandatoryFixedLengthFields =
+                2 + // length
+                2 + // ply + result
+                1; // flags
+
+            std::size_t length =
+                m_header.isHeaderless
+                ? lengthOfHeaderlessMandatoryFixedLengthFields
+                : lengthOfMandatoryFixedLengthFields;
 
             if (m_customStartPos.has_value())
             {
@@ -424,19 +445,22 @@ namespace bcgn
                 length += sizeof(CompressedPosition);
             }
 
-            length += m_whiteLength;
-            length += m_blackLength;
-            length += m_eventLength;
-            length += m_siteLength;
-
-            if (!m_additionalTags.empty())
+            if (!m_header.isHeaderless)
             {
-                length += 1;
-                for (auto&& [name, value] : m_additionalTags)
+                length += m_whiteLength;
+                length += m_blackLength;
+                length += m_eventLength;
+                length += m_siteLength;
+
+                if (!m_additionalTags.empty())
                 {
-                    length += 2; // for two length specifications
-                    length += std::min(traits::maxStringLength, name.size());
-                    length += std::min(traits::maxStringLength, value.size());
+                    length += 1;
+                    for (auto&& [name, value] : m_additionalTags)
+                    {
+                        length += 2; // for two length specifications
+                        length += std::min(traits::maxStringLength, name.size());
+                        length += std::min(traits::maxStringLength, value.size());
+                    }
                 }
             }
 
@@ -451,7 +475,7 @@ namespace bcgn
         std::size_t bufferSize
         ) :
         m_header(header),
-        m_game(std::make_unique<detail::BcgnGameEntryBuffer>()),
+        m_game(std::make_unique<detail::BcgnGameEntryBuffer>(header)),
         m_file(nullptr, &std::fclose),
         m_path(path),
         m_buffer(std::max(bufferSize, traits::minBufferSize)),
@@ -471,7 +495,7 @@ namespace bcgn
 
         if (needsHeader)
         {
-            writeHeader();
+            writeFileHeader();
         }
     }
 
@@ -617,7 +641,7 @@ namespace bcgn
         flush();
     }
 
-    void BcgnFileWriter::writeHeader()
+    void BcgnFileWriter::writeFileHeader()
     {
         unsigned char* data = m_buffer.data();
         m_numBytesUsedInFrontBuffer += m_header.writeTo(data);
@@ -1032,7 +1056,7 @@ namespace bcgn
 
         m_eco = Eco(m_data[16], m_data[17]);
 
-        m_flags = BcgnFlags::decode(m_data[18]);
+        m_flags = BcgnGameFlags::decode(m_data[18]);
 
         std::size_t offset = getStringsOffset();
         m_whitePlayer = m_data.substr(offset + 1, m_data[offset]).toStringView();
@@ -1072,7 +1096,17 @@ namespace bcgn
 
     [[nodiscard]] UnparsedBcgnGameHeader UnparsedBcgnGame::gameHeader() const
     {
+        if (m_header.isHeaderless)
+        {
+            throw std::runtime_error("IsHeaderless flag is set. Header inaccessible.");
+        }
+
         return UnparsedBcgnGameHeader(m_data);
+    }
+
+    [[nodiscard]] bool UnparsedBcgnGame::hasGameHeader() const
+    {
+        return !m_header.isHeaderless;
     }
 
     void UnparsedBcgnGame::setFileHeader(BcgnFileHeader header)
@@ -1089,6 +1123,11 @@ namespace bcgn
     [[nodiscard]] std::uint16_t UnparsedBcgnGame::readHeaderLength() const
     {
         return (m_data[2] << 8) | m_data[3];
+    }
+
+    [[nodiscard]] bool UnparsedBcgnGame::hasCustomStartPosition() const
+    {
+        return m_flags.hasCustomStartPos();
     }
 
     [[nodiscard]] util::UnsignedCharBufferView
@@ -1131,16 +1170,30 @@ namespace bcgn
 
     [[nodiscard]] Position UnparsedBcgnGame::getCustomStartPos() const
     {
-        const auto pos = CompressedPosition::readFromBigEndian(m_data.data() + 19);
+        // Assumes the entry exists.
+        const std::size_t offset =
+            m_header.isHeaderless
+            ? 5
+            : 19;
+        const auto pos = CompressedPosition::readFromBigEndian(m_data.data() + offset);
         return pos.decompress();
     }
 
     void UnparsedBcgnGame::prereadData()
     {
         m_headerLength = readHeaderLength();
-        m_numPlies = (m_data[4] << 6) | (m_data[5] >> 2);
-        m_result = mapIntToResult(m_data[5] & 3);
-        m_flags = BcgnFlags::decode(m_data[18]);
+        if (m_header.isHeaderless)
+        {
+            m_numPlies = (m_data[2] << 6) | (m_data[3] >> 2);
+            m_result = mapIntToResult(m_data[3] & 3);
+            m_flags = BcgnGameFlags::decode(m_data[4]);
+        }
+        else
+        {
+            m_numPlies = (m_data[4] << 6) | (m_data[5] >> 2);
+            m_result = mapIntToResult(m_data[5] & 3);
+            m_flags = BcgnGameFlags::decode(m_data[18]);
+        }
     }
 
     [[nodiscard]] std::optional<GameResult> UnparsedBcgnGame::mapIntToResult(unsigned v) const
