@@ -14,6 +14,8 @@ Then 3 runs are made and the average is taken.
 All files have the same 1 457 174 games and 100 774 756 positions.
 The file used is stripped lichess_db_standard_rated_2015-01 with <5 ply games removed.
 
+Tested on old i7-920 and DDR3-1066 DRAM.
+
 |Format|Size [MB]|Time [s]|Games/s|Positions/s|Throughput [MB/s]|Speedup|
 |-|-|-|-|-|-|-|
 |.pgn|1 157|13.159|109 178|7 543 642|86.621|1|
