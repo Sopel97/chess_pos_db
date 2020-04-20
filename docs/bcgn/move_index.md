@@ -294,11 +294,13 @@ Each knight promotion makes it smaller.
 Each bishop promotion adds 1, each rook promotion adds 2, each queen promotion add 15.
 We consider N queen promotions and 8-N rook promotions. This is the parametrized worst case.
 Then the total amount is `2 + 8*2 + 13*2 + 14*(2+8-N) + 27*(1+N) + 8 == 219 + 13N`.
-So for different N we have:
+So for different `N` we have:
+```
 N = 0 -> 219
 N = 1 -> 232
 N = 2 -> 245
 N = 3 -> 258 > 255 // we cannot encode this value in one byte.
+```
 Hence for positions with at least 3 queens we use a 16 bit index (for ease of parsing we want whole bytes).
 These positions are so rare that it doesn't have a noticable impact on the compression.
 
