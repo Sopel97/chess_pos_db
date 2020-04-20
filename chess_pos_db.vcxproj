@@ -73,6 +73,7 @@
     <ClInclude Include="src\persistence\pos_db\Database.h" />
     <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h" />
+    <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h" />
     <ClInclude Include="src\persistence\pos_db\Query.h" />
     <ClInclude Include="src\persistence\pos_db\StorageHeader.h" />
     <ClInclude Include="src\util\ArithmeticUtility.h" />
@@ -105,6 +106,7 @@
     <ClCompile Include="src\persistence\pos_db\Database.cpp" />
     <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp" />
+    <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp" />
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
     <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp" />
     <ClCompile Include="src\util\MemoryAmount.cpp" />

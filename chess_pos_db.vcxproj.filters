@@ -109,6 +109,12 @@
     <Filter Include="Source Files\src\persistence\pos_db\delta">
       <UniqueIdentifier>{6caf5f73-4e52-4734-971f-33d1a295f7ab}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\src\persistence\pos_db\epsilon">
+      <UniqueIdentifier>{abb29530-fc28-42af-b10a-5d71847d44a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\persistence\pos_db\epsilon">
+      <UniqueIdentifier>{34c1335f-56b2-4f06-ba15-75bf010e1f43}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\algorithm\Unsort.h">
@@ -228,6 +234,9 @@
     <ClInclude Include="src\util\Buffer.h">
       <Filter>Header Files\src\util</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h">
+      <Filter>Header Files\src\persistence\pos_db\epsilon</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -313,6 +322,9 @@
     </ClCompile>
     <ClCompile Include="test\chess\BcgnTest.cpp">
       <Filter>Source Files\test\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp">
+      <Filter>Source Files\src\persistence\pos_db\epsilon</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

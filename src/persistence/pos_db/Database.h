@@ -55,6 +55,9 @@ namespace persistence
         DatabaseStats& operator+=(const ImportStats& rhs);
     };
 
+    // TODO: use enum for signifying type (PGN, BCGN).
+    //       rename to ImportableFile or something.
+    //       Each database has to switch on the type. They are to different to have a common interface.
     using ImportablePgnFilePath = std::filesystem::path;
     using ImportablePgnFilePaths = std::vector<std::filesystem::path>;
 
