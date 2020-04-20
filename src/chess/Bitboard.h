@@ -10,6 +10,9 @@
 #include "util/ArithmeticUtility.h"
 #include "util/Assert.h"
 
+#include <cstdint>
+#include <iterator>
+
 struct BitboardIterator
 {
     using value_type = Square;

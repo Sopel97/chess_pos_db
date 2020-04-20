@@ -417,16 +417,16 @@ namespace persistence
 
         struct Database final : persistence::Database
         {
-        private:
-            using BaseType = persistence::Database;
-
-            static inline const DatabaseManifest m_manifest = { "db_alpha", true };
-
             template <typename T>
             using PerPartition = EnumArray2<GameLevel, GameResult, T>;
 
             template <typename T>
             using PerPartitionWithSpecificGameLevel = EnumArray<GameResult, T>;
+
+        private:
+            using BaseType = persistence::Database;
+
+            static inline const DatabaseManifest m_manifest = { "db_alpha", true };
 
             using PartitionStorageType = PerPartition<detail::Partition>;
 

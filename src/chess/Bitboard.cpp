@@ -9,6 +9,8 @@
 
 #include "util/Assert.h"
 
+#include <array>
+
 namespace bb
 {
     namespace detail

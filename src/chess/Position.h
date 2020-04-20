@@ -9,6 +9,7 @@
 
 #include "util/Assert.h"
 
+#include <cstdint>
 #include <optional>
 #include <string_view>
 

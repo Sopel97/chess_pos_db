@@ -1349,6 +1349,9 @@ namespace command_line_app
 
     static void tcp(const Args& args)
     {
+#if defined(__clang__)
+        throw std::runtime_error("Problems with brynet with clang-cl. Not available right now.");
+#else
         if (args.size() == 3)
         {
             const int port = std::stoi(args[2]);
@@ -1373,6 +1376,7 @@ namespace command_line_app
         {
             throwInvalidArguments();
         }
+#endif
     }
 
     static void convertPgnToBcgnImpl(

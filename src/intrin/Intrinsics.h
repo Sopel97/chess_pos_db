@@ -123,7 +123,7 @@ namespace intrin
 {
     [[nodiscard]] inline int popcount(std::uint64_t b)
     {
-#if defined(_MSC_VER) || defined(__INTEL_COMPILER)
+#if (defined(_MSC_VER) || defined(__INTEL_COMPILER)) && !defined(__clang__)
 
         return static_cast<int>(_mm_popcnt_u64(b));
 
@@ -134,7 +134,7 @@ namespace intrin
 #endif
     }
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
 
     [[nodiscard]] inline int lsb(std::uint64_t value)
     {
@@ -163,7 +163,7 @@ namespace intrin
         return __builtin_ctzll(value);
     }
 
-    [[nodiscard]] inline Square msb(std::uint64_t value)
+    [[nodiscard]] inline int msb(std::uint64_t value)
     {
         ASSERT(value != 0);
 
