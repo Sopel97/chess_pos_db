@@ -1112,11 +1112,6 @@ namespace persistence
 
         void Database::disableUnsupportedQueryFeatures(query::Request& query) const
         {
-            for (auto&& [select, fetch] : query.fetchingOptions)
-            {
-                fetch.fetchLastGame = false;
-                fetch.fetchLastGameForEachChild = false;
-            }
         }
 
         [[nodiscard]] query::PositionQueryResults Database::commitStatsAsResults(
