@@ -99,8 +99,6 @@ namespace move_index
         static_assert(ordinal(PieceType::Rook) == ordinal(PieceType::Knight) + 2);
         static_assert(ordinal(PieceType::Queen) == ordinal(PieceType::Knight) + 3);
 
-        const auto fromRank = from.rank();
-
         unsigned idx;
         if (sideToMove == Color::White)
         {
@@ -118,8 +116,8 @@ namespace move_index
         if (promotedPieceType != PieceType::None)
         {
             ASSERT(
-                (sideToMove == Color::White && fromRank == rank7)
-                || (sideToMove == Color::Black && fromRank == rank2));
+                (sideToMove == Color::White && from.rank() == rank7)
+                || (sideToMove == Color::Black && from.rank() == rank2));
 
             idx <<= 2;
             idx += ordinal(promotedPieceType) - ordinal(PieceType::Knight);
@@ -171,7 +169,9 @@ namespace move_index
 
     [[nodiscard]] bool requiresLongMoveIndex(const Position& pos)
     {
-        return pos.pieceCount(Piece(PieceType::Queen, pos.sideToMove())) > 3;
+        // 2 + 8*2 + 13*2 + 14*(2+8-N) + 27*(1+N) + 8 == 219 + 13N
+        // For N = 2 it is < 256, for N = 3 it is >= 256
+        return pos.pieceCount(Piece(PieceType::Queen, pos.sideToMove())) > 2;
     }
 
     template <typename IntT, unsigned MaxV>
@@ -268,9 +268,9 @@ namespace move_index
     namespace detail
     {
         template <PieceType Pt>
-        FORCEINLINE static bool indexToMoveForPieceType(const Position& pos, unsigned index, Color sideToMove, Square& from, Square& to, unsigned& offset)
+        FORCEINLINE static bool indexToMoveForPieceType(const Position& pos, unsigned index, Square& from, Square& to, unsigned& offset)
         {
-            const Piece piece = Piece(Pt, sideToMove);
+            const Piece piece = Piece(Pt, pos.sideToMove());
             const unsigned nextOffset = offset + maxDestinationCount(Pt) * pos.pieceCount(piece);
 
             if (index < nextOffset)
@@ -356,16 +356,16 @@ namespace move_index
             // Manually unrolled.
             Move move{};
             if (detail::indexToMoveForPieceType<PieceType::Knight>(
-                pos, index, sideToMove, move.from, move.to, offset)) return move;
+                pos, index, move.from, move.to, offset)) return move;
 
             if (detail::indexToMoveForPieceType<PieceType::Bishop>(
-                pos, index, sideToMove, move.from, move.to, offset)) return move;
+                pos, index, move.from, move.to, offset)) return move;
 
             if (detail::indexToMoveForPieceType<PieceType::Rook>(
-                pos, index, sideToMove, move.from, move.to, offset)) return move;
+                pos, index, move.from, move.to, offset)) return move;
 
             if (detail::indexToMoveForPieceType<PieceType::Queen>(
-                pos, index, sideToMove, move.from, move.to, offset)) return move;
+                pos, index, move.from, move.to, offset)) return move;
         }
 
         // This should not be reachable.
