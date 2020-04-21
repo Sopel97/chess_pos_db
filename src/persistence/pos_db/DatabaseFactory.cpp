@@ -23,5 +23,7 @@ namespace persistence
         {
             manifests[name] = fac->supportManifest();
         }
+
+        return manifests;
     }
 }
