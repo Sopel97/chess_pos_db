@@ -62,6 +62,9 @@ namespace persistence
         Unknown
     };
 
+    [[nodiscard]] const std::string& importableFileTypeExtension(ImportableFileType type);
+    [[nodiscard]] ImportableFileType importableFileTypeFromPath(const std::filesystem::path path);
+
     using ImportableFilePath = std::filesystem::path;
     using ImportableFilePaths = std::vector<std::filesystem::path>;
 
@@ -84,6 +87,11 @@ namespace persistence
     };
 
     using ImportableFiles = std::vector<ImportableFile>;
+
+    struct DatabaseSupportManifest
+    {
+        std::vector<ImportableFileType> importableFileTypes;
+    };
 
     struct DatabaseManifest
     {

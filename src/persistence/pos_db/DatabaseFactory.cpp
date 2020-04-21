@@ -7,11 +7,21 @@ namespace persistence
         auto it = m_factories.find(key);
         if (it == m_factories.end()) return nullptr;
 
-        return it->second(path);
+        return it->second->create(path);
     }
 
-    [[nodiscard]] DatabaseFactory::SpecificDatabaseFactory DatabaseFactory::at(const std::string& key) const
+    [[nodiscard]] const SpecificDatabaseFactoryBase& DatabaseFactory::at(const std::string& key) const
     {
-        return m_factories.at(key);
+        return *m_factories.at(key);
+    }
+
+    [[nodiscard]] std::map<std::string, DatabaseSupportManifest> DatabaseFactory::supportManifests() const
+    {
+        std::map<std::string, DatabaseSupportManifest> manifests;
+
+        for (auto&& [name, fac] : m_factories)
+        {
+            manifests[name] = fac->supportManifest();
+        }
     }
 }

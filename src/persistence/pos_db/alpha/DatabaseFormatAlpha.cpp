@@ -908,6 +908,15 @@ namespace persistence
             return m_manifest.key;
         }
 
+        [[nodiscard]] const DatabaseSupportManifest& Database::supportManifest()
+        {
+            static const DatabaseSupportManifest manifest = {
+                { ImportableFileType::Pgn }
+            };
+
+            return manifest;
+        }
+
         [[nodiscard]] const DatabaseManifest& Database::manifest() const
         {
             return m_manifest;

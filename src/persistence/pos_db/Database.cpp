@@ -90,11 +90,26 @@ namespace persistence
         return *this;
     }
 
-    [[nodiscard]] static ImportableFileType fileTypeFromPath(const std::filesystem::path path)
+    [[nodiscard]] const std::string& importableFileTypeExtension(ImportableFileType type)
+    {
+        static std::string extensions[] = {
+            ".pgn",
+            ".bcgn",
+            ""
+        };
+
+        return extensions[static_cast<int>(type)];
+    }
+
+    [[nodiscard]] ImportableFileType importableFileTypeFromPath(const std::filesystem::path path)
     {
         const auto extension = path.extension();
-        if (extension == ".pgn") return ImportableFileType::Pgn;
-        if (extension == ".pgn") return ImportableFileType::Bcgn;
+
+        if (extension == importableFileTypeExtension(ImportableFileType::Pgn)) 
+            return ImportableFileType::Pgn;
+
+        if (extension == importableFileTypeExtension(ImportableFileType::Bcgn))
+            return ImportableFileType::Bcgn;
 
         return ImportableFileType::Unknown;
     }
@@ -102,7 +117,7 @@ namespace persistence
     ImportableFile::ImportableFile(std::filesystem::path path, GameLevel level) :
         m_path(std::move(path)),
         m_level(level),
-        m_type(fileTypeFromPath(m_path))
+        m_type(importableFileTypeFromPath(m_path))
     {
     }
 

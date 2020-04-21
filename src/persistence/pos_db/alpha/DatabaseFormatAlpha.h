@@ -457,6 +457,8 @@ namespace persistence
 
             [[nodiscard]] static const std::string& key();
 
+            [[nodiscard]] static const DatabaseSupportManifest& supportManifest();
+
             [[nodiscard]] const DatabaseManifest& manifest() const override;
 
             void clear() override;

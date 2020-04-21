@@ -9,25 +9,46 @@
 
 namespace persistence
 {
+    struct SpecificDatabaseFactoryBase
+    {
+        [[nodiscard]] virtual std::unique_ptr<Database> create(const std::filesystem::path&) const = 0;
+
+        [[nodiscard]] virtual DatabaseSupportManifest supportManifest() const = 0;
+
+        virtual ~SpecificDatabaseFactoryBase() {};
+    };
+
+    template <typename DatabaseT>
+    struct SpecificDatabaseFactory : SpecificDatabaseFactoryBase
+    {
+        [[nodiscard]] std::unique_ptr<Database> create(const std::filesystem::path& path) const override
+        {
+            return std::make_unique<DatabaseT>(path);
+        }
+
+        [[nodiscard]] DatabaseSupportManifest supportManifest() const override
+        {
+            return DatabaseT::supportManifest();
+        }
+    };
+
     struct DatabaseFactory
     {
-        using SpecificDatabaseFactory = std::unique_ptr<Database>(*)(const std::filesystem::path&);
-
         DatabaseFactory() = default;
 
         template <typename DatabaseT>
         void registerDatabaseType()
         {
-            m_factories[DatabaseT::key()] = [](const std::filesystem::path& path) -> std::unique_ptr<Database> {
-                return std::make_unique<DatabaseT>(path);
-            };
+            m_factories[DatabaseT::key()] = std::make_unique<SpecificDatabaseFactory<DatabaseT>>();
         }
 
         [[nodiscard]] std::unique_ptr<Database> tryInstantiateByKey(const std::string& key, const std::filesystem::path& path) const;
 
-        [[nodiscard]] SpecificDatabaseFactory at(const std::string& key) const;
+        [[nodiscard]] const SpecificDatabaseFactoryBase& at(const std::string& key) const;
+
+        [[nodiscard]] std::map<std::string, DatabaseSupportManifest> supportManifests() const;
 
     private:
-        std::map<std::string, SpecificDatabaseFactory> m_factories;
+        std::map<std::string, std::unique_ptr<SpecificDatabaseFactoryBase>> m_factories;
     };
 }
