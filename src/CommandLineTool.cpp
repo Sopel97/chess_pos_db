@@ -1674,6 +1674,80 @@ namespace command_line_app
         }
     }
 
+    template <typename ReaderT>
+    static void statsImpl(const std::filesystem::path& path, std::size_t memory)
+    {
+        ReaderT reader(path, memory);
+        std::size_t numGames = 0;
+        std::size_t numPositions = 0;
+        std::size_t numWhiteWins = 0;
+        std::size_t numDraws = 0;
+        std::size_t numBlackWins = 0;
+        for (auto&& game : reader)
+        {
+            auto result = game.result();
+            if (result.has_value())
+            {
+                if (*result == GameResult::WhiteWin) numWhiteWins += 1;
+                else if (*result == GameResult::Draw) numDraws += 1;
+                else numBlackWins += 1;
+            }
+
+            numGames += 1;
+            if constexpr (std::is_same_v<ReaderT, pgn::LazyPgnFileReader>)
+            {
+                for (auto&& position : game.positions())
+                {
+                    numPositions += 1;
+                }
+            }
+            else
+            {
+                numPositions += game.numPlies() + 1;
+            }
+        }
+
+        const auto size = std::filesystem::file_size(path);
+        std::cout << "File size : " << size << '\n';
+        std::cout << "Games     : " << numGames << '\n';
+        std::cout << "Positions : " << numPositions << '\n';
+        std::cout << "Wins      : " << numWhiteWins << '\n';
+        std::cout << "Draws     : " << numDraws << '\n';
+        std::cout << "Losses    : " << numBlackWins << '\n';
+    }
+
+    static void statsPgn(const std::filesystem::path& path)
+    {
+        statsImpl<pgn::LazyPgnFileReader>(path, pgnParserMemory);
+    }
+
+    static void statsBcgn(const std::filesystem::path& path)
+    {
+        statsImpl<bcgn::BcgnFileReader>(path, bcgnParserMemory);
+    }
+
+    static void stats(const Args& args)
+    {
+        if (args.size() < 2)
+        {
+            throwInvalidArguments();
+        }
+
+        const std::filesystem::path path = args[1];
+        if (path.extension() == ".pgn")
+        {
+            statsPgn(path);
+        }
+        else if (path.extension() == ".bcgn")
+        {
+            statsBcgn(path);
+        }
+        else
+        {
+            throwInvalidArguments();
+        }
+    }
+
     void runCommand(const std::vector<std::string>& args)
     {
         static const std::map<std::string, CommandHandler> s_commandHandlers = {
@@ -1683,6 +1757,7 @@ namespace command_line_app
             { "tcp", tcp },
             { "convert", convert },
             { "count_games", countGames },
+            { "stats", stats },
             { "bench", bench }
         };
 
