@@ -85,7 +85,9 @@ namespace persistence
                         if (lhs.m_hash[1] < rhs.m_hash[1]) return true;
                         else if (lhs.m_hash[1] > rhs.m_hash[1]) return false;
 
-                        return ((lhs.m_hash[2] & reverseMoveMask) < (rhs.m_hash[2] & reverseMoveMask));
+                        return 
+                            (lhs.m_hash[2] & (reverseMoveMask | lastHashPartMask)) 
+                            < (rhs.m_hash[2] & (reverseMoveMask | lastHashPartMask));
                     }
                 };
 
@@ -124,7 +126,9 @@ namespace persistence
                         return
                             lhs.m_hash[0] == rhs.m_hash[0]
                             && lhs.m_hash[1] == rhs.m_hash[1]
-                            && (lhs.m_hash[2] & reverseMoveMask) == (rhs.m_hash[2] & reverseMoveMask);
+                            && 
+                            (lhs.m_hash[2] & (reverseMoveMask | lastHashPartMask)) 
+                            == (rhs.m_hash[2] & (reverseMoveMask | lastHashPartMask));
                     }
                 };
 
