@@ -1221,6 +1221,38 @@ namespace command_line_app
         }
     }
 
+    static void handleTcpCommandSupport(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+
+        auto manifests = g_factory.supportManifests();
+        auto manifestsJson = nlohmann::json::object();
+        for (auto&& [name, manifest] : manifests)
+        {
+            auto supportedTypesJson = nlohmann::json::array();
+            for (auto type : manifest.importableFileTypes)
+            {
+                supportedTypesJson.emplace_back(persistence::importableFileTypeExtension(type));
+            }
+
+            manifestsJson[name] = nlohmann::json{
+                "support_manifest", nlohmann::json{
+                    "supported_file_types", supportedTypesJson
+                    }
+            };
+        }
+
+        auto response = nlohmann::json{
+            { "support_manifests", manifestsJson }
+        };
+
+        auto responseStr = nlohmann::json(response).dump();
+        sendMessage(session, responseStr);
+    }
+
     static bool handleTcpCommand(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
@@ -1235,7 +1267,8 @@ namespace command_line_app
             { "close", handleTcpCommandClose },
             { "query", handleTcpCommandQuery },
             { "stats", handleTcpCommandStats },
-            { "dump", handleTcpCommandDump }
+            { "dump", handleTcpCommandDump },
+            { "support", handleTcpCommandSupport }
         };
 
         auto datastr = std::string(data, len);
