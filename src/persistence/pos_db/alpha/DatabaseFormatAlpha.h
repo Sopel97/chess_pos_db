@@ -471,7 +471,7 @@ namespace persistence
 
             ImportStats import(
                 std::execution::parallel_unsequenced_policy,
-                const ImportablePgnFiles& pgns,
+                const ImportableFiles& pgns,
                 std::size_t memory,
                 std::size_t numThreads = std::thread::hardware_concurrency(),
                 ImportProgressCallback progressCallback = {}
@@ -479,13 +479,13 @@ namespace persistence
 
             ImportStats import(
                 std::execution::sequenced_policy,
-                const ImportablePgnFiles& pgns,
+                const ImportableFiles& pgns,
                 std::size_t memory,
                 ImportProgressCallback progressCallback = {}
                 ) override;
 
             ImportStats import(
-                const ImportablePgnFiles& pgns, 
+                const ImportableFiles& pgns, 
                 std::size_t memory,
                 ImportProgressCallback progressCallback = {}
             ) override;
@@ -500,8 +500,8 @@ namespace persistence
 
             struct Block
             {
-                typename std::vector<std::filesystem::path>::const_iterator begin;
-                typename std::vector<std::filesystem::path>::const_iterator end;
+                typename ImportableFiles::const_iterator begin;
+                typename ImportableFiles::const_iterator end;
                 PerPartitionWithSpecificGameLevel<std::uint32_t> nextIds;
             };
 
@@ -523,13 +523,13 @@ namespace persistence
             ImportStats importPgnsImpl(
                 std::execution::sequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
-                const ImportablePgnFilePaths& paths,
+                const ImportableFiles& files,
                 GameLevel level,
                 std::function<void(const std::filesystem::path& file)> completionCallback
             );
 
             [[nodiscard]] std::vector<Block> divideIntoBlocks(
-                const ImportablePgnFilePaths& paths,
+                const ImportableFiles& files,
                 GameLevel level,
                 std::size_t bufferSize,
                 std::size_t numBlocks
@@ -538,7 +538,7 @@ namespace persistence
             ImportStats importPgnsImpl(
                 std::execution::parallel_unsequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
-                const ImportablePgnFilePaths& paths,
+                const ImportableFiles& files,
                 GameLevel level,
                 std::size_t bufferSize,
                 std::size_t numThreads

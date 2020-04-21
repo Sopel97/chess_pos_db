@@ -650,7 +650,7 @@ namespace persistence
 
             ImportStats import(
                 std::execution::parallel_unsequenced_policy,
-                const ImportablePgnFiles& pgns,
+                const ImportableFiles& files,
                 std::size_t memory,
                 std::size_t numThreads = std::thread::hardware_concurrency(),
                 ImportProgressCallback progressCallback = {}
@@ -658,13 +658,13 @@ namespace persistence
 
             ImportStats import(
                 std::execution::sequenced_policy,
-                const ImportablePgnFiles& pgns,
+                const ImportableFiles& files,
                 std::size_t memory,
                 ImportProgressCallback progressCallback = {}
             ) override;
 
             ImportStats import(
-                const ImportablePgnFiles& pgns,
+                const ImportableFiles& files,
                 std::size_t memory,
                 ImportProgressCallback progressCallback = {}
             ) override;
@@ -704,19 +704,19 @@ namespace persistence
             ImportStats importPgnsImpl(
                 std::execution::sequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
-                const ImportablePgnFiles& pgns,
+                const ImportableFiles& files,
                 std::function<void(const std::filesystem::path& file)> completionCallback
             );
 
             struct Block
             {
-                typename ImportablePgnFiles::const_iterator begin;
-                typename ImportablePgnFiles::const_iterator end;
+                typename ImportableFiles::const_iterator begin;
+                typename ImportableFiles::const_iterator end;
                 std::uint32_t nextId;
             };
 
             [[nodiscard]] std::vector<Block> divideIntoBlocks(
-                const ImportablePgnFiles& pgns,
+                const ImportableFiles& files,
                 std::size_t bufferSize,
                 std::size_t numBlocks
             );
@@ -724,7 +724,7 @@ namespace persistence
             ImportStats importPgnsImpl(
                 std::execution::parallel_unsequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
-                const ImportablePgnFiles& paths,
+                const ImportableFiles& files,
                 std::size_t bufferSize,
                 std::size_t numThreads
             );

@@ -839,12 +839,12 @@ namespace persistence
                 return buffers;
             }
 
-            [[nodiscard]] static EnumArray<GameLevel, ImportablePgnFilePaths> partitionPathsByLevel(ImportablePgnFiles files)
+            [[nodiscard]] static EnumArray<GameLevel, ImportableFiles> partitionInputFilesByLevel(ImportableFiles files)
             {
-                EnumArray<GameLevel, ImportablePgnFilePaths> partitioned;
+                EnumArray<GameLevel, ImportableFiles> partitioned;
                 for (auto&& file : files)
                 {
-                    partitioned[file.level()].emplace_back(std::move(file).path());
+                    partitioned[file.level()].emplace_back(std::move(file));
                 }
                 return partitioned;
             }
@@ -1063,7 +1063,7 @@ namespace persistence
 
         ImportStats Database::import(
             std::execution::parallel_unsequenced_policy,
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& pgns,
             std::size_t memory,
             std::size_t numThreads,
             Database::ImportProgressCallback progressCallback
@@ -1084,7 +1084,7 @@ namespace persistence
             const std::size_t numWorkerThreads = numThreads / 4;
             const std::size_t numSortingThreads = numThreads - numWorkerThreads;
 
-            auto pathsByLevel = detail::partitionPathsByLevel(pgns);
+            auto filesByLevel = detail::partitionInputFilesByLevel(pgns);
 
             const std::size_t numBuffers = cardinality<GameResult>() * numWorkerThreads;
 
@@ -1106,12 +1106,19 @@ namespace persistence
             ImportStats stats;
             for (auto level : values<GameLevel>())
             {
-                if (pathsByLevel[level].empty())
+                if (filesByLevel[level].empty())
                 {
                     continue;
                 }
 
-                stats += importPgnsImpl(std::execution::par_unseq, pipeline, pathsByLevel[level], level, bucketSize, numWorkerThreads);
+                stats += importPgnsImpl(
+                    std::execution::par_unseq, 
+                    pipeline, 
+                    filesByLevel[level], 
+                    level, 
+                    bucketSize, 
+                    numWorkerThreads
+                );
             }
 
             pipeline.waitForCompletion();
@@ -1126,26 +1133,26 @@ namespace persistence
 
         ImportStats Database::import(
             std::execution::sequenced_policy,
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& files,
             std::size_t memory,
             Database::ImportProgressCallback progressCallback
             )
         {
             const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u) - 1u;
 
-            if (pgns.empty())
+            if (files.empty())
             {
                 return {};
             }
 
             std::size_t totalSize = 0;
             std::size_t totalSizeProcessed = 0;
-            for (auto&& pgn : pgns)
+            for (auto&& file : files)
             {
-                totalSize += std::filesystem::file_size(pgn.path());
+                totalSize += std::filesystem::file_size(file.path());
             }
 
-            auto pathsByLevel = detail::partitionPathsByLevel(pgns);
+            auto filesByLevel = detail::partitionInputFilesByLevel(files);
 
             const constexpr std::size_t numBuffers = cardinality<GameResult>();
 
@@ -1166,7 +1173,7 @@ namespace persistence
             Logger::instance().logInfo(": Importing pgns...");
             for (auto level : values<GameLevel>())
             {
-                if (pathsByLevel[level].empty())
+                if (filesByLevel[level].empty())
                 {
                     continue;
                 }
@@ -1174,7 +1181,7 @@ namespace persistence
                 statsTotal += importPgnsImpl(
                     std::execution::seq, 
                     pipeline, 
-                    pathsByLevel[level], 
+                    filesByLevel[level], 
                     level, 
                     [&progressCallback, &totalSize, &totalSizeProcessed](auto&& pgn) {
                         totalSizeProcessed += std::filesystem::file_size(pgn);
@@ -1213,7 +1220,7 @@ namespace persistence
             return statsTotal;
         }
 
-        ImportStats Database::import(const ImportablePgnFiles& pgns, std::size_t memory, Database::ImportProgressCallback progressCallback)
+        ImportStats Database::import(const ImportableFiles& pgns, std::size_t memory, Database::ImportProgressCallback progressCallback)
         {
             return import(std::execution::seq, pgns, memory, progressCallback);
         }
@@ -1330,7 +1337,7 @@ namespace persistence
         ImportStats Database::importPgnsImpl(
             std::execution::sequenced_policy,
             detail::AsyncStorePipeline& pipeline,
-            const ImportablePgnFilePaths& paths,
+            const ImportableFiles& files,
             GameLevel level,
             std::function<void(const std::filesystem::path& file)> completionCallback
         )
@@ -1342,8 +1349,9 @@ namespace persistence
                 });
 
             SingleGameLevelImportStats stats{};
-            for (auto& path : paths)
+            for (auto& file : files)
             {
+                const auto& path = file.path();
                 pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                 if (!fr.isOpen())
                 {
@@ -1412,7 +1420,7 @@ namespace persistence
         }
 
         [[nodiscard]] std::vector<Database::Block> Database::divideIntoBlocks(
-            const ImportablePgnFilePaths& paths,
+            const ImportableFiles& files,
             GameLevel level,
             std::size_t bufferSize,
             std::size_t numBlocks
@@ -1422,10 +1430,11 @@ namespace persistence
 
             // We compute the total size of the files
             std::vector<std::size_t> fileSizes;
-            fileSizes.reserve(paths.size());
+            fileSizes.reserve(files.size());
             std::size_t totalFileSize = 0;
-            for (auto& path : paths)
+            for (auto& file : files)
             {
+                const auto& path = file.path();
                 const std::size_t size = std::filesystem::file_size(path);
                 totalFileSize += size;
                 fileSizes.emplace_back(size);
@@ -1449,8 +1458,8 @@ namespace persistence
                     });
 
                 std::size_t blockSize = 0;
-                auto start = paths.begin();
-                for (int i = 0; i < paths.size(); ++i)
+                auto start = files.begin();
+                for (int i = 0; i < files.size(); ++i)
                 {
                     blockSize += fileSizes[i];
 
@@ -1463,7 +1472,7 @@ namespace persistence
                             });
 
                         // store the block of desired size
-                        auto end = paths.begin() + i;
+                        auto end = files.begin() + i;
                         blocks.emplace_back(Block{ start, end, nextIds });
                         start = end;
                         idOffset += static_cast<std::uint32_t>(blockSize / (bufferSize * minPgnBytesPerMove)) + 1u;
@@ -1473,13 +1482,13 @@ namespace persistence
 
                 // if anything is left over we have to handle it here as in the
                 // loop we only handle full blocks; last one may be only partially full
-                if (start != paths.end())
+                if (start != files.end())
                 {
                     PerPartitionWithSpecificGameLevel<std::uint32_t> nextIds;
                     forEach(nextIds, [&](auto& nextId, GameResult result) {
                         nextId = baseNextIds[result] + idOffset;
                         });
-                    blocks.emplace_back(Block{ start, paths.end(), nextIds });
+                    blocks.emplace_back(Block{ start, files.end(), nextIds });
                 }
 
                 ASSERT(blocks.size() <= numBlocks);
@@ -1495,7 +1504,7 @@ namespace persistence
         ImportStats Database::importPgnsImpl(
             std::execution::parallel_unsequenced_policy,
             detail::AsyncStorePipeline& pipeline,
-            const ImportablePgnFilePaths& paths,
+            const ImportableFiles& paths,
             GameLevel level,
             std::size_t bufferSize,
             std::size_t numThreads
@@ -1519,7 +1528,8 @@ namespace persistence
 
                 for (; begin != end; ++begin)
                 {
-                    auto& path = *begin;
+                    const auto& file = *begin;
+                    const auto& path = file.path();
 
                     pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                     if (!fr.isOpen())

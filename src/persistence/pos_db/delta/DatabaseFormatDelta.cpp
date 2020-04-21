@@ -899,7 +899,7 @@ namespace persistence
 
         ImportStats Database::import(
             std::execution::parallel_unsequenced_policy,
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& files,
             std::size_t memory,
             std::size_t numThreads,
             Database::ImportProgressCallback progressCallback
@@ -907,14 +907,14 @@ namespace persistence
         {
             // TODO: progress reporting
 
-            if (pgns.empty())
+            if (files.empty())
             {
                 return {};
             }
 
             if (numThreads <= 4)
             {
-                return import(std::execution::seq, pgns, memory);
+                return import(std::execution::seq, files, memory);
             }
 
             const std::size_t numWorkerThreads = numThreads / 4;
@@ -937,7 +937,7 @@ namespace persistence
 
             // We do different game levels sequentially because
             // importing is parallelized on file granularity.
-            ImportStats stats = importPgnsImpl(std::execution::par_unseq, pipeline, pgns, bucketSize, numWorkerThreads);
+            ImportStats stats = importPgnsImpl(std::execution::par_unseq, pipeline, files, bucketSize, numWorkerThreads);
 
             pipeline.waitForCompletion();
             collectFutureFiles();
@@ -951,23 +951,23 @@ namespace persistence
 
         ImportStats Database::import(
             std::execution::sequenced_policy,
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& files,
             std::size_t memory,
             Database::ImportProgressCallback progressCallback
             )
         {
             const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u) - 1u;
 
-            if (pgns.empty())
+            if (files.empty())
             {
                 return {};
             }
 
             std::size_t totalSize = 0;
             std::size_t totalSizeProcessed = 0;
-            for (auto&& pgn : pgns)
+            for (auto&& file : files)
             {
-                totalSize += std::filesystem::file_size(pgn.path());
+                totalSize += std::filesystem::file_size(file.path());
             }
 
             const std::size_t numBuffers = 1;
@@ -985,18 +985,18 @@ namespace persistence
                 numSortingThreads
             );
 
-            Logger::instance().logInfo(": Importing pgns...");
+            Logger::instance().logInfo(": Importing files...");
             ImportStats statsTotal = importPgnsImpl(
                 std::execution::seq, 
                 pipeline, 
-                pgns, 
-                [&progressCallback, &totalSize, &totalSizeProcessed](auto&& pgn) {
-                    totalSizeProcessed += std::filesystem::file_size(pgn);
+                files, 
+                [&progressCallback, &totalSize, &totalSizeProcessed](auto&& file) {
+                    totalSizeProcessed += std::filesystem::file_size(file);
                     Logger::instance().logInfo(
                         ":     ", 
                         static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), 
                         "% - completed ", 
-                        pgn, 
+                        file, 
                         "."
                     );
 
@@ -1005,7 +1005,7 @@ namespace persistence
                         ImportProgressReport report{
                             totalSizeProcessed,
                             totalSize,
-                            pgn
+                            file
                         };
                         progressCallback(report);
                     }
@@ -1026,9 +1026,9 @@ namespace persistence
             return statsTotal;
         }
 
-        ImportStats Database::import(const ImportablePgnFiles& pgns, std::size_t memory, Database::ImportProgressCallback progressCallback)
+        ImportStats Database::import(const ImportableFiles& files, std::size_t memory, Database::ImportProgressCallback progressCallback)
         {
-            return import(std::execution::seq, pgns, memory, progressCallback);
+            return import(std::execution::seq, files, memory, progressCallback);
         }
 
         void Database::flush()
@@ -1184,7 +1184,7 @@ namespace persistence
         ImportStats Database::importPgnsImpl(
             std::execution::sequenced_policy,
             detail::AsyncStorePipeline& pipeline,
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& files,
             std::function<void(const std::filesystem::path& file)> completionCallback
         )
         {
@@ -1192,10 +1192,10 @@ namespace persistence
             std::vector<detail::Entry> bucket = pipeline.getEmptyBuffer();
 
             ImportStats stats{};
-            for (auto& pgn : pgns)
+            for (auto& file : files)
             {
-                const auto& path = pgn.path();
-                const auto level = pgn.level();
+                const auto& path = file.path();
+                const auto level = file.level();
 
                 pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                 if (!fr.isOpen())
@@ -1267,7 +1267,7 @@ namespace persistence
         }
 
         [[nodiscard]] std::vector<Database::Block> Database::divideIntoBlocks(
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& files,
             std::size_t bufferSize,
             std::size_t numBlocks
         )
@@ -1276,11 +1276,11 @@ namespace persistence
 
             // We compute the total size of the files
             std::vector<std::size_t> fileSizes;
-            fileSizes.reserve(pgns.size());
+            fileSizes.reserve(files.size());
             std::size_t totalFileSize = 0;
-            for (auto& pgn : pgns)
+            for (auto& file : files)
             {
-                const std::size_t size = std::filesystem::file_size(pgn.path());
+                const std::size_t size = std::filesystem::file_size(file.path());
                 totalFileSize += size;
                 fileSizes.emplace_back(size);
             }
@@ -1300,8 +1300,8 @@ namespace persistence
                 std::uint32_t baseNextId = m_partition.nextId();
 
                 std::size_t blockSize = 0;
-                auto start = pgns.begin();
-                for (int i = 0; i < pgns.size(); ++i)
+                auto start = files.begin();
+                for (int i = 0; i < files.size(); ++i)
                 {
                     blockSize += fileSizes[i];
 
@@ -1311,7 +1311,7 @@ namespace persistence
                         std::uint32_t nextIds = baseNextId + idOffset;
 
                         // store the block of desired size
-                        auto end = pgns.begin() + i;
+                        auto end = files.begin() + i;
                         blocks.emplace_back(Block{ start, end, nextIds });
                         start = end;
                         idOffset += static_cast<std::uint32_t>(blockSize / (bufferSize * minPgnBytesPerMove)) + 1u;
@@ -1321,10 +1321,10 @@ namespace persistence
 
                 // if anything is left over we have to handle it here as in the
                 // loop we only handle full blocks; last one may be only partially full
-                if (start != pgns.end())
+                if (start != files.end())
                 {
                     std::uint32_t nextId = baseNextId + idOffset;
-                    blocks.emplace_back(Block{ start, pgns.end(), nextId });
+                    blocks.emplace_back(Block{ start, files.end(), nextId });
                 }
 
                 ASSERT(blocks.size() <= numBlocks);
@@ -1340,12 +1340,12 @@ namespace persistence
         ImportStats Database::importPgnsImpl(
             std::execution::parallel_unsequenced_policy,
             detail::AsyncStorePipeline& pipeline,
-            const ImportablePgnFiles& paths,
+            const ImportableFiles& files,
             std::size_t bufferSize,
             std::size_t numThreads
         )
         {
-            const auto blocks = divideIntoBlocks(paths, bufferSize, numThreads);
+            const auto blocks = divideIntoBlocks(files, bufferSize, numThreads);
 
             // Here almost everything is as in the sequential algorithm.
             // Synchronization is handled in deeper layers.
@@ -1360,9 +1360,9 @@ namespace persistence
 
                 for (; begin != end; ++begin)
                 {
-                    auto& pgn = *begin;
-                    const auto& path = pgn.path();
-                    const auto level = pgn.level();
+                    auto& file = *begin;
+                    const auto& path = file.path();
+                    const auto level = file.level();
 
                     pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                     if (!fr.isOpen())

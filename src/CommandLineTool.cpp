@@ -152,9 +152,9 @@ namespace command_line_app
         return instantiateDatabase(key, path);
     }
 
-    [[nodiscard]] static persistence::ImportablePgnFiles parsePgnListFile(const std::filesystem::path& path)
+    [[nodiscard]] static persistence::ImportableFiles parsePgnListFile(const std::filesystem::path& path)
     {
-        persistence::ImportablePgnFiles pgns;
+        persistence::ImportableFiles pgns;
 
         std::ifstream file(path);
         std::string line;
@@ -186,7 +186,7 @@ namespace command_line_app
     static void createImpl(
         const std::string& key,
         const std::filesystem::path& destination,
-        const persistence::ImportablePgnFiles& pgns
+        const persistence::ImportableFiles& pgns
     )
     {
         assertDirectoryEmpty(destination);
@@ -198,7 +198,7 @@ namespace command_line_app
     static void createImpl(
         const std::string& key,
         const std::filesystem::path& destination,
-        const persistence::ImportablePgnFiles& pgns,
+        const persistence::ImportableFiles& pgns,
         const std::filesystem::path& temp
     )
     {
@@ -546,7 +546,7 @@ namespace command_line_app
         const TcpConnection::Ptr& session,
         const std::string& key,
         const std::filesystem::path& destination,
-        const persistence::ImportablePgnFiles& pgns,
+        const persistence::ImportableFiles& pgns,
         const std::filesystem::path& temp,
         bool doMerge,
         bool doReportProgress
@@ -593,7 +593,7 @@ namespace command_line_app
         const TcpConnection::Ptr& session,
         const std::string& key,
         const std::filesystem::path& destination,
-        const persistence::ImportablePgnFiles& pgns,
+        const persistence::ImportableFiles& pgns,
         bool doMerge,
         bool doReportProgress
     )
@@ -628,7 +628,7 @@ namespace command_line_app
         const bool doMerge = json["merge"].get<bool>();
         const bool doReportProgress = json["report_progress"].get<bool>();
         
-        persistence::ImportablePgnFiles pgns;
+        persistence::ImportableFiles pgns;
         for (auto& v : json["human_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Human);
         for (auto& v : json["engine_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Engine);
         for (auto& v : json["server_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Server);

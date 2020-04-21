@@ -90,25 +90,40 @@ namespace persistence
         return *this;
     }
 
-    ImportablePgnFile::ImportablePgnFile(std::filesystem::path path, GameLevel level) :
+    [[nodiscard]] static ImportableFileType fileTypeFromPath(const std::filesystem::path path)
+    {
+        const auto extension = path.extension();
+        if (extension == ".pgn") return ImportableFileType::Pgn;
+        if (extension == ".pgn") return ImportableFileType::Bcgn;
+
+        return ImportableFileType::Unknown;
+    }
+
+    ImportableFile::ImportableFile(std::filesystem::path path, GameLevel level) :
         m_path(std::move(path)),
-        m_level(level)
+        m_level(level),
+        m_type(fileTypeFromPath(m_path))
     {
     }
 
-    [[nodiscard]] const std::filesystem::path& ImportablePgnFile::path() const &
+    [[nodiscard]] const std::filesystem::path& ImportableFile::path() const &
     {
         return m_path;
     }
 
-    [[nodiscard]] ImportablePgnFilePath ImportablePgnFile::path() &&
+    [[nodiscard]] ImportableFilePath ImportableFile::path() &&
     {
         return std::move(m_path);
     }
 
-    [[nodiscard]] GameLevel ImportablePgnFile::level() const
+    [[nodiscard]] GameLevel ImportableFile::level() const
     {
         return m_level;
+    }
+
+    [[nodiscard]] ImportableFileType ImportableFile::type() const
+    {
+        return m_type;
     }
 
     Database::Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel) :

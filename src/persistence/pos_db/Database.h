@@ -55,28 +55,35 @@ namespace persistence
         DatabaseStats& operator+=(const ImportStats& rhs);
     };
 
-    // TODO: use enum for signifying type (PGN, BCGN).
-    //       rename to ImportableFile or something.
-    //       Each database has to switch on the type. They are to different to have a common interface.
-    using ImportablePgnFilePath = std::filesystem::path;
-    using ImportablePgnFilePaths = std::vector<std::filesystem::path>;
-
-    struct ImportablePgnFile
+    enum struct ImportableFileType
     {
-        ImportablePgnFile(std::filesystem::path path, GameLevel level);
+        Pgn,
+        Bcgn,
+        Unknown
+    };
+
+    using ImportableFilePath = std::filesystem::path;
+    using ImportableFilePaths = std::vector<std::filesystem::path>;
+
+    struct ImportableFile
+    {
+        ImportableFile(std::filesystem::path path, GameLevel level);
 
         [[nodiscard]] const std::filesystem::path& path() const &;
 
-        [[nodiscard]] ImportablePgnFilePath path() &&;
+        [[nodiscard]] ImportableFilePath path() &&;
 
         [[nodiscard]] GameLevel level() const;
 
+        [[nodiscard]] ImportableFileType type() const;
+
     private:
-        ImportablePgnFilePath m_path;
+        ImportableFilePath m_path;
         GameLevel m_level;
+        ImportableFileType m_type;
     };
 
-    using ImportablePgnFiles = std::vector<ImportablePgnFile>;
+    using ImportableFiles = std::vector<ImportableFile>;
 
     struct DatabaseManifest
     {
@@ -140,7 +147,7 @@ namespace persistence
 
         virtual ImportStats import(
             std::execution::parallel_unsequenced_policy,
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& pgns,
             std::size_t memory,
             std::size_t numThreads = std::thread::hardware_concurrency(),
             ImportProgressCallback progressCallback = {}
@@ -148,13 +155,13 @@ namespace persistence
 
         virtual ImportStats import(
             std::execution::sequenced_policy,
-            const ImportablePgnFiles& pgns,
+            const ImportableFiles& pgns,
             std::size_t memory,
             ImportProgressCallback progressCallback = {}
         ) = 0;
 
         virtual ImportStats import(
-            const ImportablePgnFiles& pgns, 
+            const ImportableFiles& pgns, 
             std::size_t memory,
             ImportProgressCallback progressCallback = {}
         ) = 0;

@@ -46,9 +46,9 @@ namespace console_app
 
     const std::size_t importMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
 
-    [[nodiscard]] static persistence::ImportablePgnFiles parsePgnListFile(const std::filesystem::path& path)
+    [[nodiscard]] static persistence::ImportableFiles parsePgnListFile(const std::filesystem::path& path)
     {
-        persistence::ImportablePgnFiles pgns;
+        persistence::ImportableFiles pgns;
 
         std::ifstream file(path);
         std::string line;
@@ -363,7 +363,7 @@ namespace console_app
         //db.printInfo(out);
     }
 
-    static void create(const std::filesystem::path& destination, const persistence::ImportablePgnFiles& pgns, const std::filesystem::path& temp)
+    static void create(const std::filesystem::path& destination, const persistence::ImportableFiles& pgns, const std::filesystem::path& temp)
     {
         assertDirectoryEmpty(destination);
         assertDirectoryEmpty(temp);
@@ -376,7 +376,7 @@ namespace console_app
         std::filesystem::remove_all(temp);
     }
 
-    static void create(const std::filesystem::path& destination, const persistence::ImportablePgnFiles& pgns)
+    static void create(const std::filesystem::path& destination, const persistence::ImportableFiles& pgns)
     {
         assertDirectoryEmpty(destination);
 
