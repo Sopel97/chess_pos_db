@@ -746,7 +746,8 @@ namespace persistence
             }
         }
 
-        const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_beta"]["pgn_parser_memory"].get<MemoryAmount>();
+        const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_epsilon"]["pgn_parser_memory"].get<MemoryAmount>();
+        const std::size_t Database::m_bcgnParserMemory = cfg::g_config["persistence"]["db_epsilon"]["bcgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
             BaseType(path, Database::manifest()),
@@ -1067,60 +1068,108 @@ namespace persistence
             // create buffers
             std::vector<detail::Entry> bucket = pipeline.getEmptyBuffer();
 
+            auto processPosition = [this, &bucket, &pipeline](
+                const Position& position,
+                const ReverseMove& reverseMove,
+                GameLevel level,
+                GameResult result
+                ) {
+                    bucket.emplace_back(position, reverseMove, level, result);
+
+                    if (bucket.size() == bucket.capacity())
+                    {
+                        store(pipeline, bucket);
+                    }
+            };
+
             ImportStats stats{};
-            // TODO: somehow allow for BCGN files. May need change of the abstraction.
             for (auto& file : files)
             {
                 const auto& path = file.path();
                 const auto level = file.level();
+                const auto type = file.type();
 
-                pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
-                if (!fr.isOpen())
+                if (type == ImportableFileType::Pgn)
                 {
-                    Logger::instance().logError("Failed to open file ", path);
-                    completionCallback(path);
-                    break;
+                    pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
+                    if (!fr.isOpen())
+                    {
+                        Logger::instance().logError("Failed to open file ", path);
+                        completionCallback(path);
+                        break;
+                    }
+
+                    for (auto& game : fr)
+                    {
+                        const std::optional<GameResult> result = game.result();
+                        if (!result.has_value())
+                        {
+                            stats.statsByLevel[level].numSkippedGames += 1;
+                            continue;
+                        }
+
+                        Position position = Position::startPosition();
+                        ReverseMove reverseMove{};
+                        processPosition(position, reverseMove, level, *result);
+                        std::size_t numPositionsInGame = 1;
+                        for (auto& san : game.moves())
+                        {
+                            const Move move = san::sanToMove(position, san);
+                            if (move == Move::null())
+                            {
+                                break;
+                            }
+
+                            reverseMove = position.doMove(move);
+                            processPosition(position, reverseMove, level, *result);
+
+                            ++numPositionsInGame;
+                        }
+
+                        ASSERT(numPositionsInGame > 0);
+
+                        stats.statsByLevel[level].numGames += 1;
+                        stats.statsByLevel[level].numPositions += numPositionsInGame;
+                    }
                 }
-
-                for (auto& game : fr)
+                else if (type == ImportableFileType::Bcgn)
                 {
-                    const std::optional<GameResult> result = game.result();
-                    if (!result.has_value())
+                    bcgn::BcgnFileReader fr(path, m_bcgnParserMemory);
+                    if (!fr.isOpen())
                     {
-                        stats.statsByLevel[level].numSkippedGames += 1;
-                        continue;
+                        Logger::instance().logError("Failed to open file ", path);
+                        completionCallback(path);
+                        break;
                     }
 
-                    std::size_t numPositionsInGame = 0;
-                    auto processPosition = [&](const Position& position, const ReverseMove& reverseMove) {
-                        bucket.emplace_back(position, reverseMove, level, *result);
-                        numPositionsInGame += 1;
-
-                        if (bucket.size() == bucket.capacity())
-                        {
-                            store(pipeline, bucket);
-                        }
-                    };
-
-                    Position position = Position::startPosition();
-                    ReverseMove reverseMove{};
-                    processPosition(position, reverseMove);
-                    for (auto& san : game.moves())
+                    for (auto& game : fr)
                     {
-                        const Move move = san::sanToMove(position, san);
-                        if (move == Move::null())
+                        const std::optional<GameResult> result = game.result();
+                        if (!result.has_value())
                         {
-                            break;
+                            stats.statsByLevel[level].numSkippedGames += 1;
+                            continue;
                         }
 
-                        reverseMove = position.doMove(move);
-                        processPosition(position, reverseMove);
+                        Position position = Position::startPosition();
+                        ReverseMove reverseMove{};
+                        processPosition(position, reverseMove, level, *result);
+                        auto moves = game.moves();
+                        while(moves.hasNext())
+                        {
+                            const auto move = moves.next(position);
+                            reverseMove = position.doMove(move);
+                            processPosition(position, reverseMove, level, *result);
+                        }
+
+                        stats.statsByLevel[level].numGames += 1;
+                        stats.statsByLevel[level].numPositions += game.numPlies() + 1;
                     }
-
-                    ASSERT(numPositionsInGame > 0);
-
-                    stats.statsByLevel[level].numGames += 1;
-                    stats.statsByLevel[level].numPositions += numPositionsInGame;
+                }
+                else
+                {
+                    Logger::instance().logError("Importing files other than PGN or BCGN is not supported by db_epsilon.");
+                    throw std::runtime_error("Importing files other than PGN or BCGN is not supported by db_epsilon.");
                 }
 
                 completionCallback(path);
@@ -1139,6 +1188,7 @@ namespace persistence
         )
         {
             constexpr std::size_t minPgnBytesPerMove = 4;
+            constexpr std::size_t minBcgnBytesPerMove = 1;
 
             // We compute the total size of the files
             std::vector<std::size_t> fileSizes;
@@ -1166,10 +1216,17 @@ namespace persistence
                 std::uint32_t baseNextId = m_partition.nextId();
 
                 std::size_t blockSize = 0;
+                std::size_t maxNumberOfMovesInBlock = 0;
                 auto start = files.begin();
                 for (int i = 0; i < files.size(); ++i)
                 {
                     blockSize += fileSizes[i];
+
+                    const auto minBytesPerMove =
+                        files[i].type() == ImportableFileType::Pgn
+                        ? minPgnBytesPerMove
+                        : minBcgnBytesPerMove;
+                    maxNumberOfMovesInBlock += (fileSizes[i] / minBytesPerMove) + 1u;
 
                     if (blockSize >= blockSizeThreshold)
                     {
@@ -1180,8 +1237,9 @@ namespace persistence
                         auto end = files.begin() + i;
                         blocks.emplace_back(Block{ start, end, nextIds });
                         start = end;
-                        idOffset += static_cast<std::uint32_t>(blockSize / (bufferSize * minPgnBytesPerMove)) + 1u;
+                        idOffset += static_cast<std::uint32_t>(maxNumberOfMovesInBlock / bufferSize) + 1u;
                         blockSize = 0;
+                        maxNumberOfMovesInBlock = 0;
                     }
                 }
 
@@ -1221,6 +1279,25 @@ namespace persistence
 
                 std::vector<detail::Entry> entries = pipeline.getEmptyBuffer();
 
+                auto processPosition = [this, &pipeline, &entries](
+                    const Position& position, 
+                    const ReverseMove& reverseMove,
+                    GameLevel level,
+                    GameResult result,
+                    std::uint32_t& nextId
+                    ) {
+                    entries.emplace_back(position, reverseMove, level, result);
+
+                    if (entries.size() == entries.capacity())
+                    {
+                        // Here we force the id and move to the next one.
+                        // This doesn't have to be atomic since we're the only
+                        // ones using this blocks and there is enough space left for
+                        // all files before the next already present id.
+                        store(pipeline, entries, nextId++);
+                    }
+                };
+
                 ImportStats stats{};
                 auto [begin, end, nextId] = block;
 
@@ -1229,57 +1306,86 @@ namespace persistence
                     auto& file = *begin;
                     const auto& path = file.path();
                     const auto level = file.level();
+                    const auto type = file.type();
 
-                    pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
-                    if (!fr.isOpen())
+                    if (type == ImportableFileType::Pgn)
                     {
-                        Logger::instance().logError("Failed to open file ", path);
-                        break;
+                        pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
+                        if (!fr.isOpen())
+                        {
+                            Logger::instance().logError("Failed to open file ", path);
+                            break;
+                        }
+
+                        for (auto& game : fr)
+                        {
+                            const std::optional<GameResult> result = game.result();
+                            if (!result.has_value())
+                            {
+                                stats.statsByLevel[level].numSkippedGames += 1;
+                                continue;
+                            }
+
+                            std::size_t numPositionsInGame = 0;
+
+                            Position position = Position::startPosition();
+                            ReverseMove reverseMove{};
+                            processPosition(position, reverseMove, level, *result, nextId);
+                            for (auto& san : game.moves())
+                            {
+                                const Move move = san::sanToMove(position, san);
+                                if (move == Move::null())
+                                {
+                                    break;
+                                }
+
+                                reverseMove = position.doMove(move);
+                                processPosition(position, reverseMove, level, *result, nextId);
+                            }
+
+                            ASSERT(numPositionsInGame > 0);
+
+                            stats.statsByLevel[level].numGames += 1;
+                            stats.statsByLevel[level].numPositions += numPositionsInGame;
+                        }
                     }
-
-                    for (auto& game : fr)
+                    else if (type == ImportableFileType::Bcgn)
                     {
-                        const std::optional<GameResult> result = game.result();
-                        if (!result.has_value())
+                        bcgn::BcgnFileReader fr(path, m_bcgnParserMemory);
+                        if (!fr.isOpen())
                         {
-                            stats.statsByLevel[level].numSkippedGames += 1;
-                            continue;
+                            Logger::instance().logError("Failed to open file ", path);
+                            break;
                         }
 
-                        std::size_t numPositionsInGame = 0;
-                        auto processPosition = [&, &nextId = nextId](const Position& position, const ReverseMove& reverseMove) {
-                            entries.emplace_back(position, reverseMove, level, *result);
-                            numPositionsInGame += 1;
-
-                            if (entries.size() == bufferSize)
-                            {
-                                // Here we force the id and move to the next one.
-                                // This doesn't have to be atomic since we're the only
-                                // ones using this blocks and there is enough space left for
-                                // all files before the next already present id.
-                                store(pipeline, entries, nextId++);
-                            }
-                        };
-
-                        Position position = Position::startPosition();
-                        ReverseMove reverseMove{};
-                        processPosition(position, reverseMove);
-                        for (auto& san : game.moves())
+                        for (auto& game : fr)
                         {
-                            const Move move = san::sanToMove(position, san);
-                            if (move == Move::null())
+                            const std::optional<GameResult> result = game.result();
+                            if (!result.has_value())
                             {
-                                break;
+                                stats.statsByLevel[level].numSkippedGames += 1;
+                                continue;
                             }
 
-                            reverseMove = position.doMove(move);
-                            processPosition(position, reverseMove);
+                            Position position = Position::startPosition();
+                            ReverseMove reverseMove{};
+                            processPosition(position, reverseMove, level, *result, nextId);
+                            auto moves = game.moves();
+                            while(moves.hasNext())
+                            {
+                                const Move move = moves.next(position);
+                                reverseMove = position.doMove(move);
+                                processPosition(position, reverseMove, level, *result, nextId);
+                            }
+
+                            stats.statsByLevel[level].numGames += 1;
+                            stats.statsByLevel[level].numPositions += game.numPlies() + 1;
                         }
-
-                        ASSERT(numPositionsInGame > 0);
-
-                        stats.statsByLevel[level].numGames += 1;
-                        stats.statsByLevel[level].numPositions += numPositionsInGame;
+                    }
+                    else
+                    {
+                        Logger::instance().logError("Importing files other than PGN or BCGN is not supported by db_epsilon.");
+                        throw std::runtime_error("Importing files other than PGN or BCGN is not supported by db_epsilon.");
                     }
                 }
 

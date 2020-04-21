@@ -44,7 +44,7 @@ namespace console_app
 {
     using DbType = persistence::db_delta::Database;
 
-    const std::size_t importMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
+    const std::size_t importMemory = cfg::g_config["console_app"]["import_memory"].get<MemoryAmount>();
 
     [[nodiscard]] static persistence::ImportableFiles parsePgnListFile(const std::filesystem::path& path)
     {

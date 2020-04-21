@@ -520,6 +520,7 @@ namespace persistence
             static constexpr std::size_t m_totalNumDirectories = 1;
 
             static const std::size_t m_pgnParserMemory;
+            static const std::size_t m_bcgnParserMemory;
 
         public:
             Database(std::filesystem::path path);

@@ -1200,8 +1200,8 @@ namespace persistence
 
                 if (type != ImportableFileType::Pgn)
                 {
-                    Logger::instance().logError("Importing files other than PGN is not supported by db_alpha.");
-                    throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
+                    Logger::instance().logError("Importing files other than PGN is not supported by db_delta.");
+                    throw std::runtime_error("Importing files other than PGN is not supported by db_delta.");
                 }
 
                 pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
@@ -1374,8 +1374,8 @@ namespace persistence
 
                     if (type != ImportableFileType::Pgn)
                     {
-                        Logger::instance().logError("Importing files other than PGN is not supported by db_alpha.");
-                        throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
+                        Logger::instance().logError("Importing files other than PGN is not supported by db_delta.");
+                        throw std::runtime_error("Importing files other than PGN is not supported by db_delta.");
                     }
 
                     pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);

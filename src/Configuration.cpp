@@ -155,19 +155,38 @@ namespace cfg
         "index_granularity" : 1024,
         "max_merge_buffer_size" : "1GiB",
         "pgn_parser_memory" : "4MiB"
+    },
+
+    "db_delta" : {
+        "index_granularity" : 1024,
+        "max_merge_buffer_size" : "1GiB",
+        "pgn_parser_memory" : "4MiB"
+    },
+
+    "db_epsilon" : {
+        "index_granularity" : 1024,
+        "max_merge_buffer_size" : "1GiB",
+        "pgn_parser_memory" : "4MiB",
+        "bcgn_parser_memory" : "4MiB"
     }
 },
 
 "command_line_app" : {
+    "import_memory" : "2GiB",
+    "pgn_parser_memory" : "4MiB",
+    "bcgn_parser_memory" : "4MiB",
     "dump" : {
-        "pgn_import_memory" : "2GiB",
+        "import_memory" : "2GiB",
         "pgn_parser_memory" : "4MiB",
+        "bcgn_parser_memory" : "4MiB",
         "max_merge_buffer_size" : "1GiB"
     }
 },
 
 "console_app" : {
-    "pgn_import_memory" : "2GiB"
+    "import_memory" : "2GiB",
+    "pgn_parser_memory" : "4MiB",
+    "bcgn_parser_memory" : "4MiB"
 }
 })"_json;
 

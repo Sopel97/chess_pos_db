@@ -62,9 +62,9 @@ namespace command_line_app
         const TcpConnection::Ptr&,
         const nlohmann::json&);
 
-    const std::size_t pgnImportMemory = cfg::g_config["console_app"]["pgn_import_memory"].get<MemoryAmount>();
-    const std::size_t pgnParserMemory = cfg::g_config["console_app"]["pgn_parser_memory"].get<MemoryAmount>();
-    const std::size_t bcgnParserMemory = cfg::g_config["console_app"]["bcgn_parser_memory"].get<MemoryAmount>();
+    const std::size_t importMemory = cfg::g_config["command_line_app"]["import_memory"].get<MemoryAmount>();
+    const std::size_t pgnParserMemory = cfg::g_config["command_line_app"]["pgn_parser_memory"].get<MemoryAmount>();
+    const std::size_t bcgnParserMemory = cfg::g_config["command_line_app"]["bcgn_parser_memory"].get<MemoryAmount>();
 
     static void assertDirectoryNotEmpty(const std::filesystem::path& path)
     {
@@ -192,7 +192,7 @@ namespace command_line_app
         assertDirectoryEmpty(destination);
 
         auto db = instantiateDatabase(key, destination);
-        db->import(pgns, pgnImportMemory);
+        db->import(pgns, importMemory);
     }
 
     static void createImpl(
@@ -207,7 +207,7 @@ namespace command_line_app
 
         {
             auto db = instantiateDatabase(key, temp);
-            db->import(pgns, pgnImportMemory);
+            db->import(pgns, importMemory);
             db->replicateMergeAll(destination);
         }
 
@@ -562,7 +562,7 @@ namespace command_line_app
 
                 {
                     auto callback = makeImportProgressReportHandler(session, doReportProgress);
-                    auto stats = db->import(pgns, pgnImportMemory, callback);
+                    auto stats = db->import(pgns, importMemory, callback);
                     sendProgressFinished(session, "import", statsToJson(stats));
                 }
 
@@ -580,7 +580,7 @@ namespace command_line_app
             auto db = instantiateDatabase(key, destination);
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            auto stats = db->import(pgns, pgnImportMemory, callback);
+            auto stats = db->import(pgns, importMemory, callback);
             sendProgressFinished(session, "import", statsToJson(stats));
         }
 
@@ -604,7 +604,7 @@ namespace command_line_app
             auto db = instantiateDatabase(key, destination);
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            auto stats = db->import(pgns, pgnImportMemory, callback);
+            auto stats = db->import(pgns, importMemory, callback);
             sendProgressFinished(session, "import", statsToJson(stats));
 
             if (doMerge)
@@ -1047,7 +1047,7 @@ namespace command_line_app
     )
     {
         static const std::size_t pgnParserMemory = cfg::g_config["command_line_app"]["dump"]["pgn_parser_memory"].get<MemoryAmount>();
-        static const std::size_t importMemory = cfg::g_config["command_line_app"]["dump"]["pgn_import_memory"].get<MemoryAmount>();
+        static const std::size_t importMemory = cfg::g_config["command_line_app"]["dump"]["import_memory"].get<MemoryAmount>();
         static const std::size_t mergeMemory = cfg::g_config["command_line_app"]["dump"]["max_merge_buffer_size"].get<MemoryAmount>();
 
         assertDirectoryEmpty(temp);
