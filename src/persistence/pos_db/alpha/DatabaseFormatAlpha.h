@@ -520,7 +520,7 @@ namespace persistence
 
             void computeTranspositions(const query::Request& query, std::vector<detail::PositionStats>& stats);
             
-            ImportStats importPgnsImpl(
+            ImportStats importImpl(
                 std::execution::sequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
                 const ImportableFiles& files,
@@ -535,7 +535,7 @@ namespace persistence
                 std::size_t numBlocks
             );
 
-            ImportStats importPgnsImpl(
+            ImportStats importImpl(
                 std::execution::parallel_unsequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
                 const ImportableFiles& files,

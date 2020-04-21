@@ -701,7 +701,7 @@ namespace persistence
 
             [[nodiscard]] std::vector<detail::Key> getKeys(const query::PositionQueries& queries);
 
-            ImportStats importPgnsImpl(
+            ImportStats importImpl(
                 std::execution::sequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
                 const ImportableFiles& files,
@@ -721,7 +721,7 @@ namespace persistence
                 std::size_t numBlocks
             );
 
-            ImportStats importPgnsImpl(
+            ImportStats importImpl(
                 std::execution::parallel_unsequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
                 const ImportableFiles& files,

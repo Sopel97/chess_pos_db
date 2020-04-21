@@ -1111,7 +1111,7 @@ namespace persistence
                     continue;
                 }
 
-                stats += importPgnsImpl(
+                stats += importImpl(
                     std::execution::par_unseq, 
                     pipeline, 
                     filesByLevel[level], 
@@ -1178,7 +1178,7 @@ namespace persistence
                     continue;
                 }
 
-                statsTotal += importPgnsImpl(
+                statsTotal += importImpl(
                     std::execution::seq, 
                     pipeline, 
                     filesByLevel[level], 
@@ -1334,7 +1334,7 @@ namespace persistence
             }
         }
 
-        ImportStats Database::importPgnsImpl(
+        ImportStats Database::importImpl(
             std::execution::sequenced_policy,
             detail::AsyncStorePipeline& pipeline,
             const ImportableFiles& files,
@@ -1509,7 +1509,7 @@ namespace persistence
             return blocks;
         }
 
-        ImportStats Database::importPgnsImpl(
+        ImportStats Database::importImpl(
             std::execution::parallel_unsequenced_policy,
             detail::AsyncStorePipeline& pipeline,
             const ImportableFiles& files,

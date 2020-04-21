@@ -937,7 +937,7 @@ namespace persistence
 
             // We do different game levels sequentially because
             // importing is parallelized on file granularity.
-            ImportStats stats = importPgnsImpl(std::execution::par_unseq, pipeline, files, bucketSize, numWorkerThreads);
+            ImportStats stats = importImpl(std::execution::par_unseq, pipeline, files, bucketSize, numWorkerThreads);
 
             pipeline.waitForCompletion();
             collectFutureFiles();
@@ -986,7 +986,7 @@ namespace persistence
             );
 
             Logger::instance().logInfo(": Importing files...");
-            ImportStats statsTotal = importPgnsImpl(
+            ImportStats statsTotal = importImpl(
                 std::execution::seq, 
                 pipeline, 
                 files, 
@@ -1181,7 +1181,7 @@ namespace persistence
             return keys;
         }
 
-        ImportStats Database::importPgnsImpl(
+        ImportStats Database::importImpl(
             std::execution::sequenced_policy,
             detail::AsyncStorePipeline& pipeline,
             const ImportableFiles& files,
@@ -1344,7 +1344,7 @@ namespace persistence
             return blocks;
         }
 
-        ImportStats Database::importPgnsImpl(
+        ImportStats Database::importImpl(
             std::execution::parallel_unsequenced_policy,
             detail::AsyncStorePipeline& pipeline,
             const ImportableFiles& files,
