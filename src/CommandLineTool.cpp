@@ -1708,12 +1708,14 @@ namespace command_line_app
         }
 
         const auto size = std::filesystem::file_size(path);
+        std::cout << "Path      : " << path << '\n';
         std::cout << "File size : " << size << '\n';
         std::cout << "Games     : " << numGames << '\n';
         std::cout << "Positions : " << numPositions << '\n';
         std::cout << "Wins      : " << numWhiteWins << '\n';
         std::cout << "Draws     : " << numDraws << '\n';
         std::cout << "Losses    : " << numBlackWins << '\n';
+        std::cout << '\n';
     }
 
     static void statsPgn(const std::filesystem::path& path)
