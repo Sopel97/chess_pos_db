@@ -1196,6 +1196,13 @@ namespace persistence
             {
                 const auto& path = file.path();
                 const auto level = file.level();
+                const auto type = file.type();
+
+                if (type != ImportableFileType::Pgn)
+                {
+                    Logger::instance().logError("Importing files other than PGN is not supported by db_alpha.");
+                    throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
+                }
 
                 pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                 if (!fr.isOpen())
@@ -1363,6 +1370,13 @@ namespace persistence
                     auto& file = *begin;
                     const auto& path = file.path();
                     const auto level = file.level();
+                    const auto type = file.type();
+
+                    if (type != ImportableFileType::Pgn)
+                    {
+                        Logger::instance().logError("Importing files other than PGN is not supported by db_alpha.");
+                        throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
+                    }
 
                     pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                     if (!fr.isOpen())

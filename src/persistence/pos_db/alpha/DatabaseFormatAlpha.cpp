@@ -1063,7 +1063,7 @@ namespace persistence
 
         ImportStats Database::import(
             std::execution::parallel_unsequenced_policy,
-            const ImportableFiles& pgns,
+            const ImportableFiles& files,
             std::size_t memory,
             std::size_t numThreads,
             Database::ImportProgressCallback progressCallback
@@ -1071,20 +1071,20 @@ namespace persistence
         {
             // TODO: progress reporting
 
-            if (pgns.empty())
+            if (files.empty())
             {
                 return {};
             }
 
             if (numThreads <= 4)
             {
-                return import(std::execution::seq, pgns, memory);
+                return import(std::execution::seq, files, memory);
             }
 
             const std::size_t numWorkerThreads = numThreads / 4;
             const std::size_t numSortingThreads = numThreads - numWorkerThreads;
 
-            auto filesByLevel = detail::partitionInputFilesByLevel(pgns);
+            auto filesByLevel = detail::partitionInputFilesByLevel(files);
 
             const std::size_t numBuffers = cardinality<GameResult>() * numWorkerThreads;
 
@@ -1170,7 +1170,7 @@ namespace persistence
             );
 
             ImportStats statsTotal{};
-            Logger::instance().logInfo(": Importing pgns...");
+            Logger::instance().logInfo(": Importing files...");
             for (auto level : values<GameLevel>())
             {
                 if (filesByLevel[level].empty())
@@ -1183,13 +1183,13 @@ namespace persistence
                     pipeline, 
                     filesByLevel[level], 
                     level, 
-                    [&progressCallback, &totalSize, &totalSizeProcessed](auto&& pgn) {
-                        totalSizeProcessed += std::filesystem::file_size(pgn);
+                    [&progressCallback, &totalSize, &totalSizeProcessed](auto&& file) {
+                        totalSizeProcessed += std::filesystem::file_size(file);
                         Logger::instance().logInfo(
                             ":     ", 
                             static_cast<int>(static_cast<double>(totalSizeProcessed) / totalSize * 100.0), 
                             "% - completed ", 
-                            pgn, 
+                            file, 
                             "."
                         );
 
@@ -1198,7 +1198,7 @@ namespace persistence
                             ImportProgressReport report{
                                 totalSizeProcessed,
                                 totalSize,
-                                pgn
+                                file
                             };
                             progressCallback(report);
                         }
@@ -1220,9 +1220,9 @@ namespace persistence
             return statsTotal;
         }
 
-        ImportStats Database::import(const ImportableFiles& pgns, std::size_t memory, Database::ImportProgressCallback progressCallback)
+        ImportStats Database::import(const ImportableFiles& files, std::size_t memory, Database::ImportProgressCallback progressCallback)
         {
-            return import(std::execution::seq, pgns, memory, progressCallback);
+            return import(std::execution::seq, files, memory, progressCallback);
         }
 
         void Database::flush()
@@ -1352,6 +1352,14 @@ namespace persistence
             for (auto& file : files)
             {
                 const auto& path = file.path();
+                const auto type = file.type();
+
+                if (type != ImportableFileType::Pgn)
+                {
+                    Logger::instance().logError("Importing files other than PGN is not supported by db_alpha.");
+                    throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
+                }
+
                 pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                 if (!fr.isOpen())
                 {
@@ -1504,13 +1512,13 @@ namespace persistence
         ImportStats Database::importPgnsImpl(
             std::execution::parallel_unsequenced_policy,
             detail::AsyncStorePipeline& pipeline,
-            const ImportableFiles& paths,
+            const ImportableFiles& files,
             GameLevel level,
             std::size_t bufferSize,
             std::size_t numThreads
         )
         {
-            const auto blocks = divideIntoBlocks(paths, level, bufferSize, numThreads);
+            const auto blocks = divideIntoBlocks(files, level, bufferSize, numThreads);
 
             // Here almost everything is as in the sequential algorithm.
             // Synchronization is handled in deeper layers.
@@ -1530,6 +1538,13 @@ namespace persistence
                 {
                     const auto& file = *begin;
                     const auto& path = file.path();
+                    const auto type = file.type();
+
+                    if (type != ImportableFileType::Pgn)
+                    {
+                        Logger::instance().logError("Importing files other than PGN is not supported by db_alpha.");
+                        throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
+                    }
 
                     pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
                     if (!fr.isOpen())
