@@ -46,10 +46,48 @@ namespace persistence
         {
             const std::size_t indexGranularity = cfg::g_config["persistence"]["db_epsilon"]["index_granularity"].get<std::size_t>();
 
-            static uint32_t packReverseMove(const ReverseMove& rm)
+            static uint32_t packReverseMove(const Position& pos, const ReverseMove& rm)
             {
-                // TODO: implement
-                return 0;
+                uint32_t toSquareIndex;
+                uint32_t destinationIndex;
+                if (rm.move.type == MoveType::Castle)
+                {
+                    toSquareIndex = 0; // we can set this to zero because destinationIndex is unique
+
+                    const bool isKingSide = rm.move.to.file() == fileH;
+                    destinationIndex = isKingSide ? 30 : 31;
+                }
+                else if (rm.move.type == MoveType::Promotion)
+                {
+                    toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(pos.sideToMove())).count();
+                    destinationIndex = std::abs(ordinal(rm.move.to) - ordinal(rm.move.from)) - 7 + 27; // verify
+                }
+                else
+                {
+                    toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(pos.sideToMove())).count();
+                    const PieceType pt = pos.pieceAt(rm.move.to).type();
+                    if (pt == PieceType::Pawn)
+                    {
+                        destinationIndex = move_index::destinationIndex(pt, rm.move.from, rm.move.to);
+                    }
+                    else
+                    {
+                        destinationIndex = move_index::pawnDestinationIndex(rm.move.from, rm.move.to, pos.sideToMove(), PieceType::None);
+                    }
+                }
+
+                const uint32_t capturedPieceType = ordinal(rm.capturedPiece.type());
+                const uint32_t oldCastlingRights = ordinal(rm.oldCastlingRights);
+                const uint32_t hadEpSquare = pos.epSquare() != Square::none();
+                const uint32_t oldEpSquareFile = ordinal(pos.epSquare().file());
+
+                return
+                    (toSquareIndex << (20 - 4))
+                    | (destinationIndex << (20 - 4 - 5))
+                    | (capturedPieceType << (20 - 4 - 5 - 3))
+                    | (oldCastlingRights << (20 - 4 - 5 - 3 - 4))
+                    | (hadEpSquare << (20 - 4 - 5 - 3 - 4 - 1))
+                    | oldEpSquareFile;
             }
 
             Key::Key(const Position& pos, const ReverseMove& reverseMove)
@@ -58,7 +96,7 @@ namespace persistence
                 m_hash[0] = hash[0];
                 m_hash[1] = hash[1];
                 m_hash[2] = hash[2] & lastHashPartMask;
-                m_hash[2] |= packReverseMove(reverseMove) << reverseMoveShift;
+                m_hash[2] |= packReverseMove(pos, reverseMove) << reverseMoveShift;
             }
 
             Key::Key(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
