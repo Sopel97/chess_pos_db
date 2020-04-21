@@ -1239,9 +1239,7 @@ namespace command_line_app
             }
 
             manifestsJson[name] = nlohmann::json{
-                "support_manifest", nlohmann::json{
-                    "supported_file_types", supportedTypesJson
-                    }
+                { "supported_file_types", supportedTypesJson }
             };
         }
 
