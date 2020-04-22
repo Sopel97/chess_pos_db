@@ -1696,7 +1696,7 @@ namespace command_line_app
             numGames += 1;
             if constexpr (std::is_same_v<ReaderT, pgn::LazyPgnFileReader>)
             {
-                for (auto&& position : game.positions())
+                for (auto&& san : game.moves())
                 {
                     numPositions += 1;
                 }
