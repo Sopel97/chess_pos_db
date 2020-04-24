@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-struct Position;
+struct PositionWithZobrist;
 struct ReverseMove;
 struct Move;
 
@@ -60,9 +60,9 @@ namespace persistence
 
                 Key() = default;
 
-                Key(const Position& pos, const ReverseMove& reverseMove = ReverseMove{});
+                Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove = ReverseMove{});
 
-                Key(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result);
+                Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result);
 
                 Key(const Key&) = default;
                 Key(Key&&) = default;
@@ -165,7 +165,7 @@ namespace persistence
             {
                 Entry() = default;
 
-                Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result);
+                Entry(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result);
 
                 Entry(const Entry&) = default;
                 Entry(Entry&&) = default;

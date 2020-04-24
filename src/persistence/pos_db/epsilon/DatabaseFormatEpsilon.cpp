@@ -68,11 +68,11 @@ namespace persistence
                     const PieceType pt = pos.pieceAt(rm.move.to).type();
                     if (pt == PieceType::Pawn)
                     {
-                        destinationIndex = move_index::destinationIndex(pt, rm.move.from, rm.move.to);
+                        destinationIndex = move_index::pawnDestinationIndex(rm.move.from, rm.move.to, pos.sideToMove(), PieceType::None);
                     }
                     else
                     {
-                        destinationIndex = move_index::pawnDestinationIndex(rm.move.from, rm.move.to, pos.sideToMove(), PieceType::None);
+                        destinationIndex = move_index::destinationIndex(pt, rm.move.from, rm.move.to);
                     }
                 }
 
@@ -90,16 +90,16 @@ namespace persistence
                     | oldEpSquareFile;
             }
 
-            Key::Key(const Position& pos, const ReverseMove& reverseMove)
+            Key::Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove)
             {
-                const auto hash = pos.hash();
-                m_hash[0] = hash[0];
-                m_hash[1] = hash[1];
-                m_hash[2] = hash[2] & lastHashPartMask;
+                const auto hash = pos.zobrist();
+                m_hash[0] = hash.high >> 32;
+                m_hash[1] = hash.high & 0xFFFFFFFFull;
+                m_hash[2] = hash.low & lastHashPartMask;
                 m_hash[2] |= packReverseMove(pos, reverseMove) << reverseMoveShift;
             }
 
-            Key::Key(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
+            Key::Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
                 Key(pos, reverseMove)
             {
                 m_hash[2] |=
@@ -122,7 +122,7 @@ namespace persistence
                 return fromOrdinal<GameResult>(m_hash[2] & resultMask);
             }
 
-            Entry::Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
+            Entry::Entry(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
                 m_key(pos, reverseMove, level, result),
                 m_count(1)
             {
@@ -1100,7 +1100,7 @@ namespace persistence
             keys.reserve(queries.size());
             for (auto&& q : queries)
             {
-                keys.emplace_back(q.position, q.reverseMove);
+                keys.emplace_back(PositionWithZobrist(q.position), q.reverseMove);
             }
             return keys;
         }
@@ -1116,7 +1116,7 @@ namespace persistence
             std::vector<detail::Entry> bucket = pipeline.getEmptyBuffer();
 
             auto processPosition = [this, &bucket, &pipeline](
-                const Position& position,
+                const PositionWithZobrist& position,
                 const ReverseMove& reverseMove,
                 GameLevel level,
                 GameResult result
@@ -1155,7 +1155,7 @@ namespace persistence
                             continue;
                         }
 
-                        Position position = Position::startPosition();
+                        PositionWithZobrist position = PositionWithZobrist::startPosition();
                         ReverseMove reverseMove{};
                         processPosition(position, reverseMove, level, *result);
                         std::size_t numPositionsInGame = 1;
@@ -1198,7 +1198,7 @@ namespace persistence
                             continue;
                         }
 
-                        Position position = Position::startPosition();
+                        PositionWithZobrist position = PositionWithZobrist::startPosition();
                         ReverseMove reverseMove{};
                         processPosition(position, reverseMove, level, *result);
                         auto moves = game.moves();
@@ -1327,7 +1327,7 @@ namespace persistence
                 std::vector<detail::Entry> entries = pipeline.getEmptyBuffer();
 
                 auto processPosition = [this, &pipeline, &entries](
-                    const Position& position, 
+                    const PositionWithZobrist& position,
                     const ReverseMove& reverseMove,
                     GameLevel level,
                     GameResult result,
@@ -1375,7 +1375,7 @@ namespace persistence
 
                             std::size_t numPositionsInGame = 0;
 
-                            Position position = Position::startPosition();
+                            PositionWithZobrist position = PositionWithZobrist::startPosition();
                             ReverseMove reverseMove{};
                             processPosition(position, reverseMove, level, *result, nextId);
                             for (auto& san : game.moves())
@@ -1414,7 +1414,7 @@ namespace persistence
                                 continue;
                             }
 
-                            Position position = Position::startPosition();
+                            PositionWithZobrist position = PositionWithZobrist::startPosition();
                             ReverseMove reverseMove{};
                             processPosition(position, reverseMove, level, *result, nextId);
                             auto moves = game.moves();

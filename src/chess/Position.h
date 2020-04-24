@@ -278,6 +278,27 @@ public:
         ++m_pieceCount[piece];
     }
 
+    constexpr void place(Piece piece, Square sq, ZobristKey& zobrist)
+    {
+        ASSERT(sq.isOk());
+
+        auto oldPiece = m_pieces[sq];
+        m_pieceBB[oldPiece] ^= sq;
+
+        zobrist ^= Zobrist::psq[oldPiece][sq];
+        zobrist ^= Zobrist::psq[piece][sq];
+
+        if (oldPiece != Piece::none())
+        {
+            m_piecesByColorBB[oldPiece.color()] ^= sq;
+        }
+        m_pieces[sq] = piece;
+        m_pieceBB[piece] |= sq;
+        m_piecesByColorBB[piece.color()] |= sq;
+        --m_pieceCount[oldPiece];
+        ++m_pieceCount[piece];
+    }
+
     // returns captured piece
     // doesn't check validity
     FORCEINLINE constexpr Piece doMove(Move move)
@@ -446,8 +467,6 @@ public:
             if (capturedPiece == Piece::none())
             {
                 m_pieceBB[Piece::none()] ^= xormove;
-
-                zobrist ^= Zobrist::psq[capturedPiece][move.to];
             }
             else
             {
@@ -458,6 +477,8 @@ public:
 
                 --m_pieceCount[capturedPiece];
                 ++m_pieceCount[Piece::none()];
+
+                zobrist ^= Zobrist::psq[capturedPiece][move.to];
             }
 
             return capturedPiece;
@@ -980,6 +1001,11 @@ struct PositionWithZobrist : public Position
                 Zobrist::castling[static_cast<unsigned>(oldCastlingRights)]
                 ^ Zobrist::castling[static_cast<unsigned>(m_castlingRights)];
         }
+    }
+
+    constexpr void place(Piece piece, Square sq)
+    {
+        Board::place(piece, sq, m_zobrist);
     }
 
     ReverseMove doMove(const Move& move);
