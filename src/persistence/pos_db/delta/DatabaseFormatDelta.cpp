@@ -965,7 +965,7 @@ namespace persistence
             Database::ImportProgressCallback progressCallback
             )
         {
-            const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u) - 1u;
+            const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u);
 
             if (files.empty())
             {
