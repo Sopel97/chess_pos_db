@@ -4,6 +4,7 @@
 
 #include "Bitboard.h"
 #include "Chess.h"
+#include "Zobrist.h"
 
 #include "enum/EnumArray.h"
 
@@ -12,36 +13,6 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
-
-struct ZobristKey
-{
-    std::uint64_t high{ 0 };
-    std::uint64_t low{ 0 };
-
-    friend ZobristKey operator^(ZobristKey lhs, ZobristKey rhs)
-    {
-        return ZobristKey{
-            lhs.high ^ rhs.high,
-            lhs.low ^ rhs.low
-        };
-    }
-
-    ZobristKey& operator^=(ZobristKey rhs)
-    {
-        high ^= rhs.high;
-        low ^= rhs.low;
-
-        return *this;
-    }
-};
-
-struct Zobrist
-{
-    static EnumArray2<Piece, Square, ZobristKey> psq;
-    static EnumArray<File, ZobristKey> enpassant;
-    static std::array<ZobristKey, 16> castling;
-    static ZobristKey blackToMove;
-};
 
 struct Board
 {
@@ -792,7 +763,6 @@ struct Position : public Board
 
     constexpr Position() noexcept :
         Board(),
-        m_zobrist{},
         m_sideToMove(Color::White),
         m_epSquare(Square::none()),
         m_castlingRights(CastlingRights::All)
@@ -801,7 +771,6 @@ struct Position : public Board
 
     constexpr Position(const Board& board, Color sideToMove, Square epSquare, CastlingRights castlingRights) :
         Board(board),
-        m_zobrist{},
         m_sideToMove(sideToMove),
         m_epSquare(epSquare),
         m_castlingRights(castlingRights)
@@ -885,8 +854,11 @@ struct Position : public Board
 
     [[nodiscard]] constexpr bool friend operator==(const Position& lhs, const Position& rhs) noexcept
     {
-        // TODO: ep and castling rights equality
-        return lhs.m_sideToMove == rhs.m_sideToMove && static_cast<const Board&>(lhs) == static_cast<const Board&>(rhs);
+        return 
+            lhs.m_sideToMove == rhs.m_sideToMove
+            && lhs.m_epSquare == rhs.m_epSquare
+            && lhs.m_castlingRights == rhs.m_castlingRights
+            && static_cast<const Board&>(lhs) == static_cast<const Board&>(rhs);
     }
 
     // these are supposed to be used only for testing
@@ -903,8 +875,6 @@ struct Position : public Board
 
     [[nodiscard]] std::array<std::uint32_t, 4> hash() const;
 
-    [[nodiscard]] ZobristKey zobrist() const;
-
     [[nodiscard]] constexpr bool isEpPossible() const
     {
         return m_epSquare != Square::none();
@@ -912,8 +882,7 @@ struct Position : public Board
 
     [[nodiscard]] constexpr CompressedPosition compress() const;
 
-private:
-    ZobristKey m_zobrist;
+protected:
     Color m_sideToMove;
     Square m_epSquare;
     CastlingRights m_castlingRights;
@@ -924,8 +893,144 @@ private:
 
     void nullifyEpSquareIfNotPossible();
 };
-static_assert(sizeof(Position) == 208 + 16);
+static_assert(sizeof(Position) == 208);
 
+struct PositionWithZobrist : public Position
+{
+    using BaseType = Board;
+
+    constexpr PositionWithZobrist() noexcept :
+        Position(),
+        m_zobrist{}
+    {
+        initZobrist();
+    }
+
+    constexpr PositionWithZobrist(const Board& board, Color sideToMove, Square epSquare, CastlingRights castlingRights) :
+        Position(board, sideToMove, epSquare, castlingRights),
+        m_zobrist{}
+    {
+        initZobrist();
+    }
+
+    explicit constexpr PositionWithZobrist(const Position& pos) :
+        Position(pos)
+    {
+        initZobrist();
+    }
+
+    void set(const char* fen);
+
+    // Returns false if the fen was not valid
+    // If the returned value was false the position
+    // is in unspecified state.
+    [[nodiscard]] bool trySet(std::string_view fen);
+
+    [[nodiscard]] static PositionWithZobrist fromFen(const char* fen);
+
+    [[nodiscard]] static std::optional<PositionWithZobrist> tryFromFen(std::string_view fen);
+
+    [[nodiscard]] static PositionWithZobrist startPosition();
+
+    constexpr void setEpSquareUnchecked(Square sq)
+    {
+        if (m_epSquare != Square::none())
+        {
+            m_zobrist ^= Zobrist::enpassant[m_epSquare.file()];
+        }
+
+        m_epSquare = sq;
+
+        if (m_epSquare != Square::none())
+        {
+            m_zobrist ^= Zobrist::enpassant[m_epSquare.file()];
+        }
+    }
+
+    constexpr void setSideToMove(Color color)
+    {
+        if (m_sideToMove != color)
+        {
+            m_zobrist ^= Zobrist::blackToMove;
+            m_sideToMove = color;
+        }
+    }
+
+    constexpr void addCastlingRights(CastlingRights rights)
+    {
+        const auto oldCastlingRights = m_castlingRights;
+        m_castlingRights |= rights;
+
+        if (oldCastlingRights != m_castlingRights)
+        {
+            m_zobrist ^=
+                Zobrist::castling[static_cast<unsigned>(oldCastlingRights)]
+                ^ Zobrist::castling[static_cast<unsigned>(m_castlingRights)];
+        }
+    }
+
+    constexpr void setCastlingRights(CastlingRights rights)
+    {
+        const auto oldCastlingRights = m_castlingRights;
+        m_castlingRights = rights;
+
+        if (oldCastlingRights != m_castlingRights)
+        {
+            m_zobrist ^=
+                Zobrist::castling[static_cast<unsigned>(oldCastlingRights)]
+                ^ Zobrist::castling[static_cast<unsigned>(m_castlingRights)];
+        }
+    }
+
+    ReverseMove doMove(const Move& move);
+
+    constexpr void undoMove(const ReverseMove& reverseMove) = delete;
+
+    [[nodiscard]] constexpr bool friend operator==(const PositionWithZobrist& lhs, const PositionWithZobrist& rhs) noexcept
+    {
+        return
+            lhs.m_zobrist == rhs.m_zobrist
+            && lhs.m_sideToMove == rhs.m_sideToMove 
+            && lhs.m_epSquare == rhs.m_epSquare
+            && lhs.m_castlingRights == rhs.m_castlingRights
+            && static_cast<const Board&>(lhs) == static_cast<const Board&>(rhs);
+    }
+
+    [[nodiscard]] constexpr Position beforeMove(const ReverseMove& reverseMove) const = delete;
+
+    [[nodiscard]] PositionWithZobrist afterMove(Move move) const;
+
+    [[nodiscard]] ZobristKey zobrist() const;
+
+private:
+    ZobristKey m_zobrist;
+
+    constexpr void initZobrist()
+    {
+        m_zobrist = Zobrist::zero;
+        m_zobrist ^= Zobrist::castling[static_cast<unsigned>(m_castlingRights)];
+        if (m_epSquare != Square::none())
+        {
+            m_zobrist ^= Zobrist::enpassant[m_epSquare.file()];
+        }
+
+        if (m_sideToMove == Color::Black)
+        {
+            m_zobrist ^= Zobrist::blackToMove;
+        }
+
+        for (auto sq : values<Square>())
+        {
+            const auto piece = pieceAt(sq);
+            if (piece != Piece::none())
+            {
+                m_zobrist ^= Zobrist::psq[piece][sq];
+            }
+        }
+    }
+};
+
+static_assert(sizeof(PositionWithZobrist) == 224);
 
 struct CompressedPosition
 {

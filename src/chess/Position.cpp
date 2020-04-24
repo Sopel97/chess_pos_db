@@ -17,29 +17,6 @@
 
 #include "xxhash/xxhash_cpp.h"
 
-EnumArray2<Piece, Square, ZobristKey> Zobrist::psq;
-EnumArray<File, ZobristKey> Zobrist::enpassant;
-std::array<ZobristKey, 16> Zobrist::castling;
-ZobristKey Zobrist::blackToMove;
-
-static inline bool initZobrist = []() {
-    std::mt19937_64 rng(3121234);
-
-    for (auto& a : Zobrist::psq)
-        for (auto& b : a)
-            b = { rng(), rng() };
-
-    for (auto& a : Zobrist::enpassant)
-        a = { rng(), rng() };
-
-    for (auto& a : Zobrist::castling)
-        a = { rng(), rng() };
-
-    Zobrist::blackToMove = { rng(), rng() };
-
-    return true;
-}();
-
 [[nodiscard]] bool Board::createsDiscoveredAttackOnOwnKing(Move move, Color color) const
 {
     // checks whether by doing a move we uncover our king to a check
@@ -404,18 +381,7 @@ ReverseMove Position::doMove(const Move& move)
     m_castlingRights &= detail::lookup::preservedCastlingRights[move.from];
     m_castlingRights &= detail::lookup::preservedCastlingRights[move.to];
 
-    if (oldCastlingRights != m_castlingRights)
-    {
-        m_zobrist ^= 
-            Zobrist::castling[static_cast<unsigned>(oldCastlingRights)] 
-            ^ Zobrist::castling[static_cast<unsigned>(m_castlingRights)];
-    }
-
-    if (m_epSquare != Square::none())
-    {
-        m_zobrist ^= Zobrist::enpassant[m_epSquare.file()];
-        m_epSquare = Square::none();
-    }
+    m_epSquare = Square::none();
     // for double pushes move index differs by 16 or -16;
     if((movedPiece == PieceType::Pawn) & ((ordinal(move.to) ^ ordinal(move.from)) == 16))
     {
@@ -426,13 +392,11 @@ ReverseMove Position::doMove(const Move& move)
         if (isEpPossible(potentialEpSquare, !m_sideToMove))
         {
             m_epSquare = potentialEpSquare;
-            m_zobrist ^= Zobrist::enpassant[potentialEpSquare.file()];
         }
     }
 
-    const Piece captured = BaseType::doMove(move, m_zobrist);
+    const Piece captured = BaseType::doMove(move);
     m_sideToMove = !m_sideToMove;
-    m_zobrist ^= Zobrist::blackToMove;
     return { move, captured, oldEpSquare, oldCastlingRights };
 }
 
@@ -475,12 +439,6 @@ ReverseMove Position::doMove(const Move& move)
     return arrh;
 }
 
-
-[[nodiscard]] ZobristKey Position::zobrist() const
-{
-    return m_zobrist;
-}
-
 [[nodiscard]] FORCEINLINE bool Position::isEpPossible(Square epSquare, Color sideToMove) const
 {
     const Bitboard pawnsAttackingEpSquare =
@@ -516,4 +474,97 @@ void Position::nullifyEpSquareIfNotPossible()
     {
         m_epSquare = Square::none();
     }
+}
+
+void PositionWithZobrist::set(const char* fen)
+{
+    Position::set(fen);
+    initZobrist();
+}
+
+[[nodiscard]] bool PositionWithZobrist::trySet(std::string_view fen)
+{
+    bool b = Position::trySet(fen);
+    if (b)
+    {
+        initZobrist();
+    }
+    return b;
+}
+
+[[nodiscard]] PositionWithZobrist PositionWithZobrist::fromFen(const char* fen)
+{
+    PositionWithZobrist pos{};
+    pos.set(fen);
+    return pos;
+}
+
+[[nodiscard]] std::optional<PositionWithZobrist> PositionWithZobrist::tryFromFen(std::string_view fen)
+{
+    PositionWithZobrist pos{};
+    if (pos.trySet(fen)) return pos;
+    else return {};
+}
+
+[[nodiscard]] PositionWithZobrist PositionWithZobrist::startPosition()
+{
+    static const PositionWithZobrist pos = fromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    return pos;
+}
+
+ReverseMove PositionWithZobrist::doMove(const Move& move)
+{
+    ASSERT(move.from.isOk() && move.to.isOk());
+
+    const PieceType movedPiece = pieceAt(move.from).type();
+    const Square oldEpSquare = m_epSquare;
+    const CastlingRights oldCastlingRights = m_castlingRights;
+    m_castlingRights &= detail::lookup::preservedCastlingRights[move.from];
+    m_castlingRights &= detail::lookup::preservedCastlingRights[move.to];
+
+    if (oldCastlingRights != m_castlingRights)
+    {
+        m_zobrist ^=
+            Zobrist::castling[static_cast<unsigned>(oldCastlingRights)]
+            ^ Zobrist::castling[static_cast<unsigned>(m_castlingRights)];
+    }
+
+    if (m_epSquare != Square::none())
+    {
+        m_zobrist ^= Zobrist::enpassant[m_epSquare.file()];
+        m_epSquare = Square::none();
+    }
+    // for double pushes move index differs by 16 or -16;
+    if ((movedPiece == PieceType::Pawn) & ((ordinal(move.to) ^ ordinal(move.from)) == 16))
+    {
+        const Square potentialEpSquare = fromOrdinal<Square>((ordinal(move.to) + ordinal(move.from)) >> 1);
+        // Even though the move has not yet been made we can safely call
+        // this function and get the right result because the position of the
+        // pawn to be captured is not really relevant.
+        if (isEpPossible(potentialEpSquare, !m_sideToMove))
+        {
+            m_epSquare = potentialEpSquare;
+            m_zobrist ^= Zobrist::enpassant[potentialEpSquare.file()];
+        }
+    }
+
+    const Piece captured = BaseType::doMove(move, m_zobrist);
+    m_sideToMove = !m_sideToMove;
+    m_zobrist ^= Zobrist::blackToMove;
+    return { move, captured, oldEpSquare, oldCastlingRights };
+}
+
+[[nodiscard]] ZobristKey PositionWithZobrist::zobrist() const
+{
+    return m_zobrist;
+}
+
+[[nodiscard]] PositionWithZobrist PositionWithZobrist::afterMove(Move move) const
+{
+    PositionWithZobrist cpy(*this);
+    auto pc = cpy.doMove(move);
+
+    (void)pc;
+
+    return cpy;
 }
