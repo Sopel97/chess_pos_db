@@ -966,7 +966,7 @@ namespace persistence
             Database::ImportProgressCallback progressCallback
             )
         {
-            const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 1u, 3u);
+            const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 2u, 3u) - 1u;
 
             if (files.empty())
             {
@@ -982,7 +982,7 @@ namespace persistence
 
             const std::size_t numBuffers = 1;
 
-            const std::size_t numAdditionalBuffers = numBuffers * 4;
+            const std::size_t numAdditionalBuffers = 1 + numSortingThreads;
 
             const std::size_t bucketSize =
                 ext::numObjectsPerBufferUnit<detail::Entry>(
