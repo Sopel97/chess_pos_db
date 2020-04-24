@@ -423,21 +423,17 @@ ReverseMove Position::doMove(const Move& move)
 
 [[nodiscard]] std::array<std::uint32_t, 4> Position::hash() const
 {
-    constexpr std::size_t epSquareFileBits = 4;
-    constexpr std::size_t castlingRightsBits = 4;
+    constexpr std::uint32_t epSquareShift = 1;
+    constexpr std::uint32_t castlingRightsShift = 1 + 7;
 
     std::array<std::uint32_t, 4> arrh;
     auto h = xxhash::XXH3_128bits(piecesRaw(), 64);
     std::memcpy(arrh.data(), &h, sizeof(std::uint32_t) * 4);
-    arrh[0] ^= ordinal(m_sideToMove);
-
-    arrh[0] <<= epSquareFileBits;
-    // 0xF is certainly not a file number
-    arrh[0] ^= m_epSquare == Square::none() ? 0xF : ordinal(m_epSquare);
-
-    arrh[0] <<= castlingRightsBits;
-    arrh[0] ^= ordinal(m_castlingRights);
-
+    const std::uint32_t mod =
+        ordinal(m_sideToMove)
+        | (ordinal(m_epSquare) << epSquareShift) // epSquare can be 64
+        | (ordinal(m_castlingRights) << castlingRightsShift);
+    arrh[0] ^= mod;
     return arrh;
 }
 
