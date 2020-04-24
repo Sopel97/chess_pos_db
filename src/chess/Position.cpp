@@ -13,7 +13,32 @@
 #include <optional>
 #include <string>
 
+#include <random>
+
 #include "xxhash/xxhash_cpp.h"
+
+EnumArray2<Piece, Square, ZobristKey> Zobrist::psq;
+EnumArray<File, ZobristKey> Zobrist::enpassant;
+std::array<ZobristKey, 16> Zobrist::castling;
+ZobristKey Zobrist::blackToMove;
+
+static inline bool initZobrist = []() {
+    std::mt19937_64 rng(3121234);
+
+    for (auto& a : Zobrist::psq)
+        for (auto& b : a)
+            b = { rng(), rng() };
+
+    for (auto& a : Zobrist::enpassant)
+        a = { rng(), rng() };
+
+    for (auto& a : Zobrist::castling)
+        a = { rng(), rng() };
+
+    Zobrist::blackToMove = { rng(), rng() };
+
+    return true;
+}();
 
 [[nodiscard]] bool Board::createsDiscoveredAttackOnOwnKing(Move move, Color color) const
 {
@@ -379,7 +404,18 @@ ReverseMove Position::doMove(const Move& move)
     m_castlingRights &= detail::lookup::preservedCastlingRights[move.from];
     m_castlingRights &= detail::lookup::preservedCastlingRights[move.to];
 
-    m_epSquare = Square::none();
+    if (oldCastlingRights != m_castlingRights)
+    {
+        m_zobrist ^= 
+            Zobrist::castling[static_cast<unsigned>(oldCastlingRights)] 
+            ^ Zobrist::castling[static_cast<unsigned>(m_castlingRights)];
+    }
+
+    if (m_epSquare != Square::none())
+    {
+        m_zobrist ^= Zobrist::enpassant[m_epSquare.file()];
+        m_epSquare = Square::none();
+    }
     // for double pushes move index differs by 16 or -16;
     if((movedPiece == PieceType::Pawn) & ((ordinal(move.to) ^ ordinal(move.from)) == 16))
     {
@@ -390,11 +426,13 @@ ReverseMove Position::doMove(const Move& move)
         if (isEpPossible(potentialEpSquare, !m_sideToMove))
         {
             m_epSquare = potentialEpSquare;
+            m_zobrist ^= Zobrist::enpassant[potentialEpSquare.file()];
         }
     }
 
-    const Piece captured = BaseType::doMove(move);
+    const Piece captured = BaseType::doMove(move, m_zobrist);
     m_sideToMove = !m_sideToMove;
+    m_zobrist ^= Zobrist::blackToMove;
     return { move, captured, oldEpSquare, oldCastlingRights };
 }
 
@@ -435,6 +473,12 @@ ReverseMove Position::doMove(const Move& move)
         | (ordinal(m_castlingRights) << castlingRightsShift);
     arrh[0] ^= mod;
     return arrh;
+}
+
+
+[[nodiscard]] ZobristKey Position::zobrist() const
+{
+    return m_zobrist;
 }
 
 [[nodiscard]] FORCEINLINE bool Position::isEpPossible(Square epSquare, Color sideToMove) const

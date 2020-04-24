@@ -13,6 +13,36 @@
 #include <optional>
 #include <string_view>
 
+struct ZobristKey
+{
+    std::uint64_t high{ 0 };
+    std::uint64_t low{ 0 };
+
+    friend ZobristKey operator^(ZobristKey lhs, ZobristKey rhs)
+    {
+        return ZobristKey{
+            lhs.high ^ rhs.high,
+            lhs.low ^ rhs.low
+        };
+    }
+
+    ZobristKey& operator^=(ZobristKey rhs)
+    {
+        high ^= rhs.high;
+        low ^= rhs.low;
+
+        return *this;
+    }
+};
+
+struct Zobrist
+{
+    static EnumArray2<Piece, Square, ZobristKey> psq;
+    static EnumArray<File, ZobristKey> enpassant;
+    static std::array<ZobristKey, 16> castling;
+    static ZobristKey blackToMove;
+};
+
 struct Board
 {
 private:
@@ -420,6 +450,163 @@ public:
         }
     }
 
+    // returns captured piece
+    // doesn't check validity
+    FORCEINLINE constexpr Piece doMove(Move move, ZobristKey& zobrist)
+    {
+        if (move.type == MoveType::Normal)
+        {
+            const Piece capturedPiece = m_pieces[move.to];
+            const Piece piece = m_pieces[move.from];
+
+            const Bitboard frombb = Bitboard::square(move.from);
+            const Bitboard tobb = Bitboard::square(move.to);
+            const Bitboard xormove = frombb ^ tobb;
+
+            m_pieces[move.to] = piece;
+            m_pieces[move.from] = Piece::none();
+
+            zobrist ^= Zobrist::psq[piece][move.from] ^ Zobrist::psq[piece][move.to];
+
+            m_pieceBB[piece] ^= xormove;
+
+            m_piecesByColorBB[piece.color()] ^= xormove;
+
+            if (capturedPiece == Piece::none())
+            {
+                m_pieceBB[Piece::none()] ^= xormove;
+
+                zobrist ^= Zobrist::psq[capturedPiece][move.to];
+            }
+            else
+            {
+                m_pieceBB[capturedPiece] ^= tobb;
+                m_pieceBB[Piece::none()] ^= frombb;
+
+                m_piecesByColorBB[capturedPiece.color()] ^= tobb;
+
+                --m_pieceCount[capturedPiece];
+                ++m_pieceCount[Piece::none()];
+            }
+
+            return capturedPiece;
+        }
+
+        return doMoveColdPath(move, zobrist);
+    }
+
+    NOINLINE constexpr Piece doMoveColdPath(Move move, ZobristKey& zobrist)
+    {
+        if (move.type == MoveType::Promotion)
+        {
+            // We split it even though it's similar just because
+            // the normal case is much more common.
+            const Piece capturedPiece = m_pieces[move.to];
+            const Piece fromPiece = m_pieces[move.from];
+            const Piece toPiece = move.promotedPiece;
+
+            m_pieces[move.to] = toPiece;
+            m_pieces[move.from] = Piece::none();
+
+            zobrist ^= Zobrist::psq[fromPiece][move.from] ^ Zobrist::psq[toPiece][move.to];
+
+            m_pieceBB[fromPiece] ^= move.from;
+            m_pieceBB[toPiece] ^= move.to;
+
+            m_pieceBB[capturedPiece] ^= move.to;
+            m_pieceBB[Piece::none()] ^= move.from;
+
+            m_piecesByColorBB[fromPiece.color()] ^= move.to;
+            m_piecesByColorBB[fromPiece.color()] ^= move.from;
+            if (capturedPiece != Piece::none())
+            {
+                m_piecesByColorBB[capturedPiece.color()] ^= move.to;
+                --m_pieceCount[capturedPiece];
+                ++m_pieceCount[Piece::none()];
+
+                zobrist ^= Zobrist::psq[capturedPiece][move.to];
+            }
+
+            --m_pieceCount[fromPiece];
+            ++m_pieceCount[toPiece];
+
+            return capturedPiece;
+        }
+        else if (move.type == MoveType::EnPassant)
+        {
+            const Piece movedPiece = m_pieces[move.from];
+            const Piece capturedPiece(PieceType::Pawn, !movedPiece.color());
+            const Square capturedPieceSq(move.to.file(), move.from.rank());
+
+            // on ep move there are 3 squares involved
+            m_pieces[move.to] = movedPiece;
+            m_pieces[move.from] = Piece::none();
+            m_pieces[capturedPieceSq] = Piece::none();
+
+            zobrist ^= Zobrist::psq[movedPiece][move.from] ^ Zobrist::psq[movedPiece][move.to];
+            zobrist ^= Zobrist::psq[capturedPiece][capturedPieceSq];
+
+            m_pieceBB[movedPiece] ^= move.from;
+            m_pieceBB[movedPiece] ^= move.to;
+
+            m_pieceBB[Piece::none()] ^= move.from;
+            m_pieceBB[Piece::none()] ^= move.to;
+
+            m_pieceBB[capturedPiece] ^= capturedPieceSq;
+            m_pieceBB[Piece::none()] ^= capturedPieceSq;
+
+            m_piecesByColorBB[movedPiece.color()] ^= move.to;
+            m_piecesByColorBB[movedPiece.color()] ^= move.from;
+            m_piecesByColorBB[capturedPiece.color()] ^= capturedPieceSq;
+
+            --m_pieceCount[capturedPiece];
+            ++m_pieceCount[Piece::none()];
+
+            return capturedPiece;
+        }
+        else // if (move.type == MoveType::Castle)
+        {
+            const Square rookFromSq = move.to;
+            const Square kingFromSq = move.from;
+
+            const Piece rook = m_pieces[rookFromSq];
+            const Piece king = m_pieces[kingFromSq];
+            const Color color = king.color();
+            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
+
+            const Square rookToSq = m_rookCastleDestinations[color][castleType];
+            const Square kingToSq = m_kingCastleDestinations[color][castleType];
+
+            // 4 squares are involved
+            m_pieces[rookFromSq] = Piece::none();
+            m_pieces[kingFromSq] = Piece::none();
+            m_pieces[rookToSq] = rook;
+            m_pieces[kingToSq] = king;
+
+            zobrist ^= Zobrist::psq[rook][rookFromSq] ^ Zobrist::psq[rook][rookToSq];
+            zobrist ^= Zobrist::psq[king][kingFromSq] ^ Zobrist::psq[king][kingToSq];
+
+            m_pieceBB[rook] ^= rookFromSq;
+            m_pieceBB[rook] ^= rookToSq;
+
+            m_pieceBB[king] ^= kingFromSq;
+            m_pieceBB[king] ^= kingToSq;
+
+            m_pieceBB[Piece::none()] ^= rookFromSq;
+            m_pieceBB[Piece::none()] ^= rookToSq;
+
+            m_pieceBB[Piece::none()] ^= kingFromSq;
+            m_pieceBB[Piece::none()] ^= kingToSq;
+
+            m_piecesByColorBB[color] ^= rookFromSq;
+            m_piecesByColorBB[color] ^= rookToSq;
+            m_piecesByColorBB[color] ^= kingFromSq;
+            m_piecesByColorBB[color] ^= kingToSq;
+
+            return Piece::none();
+        }
+    }
+
     constexpr void undoMove(Move move, Piece capturedPiece)
     {
         if (move.type == MoveType::Normal || move.type == MoveType::Promotion)
@@ -605,6 +792,7 @@ struct Position : public Board
 
     constexpr Position() noexcept :
         Board(),
+        m_zobrist{},
         m_sideToMove(Color::White),
         m_epSquare(Square::none()),
         m_castlingRights(CastlingRights::All)
@@ -613,6 +801,7 @@ struct Position : public Board
 
     constexpr Position(const Board& board, Color sideToMove, Square epSquare, CastlingRights castlingRights) :
         Board(board),
+        m_zobrist{},
         m_sideToMove(sideToMove),
         m_epSquare(epSquare),
         m_castlingRights(castlingRights)
@@ -714,6 +903,8 @@ struct Position : public Board
 
     [[nodiscard]] std::array<std::uint32_t, 4> hash() const;
 
+    [[nodiscard]] ZobristKey zobrist() const;
+
     [[nodiscard]] constexpr bool isEpPossible() const
     {
         return m_epSquare != Square::none();
@@ -722,6 +913,7 @@ struct Position : public Board
     [[nodiscard]] constexpr CompressedPosition compress() const;
 
 private:
+    ZobristKey m_zobrist;
     Color m_sideToMove;
     Square m_epSquare;
     CastlingRights m_castlingRights;
@@ -732,7 +924,7 @@ private:
 
     void nullifyEpSquareIfNotPossible();
 };
-static_assert(sizeof(Position) == 208);
+static_assert(sizeof(Position) == 208 + 16);
 
 
 struct CompressedPosition
