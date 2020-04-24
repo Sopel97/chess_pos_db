@@ -43,7 +43,7 @@ using namespace std::literals;
 
 namespace console_app
 {
-    using DbType = persistence::db_epsilon::Database;
+    using DbType = persistence::db_delta::Database;
 
     const std::size_t importMemory = cfg::g_config["console_app"]["import_memory"].get<MemoryAmount>();
 

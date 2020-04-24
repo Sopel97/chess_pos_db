@@ -45,9 +45,13 @@ namespace persistence
         {
             const std::size_t indexGranularity = cfg::g_config["persistence"]["db_beta"]["index_granularity"].get<std::size_t>();
 
-            Key::Key(const Position& pos, const ReverseMove& reverseMove) :
-                m_hash(pos.hash())
+            Key::Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove)
             {
+                const auto zobrist = pos.zobrist();
+                m_hash[0] = zobrist.high >> 32;
+                m_hash[1] = zobrist.high & 0xFFFFFFFFull;
+                m_hash[2] = zobrist.low >> 32;
+
                 auto packedReverseMove = PackedReverseMove(reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
                 // We want entries ordered with reverse move to also be ordered by just hash
@@ -55,7 +59,7 @@ namespace persistence
                 m_hash[3] = (packedReverseMove.packed() << reverseMoveShift);
             }
 
-            Key::Key(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
+            Key::Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
                 Key(pos, reverseMove)
             {
                 m_hash[3] |=
@@ -247,7 +251,7 @@ namespace persistence
 
             using CountAndGameOffsetType = std::conditional_t<usePacked, PackedCountAndGameOffset, CountAndGameOffset>;
 
-            Entry::Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint64_t gameOffset) :
+            Entry::Entry(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint64_t gameOffset) :
                 m_key(pos, reverseMove, level, result),
                 m_countAndGameOffset(SingleGame{}, gameOffset)
             {
@@ -1326,7 +1330,7 @@ namespace persistence
             keys.reserve(queries.size());
             for (auto&& q : queries)
             {
-                keys.emplace_back(q.position, q.reverseMove);
+                keys.emplace_back(PositionWithZobrist(q.position), q.reverseMove);
             }
             return keys;
         }
@@ -1376,7 +1380,7 @@ namespace persistence
                     const std::uint64_t gameOffset = header.nextGameOffset();
 
                     std::size_t numPositionsInGame = 0;
-                    auto processPosition = [&](const Position& position, const ReverseMove& reverseMove) {
+                    auto processPosition = [&](const PositionWithZobrist& position, const ReverseMove& reverseMove) {
                         bucket.emplace_back(position, reverseMove, level, *result, gameOffset);
                         numPositionsInGame += 1;
 
@@ -1386,7 +1390,7 @@ namespace persistence
                         }
                     };
 
-                    Position position = Position::startPosition();
+                    PositionWithZobrist position = PositionWithZobrist::startPosition();
                     ReverseMove reverseMove{};
                     processPosition(position, reverseMove);
                     for (auto& san : game.moves())
@@ -1548,7 +1552,7 @@ namespace persistence
                         const std::uint64_t gameOffset = header.addHeader(gameHeader).offset;
 
                         std::size_t numPositionsInGame = 0;
-                        auto processPosition = [&, &nextId = nextId](const Position& position, const ReverseMove& reverseMove) {
+                        auto processPosition = [&, &nextId = nextId](const PositionWithZobrist& position, const ReverseMove& reverseMove) {
                             entries.emplace_back(position, reverseMove, level, *result, gameOffset);
                             numPositionsInGame += 1;
 
@@ -1562,7 +1566,7 @@ namespace persistence
                             }
                         };
 
-                        Position position = Position::startPosition();
+                        PositionWithZobrist position = PositionWithZobrist::startPosition();
                         ReverseMove reverseMove{};
                         processPosition(position, reverseMove);
                         for (auto& san : game.moves())

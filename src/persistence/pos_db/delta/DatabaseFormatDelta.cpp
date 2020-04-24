@@ -55,14 +55,14 @@ namespace persistence
             {
             }
 
-            Entry::Entry(const Position& pos, const ReverseMove& reverseMove) :
+            Entry::Entry(const PositionWithZobrist& pos, const ReverseMove& reverseMove) :
                 m_count(1),
                 m_firstGameIndex(std::numeric_limits<std::uint32_t>::max()),
                 m_lastGameIndex(0)
             {
-                const auto hash = pos.hash();
-                m_hashPart1 = static_cast<std::uint64_t>(hash[0]) << 32 | hash[1];
-                m_eloDiffAndHashPart2 = (hash[2] & nbitmask<std::uint64_t>[additionalHashBits]);
+                const auto zobrist = pos.zobrist();
+                m_hashPart1 = zobrist.high;
+                m_eloDiffAndHashPart2 = (zobrist.low & nbitmask<std::uint64_t>[additionalHashBits]);
 
                 auto packedReverseMove = PackedReverseMove(reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
@@ -71,14 +71,16 @@ namespace persistence
                 m_packedInfo = (packedReverseMove.packed() << reverseMoveShift);
             }
 
-            Entry::Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint32_t firstGameIndex, std::uint32_t lastGameIndex, std::int64_t eloDiff) :
+            Entry::Entry(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint32_t firstGameIndex, std::uint32_t lastGameIndex, std::int64_t eloDiff) :
                 m_count(1),
                 m_firstGameIndex(firstGameIndex),
                 m_lastGameIndex(lastGameIndex)
             {
-                const auto hash = pos.hash();
-                m_hashPart1 = static_cast<std::uint64_t>(hash[0]) << 32 | hash[1];
-                m_eloDiffAndHashPart2 = (static_cast<std::uint64_t>(eloDiff) << additionalHashBits) | (hash[2] & nbitmask<std::uint64_t>[additionalHashBits]);
+                const auto zobrist = pos.zobrist();
+                m_hashPart1 = zobrist.high;
+                m_eloDiffAndHashPart2 = 
+                    (static_cast<std::uint64_t>(eloDiff) << additionalHashBits) 
+                    | (zobrist.low & nbitmask<std::uint64_t>[additionalHashBits]);
 
                 auto packedReverseMove = PackedReverseMove(reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
@@ -1185,7 +1187,7 @@ namespace persistence
             keys.reserve(queries.size());
             for (auto&& q : queries)
             {
-                keys.emplace_back(q.position, q.reverseMove);
+                keys.emplace_back(PositionWithZobrist(q.position), q.reverseMove);
             }
             return keys;
         }
@@ -1237,7 +1239,7 @@ namespace persistence
                     const std::uint32_t gameIndex = header.nextGameId();
 
                     std::size_t numPositionsInGame = 0;
-                    auto processPosition = [&](const Position& position, const ReverseMove& reverseMove) {
+                    auto processPosition = [&](const PositionWithZobrist& position, const ReverseMove& reverseMove) {
                         bucket.emplace_back(position, reverseMove, level, *result, gameIndex, gameIndex, eloDiff);
                         numPositionsInGame += 1;
 
@@ -1247,7 +1249,7 @@ namespace persistence
                         }
                     };
 
-                    Position position = Position::startPosition();
+                    PositionWithZobrist position = PositionWithZobrist::startPosition();
                     ReverseMove reverseMove{};
                     processPosition(position, reverseMove);
                     for (auto& san : game.moves())
@@ -1411,7 +1413,7 @@ namespace persistence
                         const std::uint32_t gameIndex = header.addHeader(gameHeader).index;
 
                         std::size_t numPositionsInGame = 0;
-                        auto processPosition = [&, &nextId = nextId](const Position& position, const ReverseMove& reverseMove) {
+                        auto processPosition = [&, &nextId = nextId](const PositionWithZobrist& position, const ReverseMove& reverseMove) {
                             entries.emplace_back(position, reverseMove, level, *result, gameIndex, gameIndex, eloDiff);
                             numPositionsInGame += 1;
 
@@ -1425,7 +1427,7 @@ namespace persistence
                             }
                         };
 
-                        Position position = Position::startPosition();
+                        PositionWithZobrist position = PositionWithZobrist::startPosition();
                         ReverseMove reverseMove{};
                         processPosition(position, reverseMove);
                         for (auto& san : game.moves())

@@ -92,10 +92,10 @@ namespace persistence
 
             Key::Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove)
             {
-                const auto hash = pos.zobrist();
-                m_hash[0] = hash.high >> 32;
-                m_hash[1] = hash.high & 0xFFFFFFFFull;
-                m_hash[2] = hash.low & lastHashPartMask;
+                const auto zobrist = pos.zobrist();
+                m_hash[0] = zobrist.high >> 32;
+                m_hash[1] = zobrist.high & 0xFFFFFFFFull;
+                m_hash[2] = zobrist.low & lastHashPartMask;
                 m_hash[2] |= packReverseMove(pos, reverseMove) << reverseMoveShift;
             }
 

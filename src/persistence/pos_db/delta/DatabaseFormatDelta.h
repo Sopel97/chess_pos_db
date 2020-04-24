@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-struct Position;
+struct PositionWithZobrist;
 struct ReverseMove;
 struct Move;
 
@@ -72,9 +72,9 @@ namespace persistence
 
                 Entry();
 
-                Entry(const Position& pos, const ReverseMove& reverseMove = ReverseMove{});
+                Entry(const PositionWithZobrist & pos, const ReverseMove& reverseMove = ReverseMove{});
 
-                Entry(const Position& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint32_t firstGameIndex, std::uint32_t lastGameIndex, std::int64_t eloDiff);
+                Entry(const PositionWithZobrist & pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint32_t firstGameIndex, std::uint32_t lastGameIndex, std::int64_t eloDiff);
 
                 Entry(const Entry&) = default;
                 Entry(Entry&&) = default;
