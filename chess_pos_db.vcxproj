@@ -50,6 +50,7 @@
     <ClInclude Include="src\chess\Date.h" />
     <ClInclude Include="src\chess\detail\ParserBits.h" />
     <ClInclude Include="src\chess\Eco.h" />
+    <ClInclude Include="src\chess\Eran.h" />
     <ClInclude Include="src\chess\GameClassification.h" />
     <ClInclude Include="src\chess\MoveGenerator.h" />
     <ClInclude Include="src\chess\MoveIndex.h" />
@@ -90,6 +91,7 @@
     <ClCompile Include="src\chess\Bitboard.cpp" />
     <ClCompile Include="src\chess\Date.cpp" />
     <ClCompile Include="src\chess\Eco.cpp" />
+    <ClCompile Include="src\chess\Eran.cpp" />
     <ClCompile Include="src\chess\MoveGenerator.cpp" />
     <ClCompile Include="src\chess\MoveIndex.cpp" />
     <ClCompile Include="src\chess\Pgn.cpp" />
