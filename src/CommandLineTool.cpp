@@ -380,8 +380,8 @@ namespace command_line_app
             if (request.isValid())
             {
                 auto response = nlohmann::json(db.executeQuery(request)).dump();
-                sendMessage(session, response);
                 Logger::instance().logInfo("Handled valid request. Response size: ", response.size());
+                sendMessage(session, response);
                 return;
             }
         }
@@ -735,6 +735,8 @@ namespace command_line_app
         query::Request request = json["query"];
         auto response = db->executeQuery(request);
         auto responseStr = nlohmann::json(response).dump();
+
+        Logger::instance().logInfo("Handled valid request. Response size: ", responseStr.size());
 
         sendMessage(session, responseStr);
     }

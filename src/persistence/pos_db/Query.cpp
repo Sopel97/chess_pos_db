@@ -201,6 +201,11 @@ namespace query
                 query.fetchingOptions.emplace(select, j[selectStr].get<AdditionalFetchingOptions>());
             }
         }
+
+        if (j.contains("retractions"))
+        {
+            query.retractionsFetchingOptions.emplace(j["retractions"].get<AdditionalRetractionsFetchingOptions>());
+        }
     }
 
     [[nodiscard]] bool Request::isValid() const
