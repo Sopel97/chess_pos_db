@@ -61,6 +61,14 @@
             "fetch_last_game" : true,
             "fetch_first_game_for_each_child" : true,
             "fetch_last_game_for_each_child" : true
+        },
+
+        // Retractions in this context mean reverse moves.
+        // When this is specified a collection of (reverse move, data)
+        // pairs will be returned (see result docs).
+        "retractions" : {
+            "fetch_first_game_for_each" : true,
+            "fetch_last_game_for_each" : true
         }
     }
 }

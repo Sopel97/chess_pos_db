@@ -106,7 +106,25 @@
                 "transpositions" : {},
 
                 // if all is present then nothing else is
-                "all" : {}
+                "all" : {},
+
+                // "Reverse query result"
+                "retractions" : {
+
+                    // Reverse moves are written in Extended Reversible Algebraic Notation.
+                    // It is Reversible Algebraic Notation but with old castling rights
+                    // and old ep square appended as if this was a FEN.
+                    "Bf1xQh8 KQkq -" : {
+                        // Data is the same as for each move in continuations.
+                        // Entry (total for this reverse move) can be assumed to contain
+                        // at least one game (count != 0).
+                    },
+                    // other reverse moves
+                    // examples:
+                    // g7xNh8=Q KQ -
+                    // a2-a4 KQkq f6
+                    // Qa4-a8 - -
+                }
             }
         ]
     }
