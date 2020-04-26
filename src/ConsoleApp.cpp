@@ -144,13 +144,12 @@ namespace console_app
     static void printAggregatedResult(const query::SegregatedEntries& entries)
     {
         std::size_t total = 0;
-        std::size_t totalDirect = 0;
 
         EnumArray2<GameLevel, GameResult, std::pair<std::size_t, std::size_t>> cc{};
 
         for (auto& [origin, e] : entries)
         {
-            totalDirect += e.count;
+            total += e.count;
             cc[origin.level][origin.result].first += e.count;
         }
         std::cout << std::setw(5) << total << ' ';
