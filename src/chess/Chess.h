@@ -1367,7 +1367,11 @@ public:
         rmove.capturedPiece = fromOrdinal<Piece>((m_packed >> 11) & pieceMask);
         rmove.oldCastlingRights = fromOrdinal<CastlingRights>((m_packed >> 7) & castlingRightsMask);
         const PieceType promotedPieceType = fromOrdinal<PieceType>((m_packed >> 4) & pieceTypeMask);
-        rmove.move.promotedPiece = Piece(promotedPieceType, sideThatMoved);
+        if (promotedPieceType != PieceType::None)
+        {
+            rmove.move.promotedPiece = Piece(promotedPieceType, sideThatMoved);
+            rmove.move.type = MoveType::Promotion;
+        }
         const bool hasEpSquare = static_cast<bool>((m_packed >> 3) & 1);
         if (hasEpSquare)
         {
@@ -1378,10 +1382,33 @@ public:
                 : rank3;
             const File file = fromOrdinal<File>(m_packed & fileMask);
             rmove.oldEpSquare = Square(file, rank);
+            if (rmove.oldEpSquare == rmove.move.to)
+            {
+                rmove.move.type = MoveType::EnPassant;
+            }
         }
         else
         {
             rmove.oldEpSquare = Square::none();
+        }
+
+        if (rmove.move.type == MoveType::Normal && rmove.oldCastlingRights != CastlingRights::None)
+        {
+            // If castling was possible then we know it was the king that moved from e1/e8.
+            if (rmove.move.from == e1)
+            {
+                if (rmove.move.to == h1 || rmove.move.to == a1)
+                {
+                    rmove.move.type = MoveType::Castle;
+                }
+            }
+            else if (rmove.move.from == e8)
+            {
+                if (rmove.move.to == h8 || rmove.move.to == a8)
+                {
+                    rmove.move.type = MoveType::Castle;
+                }
+            }
         }
 
         return rmove;
