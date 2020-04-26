@@ -222,16 +222,6 @@ namespace query
 
     struct ResultForRoot
     {
-        struct MoveCompareLess
-        {
-            [[nodiscard]] bool operator()(const Move& lhs, const Move& rhs) const noexcept;
-        };
-
-        struct ReverseMoveCompareLess
-        {
-            [[nodiscard]] bool operator()(const ReverseMove& lhs, const ReverseMove& rhs) const noexcept;
-        };
-
         struct SelectResult
         {
             SegregatedEntries root;
@@ -395,6 +385,7 @@ namespace query
     // This is the result type to be used by databases' query functions
     // It is flatter, allows easier in memory manipulation.
     using PositionQueryResults = std::vector<EnumArray<Select, SegregatedEntries>>;
+    using RetractionsQueryResults = std::map<ReverseMove, query::SegregatedEntries, ReverseMoveCompareLess>;
 
     [[nodiscard]] std::vector<ResultForRoot> unflatten(PositionQueryResults&& raw, const Request& query, const PositionQueries& individialQueries);
 
@@ -411,9 +402,25 @@ namespace query
         GameHeaderDestination(std::size_t queryId, Select select, GameLevel level, GameResult result, HeaderMemberPtr headerPtr);
     };
 
+    struct GameHeaderDestinationForRetraction
+    {
+        using HeaderMemberPtr = std::optional<persistence::GameHeader> Entry::*;
+
+        ReverseMove rmove;
+        GameLevel level;
+        GameResult result;
+        HeaderMemberPtr headerPtr;
+
+        GameHeaderDestinationForRetraction(const ReverseMove& rmove, GameLevel level, GameResult result, HeaderMemberPtr headerPtr);
+    };
+
     void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers);
 
     void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, const std::vector<persistence::PackedGameHeader>& headers);
+
+    void assignGameHeaders(RetractionsQueryResults& raw, const std::vector<GameHeaderDestinationForRetraction>& destinations, std::vector<persistence::GameHeader>&& headers);
+
+    void assignGameHeaders(RetractionsQueryResults& raw, const std::vector<GameHeaderDestinationForRetraction>& destinations, const std::vector<persistence::PackedGameHeader>& headers);
 
     struct GameFetchSettings
     {

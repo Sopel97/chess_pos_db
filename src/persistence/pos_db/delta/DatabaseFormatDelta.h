@@ -95,6 +95,8 @@ namespace persistence
 
                 [[nodiscard]] std::uint32_t lastGameIndex() const;
 
+                [[nodiscard]] ReverseMove reverseMove(Color sideThatMoved) const;
+
                 void combine(const Entry & other);
 
                 struct CompareLessWithReverseMove
@@ -224,11 +226,32 @@ namespace persistence
                     query::PositionQueryOrigin origin,
                     PositionStats& stats);
 
+                void accumulateRetractionsStatsFromEntries(
+                    const std::vector<Entry>& entries,
+                    const query::Request& query,
+                    const Position& pos,
+                    std::map<
+                        ReverseMove,
+                        EnumArray2<GameLevel, GameResult, Entry>,
+                        ReverseMoveCompareLess
+                    >& retractionsStats
+                );
+
                 void executeQuery(
                     const query::Request& query,
                     const std::vector<Key>& keys,
                     const query::PositionQueries& queries,
                     std::vector<PositionStats>& stats);
+
+                void queryRetractions(
+                    const query::Request& query,
+                    const Position& pos,
+                    std::map<
+                        ReverseMove,
+                        EnumArray2<GameLevel, GameResult, Entry>,
+                        ReverseMoveCompareLess
+                    >& retractionsStats
+                );
 
             private:
                 ext::ImmutableSpan<Entry> m_entries;
@@ -324,6 +347,16 @@ namespace persistence
                     const std::vector<Key>& keys,
                     const query::PositionQueries& queries,
                     std::vector<PositionStats>& stats);
+
+                [[nodiscard]] std::map<
+                    ReverseMove, 
+                    EnumArray2<GameLevel, GameResult, Entry>,
+                    ReverseMoveCompareLess
+                >
+                    queryRetractions(
+                        const query::Request& query, 
+                        const Position& pos
+                    );
 
                 void mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback);
 
@@ -458,12 +491,23 @@ namespace persistence
 
             [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestination>& destinations);
 
+            [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestinationForRetraction>& destinations);
+
             void disableUnsupportedQueryFeatures(query::Request& query) const;
 
             [[nodiscard]] query::PositionQueryResults commitStatsAsResults(
                 const query::Request& query,
                 const query::PositionQueries& posQueries,
                 std::vector<detail::PositionStats>& stats);
+
+            [[nodiscard]] query::RetractionsQueryResults
+                segregateRetractions(
+                    const query::Request& query,
+                    std::map<
+                    ReverseMove, 
+                    EnumArray2<GameLevel, GameResult, detail::Entry>, 
+                    ReverseMoveCompareLess>&& unsegregated
+                );
 
             [[nodiscard]] std::vector<detail::Key> getKeys(const query::PositionQueries& queries);
 

@@ -1198,8 +1198,6 @@ struct EnumTraits<CastlingRights>
 
     [[nodiscard]] static constexpr EnumType fromOrdinal(IdType id) noexcept
     {
-        ASSERT(id >= 0 && id < cardinality);
-
         return static_cast<EnumType>(id);
     }
 };
@@ -1323,6 +1321,12 @@ private:
     static constexpr std::uint32_t fileMask = 0b111;
 
 public:
+    constexpr PackedReverseMove(const std::uint32_t packed) :
+        m_packed(packed)
+    {
+        
+    }
+
     constexpr PackedReverseMove(const ReverseMove& reverseMove) :
         m_packed(
             0u
@@ -1349,6 +1353,35 @@ public:
         return m_packed;
     }
 
+    constexpr ReverseMove unpack(Color sideThatMoved) const
+    {
+        ReverseMove rmove{};
+
+        rmove.move.from = fromOrdinal<Square>((m_packed >> 21) & squareMask);
+        rmove.move.to = fromOrdinal<Square>((m_packed >> 15) & squareMask);
+        rmove.capturedPiece = fromOrdinal<Piece>((m_packed >> 11) & pieceMask);
+        rmove.oldCastlingRights = fromOrdinal<CastlingRights>((m_packed >> 7) & castlingRightsMask);
+        const PieceType promotedPieceType = fromOrdinal<PieceType>((m_packed >> 4) & pieceTypeMask);
+        rmove.move.promotedPiece = Piece(promotedPieceType, sideThatMoved);
+        const bool hasEpSquare = static_cast<bool>((m_packed >> 3) & 1);
+        if (hasEpSquare)
+        {
+            // ep square is always where the opponent moved
+            const Rank rank =
+                sideThatMoved == Color::White
+                ? rank6
+                : rank3;
+            const File file = fromOrdinal<File>(m_packed & fileMask);
+            rmove.oldEpSquare = Square(file, rank);
+        }
+        else
+        {
+            rmove.oldEpSquare = Square::none();
+        }
+
+        return rmove;
+    }
+
 private:
     // Uses only 27 lowest bits.
     // Bit meaning from highest to lowest.
@@ -1360,4 +1393,43 @@ private:
     // - 1 bit  to specify if the ep square was valid (false if none())
     // - 3 bits for prev ep square file
     std::uint32_t m_packed;
+};
+
+struct MoveCompareLess
+{
+    [[nodiscard]] bool operator()(const Move& lhs, const Move& rhs) const noexcept
+    {
+        if (ordinal(lhs.from) < ordinal(rhs.from)) return true;
+        if (ordinal(lhs.from) > ordinal(rhs.from)) return false;
+
+        if (ordinal(lhs.to) < ordinal(rhs.to)) return true;
+        if (ordinal(lhs.to) > ordinal(rhs.to)) return false;
+
+        if (ordinal(lhs.type) < ordinal(rhs.type)) return true;
+        if (ordinal(lhs.type) > ordinal(rhs.type)) return false;
+
+        if (ordinal(lhs.promotedPiece) < ordinal(rhs.promotedPiece)) return true;
+
+        return false;
+    }
+};
+
+struct ReverseMoveCompareLess
+{
+    [[nodiscard]] bool operator()(const ReverseMove& lhs, const ReverseMove& rhs) const noexcept
+    {
+        if (MoveCompareLess{}(lhs.move, rhs.move)) return true;
+        if (MoveCompareLess{}(rhs.move, lhs.move)) return false;
+
+        if (ordinal(lhs.capturedPiece) < ordinal(rhs.capturedPiece)) return true;
+        if (ordinal(lhs.capturedPiece) > ordinal(rhs.capturedPiece)) return false;
+
+        if (static_cast<unsigned>(lhs.oldCastlingRights) < static_cast<unsigned>(rhs.oldCastlingRights)) return true;
+        if (static_cast<unsigned>(lhs.oldCastlingRights) > static_cast<unsigned>(rhs.oldCastlingRights)) return false;
+
+        if (ordinal(lhs.oldEpSquare) < ordinal(rhs.oldEpSquare)) return true;
+        if (ordinal(lhs.oldEpSquare) > ordinal(rhs.oldEpSquare)) return false;
+
+        return false;
+    }
 };

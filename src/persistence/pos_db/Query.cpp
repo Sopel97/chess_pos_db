@@ -306,39 +306,6 @@ namespace query
         throw std::out_of_range("");
     }
 
-    [[nodiscard]] bool ResultForRoot::MoveCompareLess::operator()(const Move& lhs, const Move& rhs) const noexcept
-    {
-        if (ordinal(lhs.from) < ordinal(rhs.from)) return true;
-        if (ordinal(lhs.from) > ordinal(rhs.from)) return false;
-
-        if (ordinal(lhs.to) < ordinal(rhs.to)) return true;
-        if (ordinal(lhs.to) > ordinal(rhs.to)) return false;
-
-        if (ordinal(lhs.type) < ordinal(rhs.type)) return true;
-        if (ordinal(lhs.type) > ordinal(rhs.type)) return false;
-
-        if (ordinal(lhs.promotedPiece) < ordinal(rhs.promotedPiece)) return true;
-
-        return false;
-    }
-
-    [[nodiscard]] bool ResultForRoot::ReverseMoveCompareLess::operator()(const ReverseMove& lhs, const ReverseMove& rhs) const noexcept
-    {
-        if (MoveCompareLess{}(lhs.move, rhs.move)) return true;
-        if (MoveCompareLess{}(rhs.move, lhs.move)) return false;
-
-        if (ordinal(lhs.capturedPiece) < ordinal(rhs.capturedPiece)) return true;
-        if (ordinal(lhs.capturedPiece) > ordinal(rhs.capturedPiece)) return false;
-
-        if (static_cast<unsigned>(lhs.oldCastlingRights) < static_cast<unsigned>(rhs.oldCastlingRights)) return true;
-        if (static_cast<unsigned>(lhs.oldCastlingRights) > static_cast<unsigned>(rhs.oldCastlingRights)) return false;
-
-        if (ordinal(lhs.oldEpSquare) < ordinal(rhs.oldEpSquare)) return true;
-        if (ordinal(lhs.oldEpSquare) > ordinal(rhs.oldEpSquare)) return false;
-
-        return false;
-    }
-
     ResultForRoot::ResultForRoot(const RootPosition& pos) :
         position(pos)
     {
@@ -512,6 +479,15 @@ namespace query
     {
     }
 
+    GameHeaderDestinationForRetraction::GameHeaderDestinationForRetraction(const ReverseMove& rmove, GameLevel level, GameResult result, HeaderMemberPtr headerPtr) :
+        rmove(rmove),
+        level(level),
+        result(result),
+        headerPtr(headerPtr)
+    {
+
+    }
+
     void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers)
     {
         ASSERT(destinations.size() == headers.size());
@@ -536,6 +512,34 @@ namespace query
             auto&& [queryId, select, level, result, headerPtr] = destinations[i];
 
             auto& entry = raw[queryId][select].at(level, result);
+            (entry.*headerPtr).emplace(headers[i]);
+        }
+    }
+
+    void assignGameHeaders(RetractionsQueryResults& raw, const std::vector<GameHeaderDestinationForRetraction>& destinations, std::vector<persistence::GameHeader>&& headers)
+    {
+        ASSERT(destinations.size() == headers.size());
+
+        const std::size_t size = destinations.size();
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            auto&& [rmove, level, result, headerPtr] = destinations[i];
+
+            auto& entry = raw[rmove].at(level, result);
+            (entry.*headerPtr).emplace(std::move(headers[i]));
+        }
+    }
+
+    void assignGameHeaders(RetractionsQueryResults& raw, const std::vector<GameHeaderDestinationForRetraction>& destinations, const std::vector<persistence::PackedGameHeader>& headers)
+    {
+        ASSERT(destinations.size() == headers.size());
+
+        const std::size_t size = destinations.size();
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            auto&& [rmove, level, result, headerPtr] = destinations[i];
+
+            auto& entry = raw[rmove].at(level, result);
             (entry.*headerPtr).emplace(headers[i]);
         }
     }

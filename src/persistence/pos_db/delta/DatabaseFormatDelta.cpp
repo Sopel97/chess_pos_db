@@ -117,6 +117,13 @@ namespace persistence
                 return m_lastGameIndex;
             }
 
+            [[nodiscard]] ReverseMove Entry::reverseMove(Color sideThatMoved) const
+            {
+                std::uint32_t packedInt = (m_packedInfo >> reverseMoveShift) & PackedReverseMove::mask;
+                PackedReverseMove packedReverseMove(packedInt);
+                return packedReverseMove.unpack(sideThatMoved);
+            }
+
             void Entry::combine(const Entry& other)
             {
                 m_eloDiffAndHashPart2 += other.m_eloDiffAndHashPart2 & ~nbitmask<std::uint64_t>[additionalHashBits];
@@ -256,6 +263,27 @@ namespace persistence
                 }
             }
 
+            void File::accumulateRetractionsStatsFromEntries(
+                const std::vector<Entry>& entries,
+                const query::Request& query,
+                const Position& pos,
+                std::map<
+                    ReverseMove,
+                    EnumArray2<GameLevel, GameResult, Entry>,
+                    ReverseMoveCompareLess
+                >& retractionsStats
+            )
+            {
+                for (auto&& entry : entries)
+                {
+                    const GameLevel level = entry.level();
+                    const GameResult result = entry.result();
+                    const ReverseMove rmove = entry.reverseMove(!pos.sideToMove());
+
+                    retractionsStats[rmove][level][result].combine(entry);
+                }
+            }
+
             void File::executeQuery(
                 const query::Request& query,
                 const std::vector<Key>& keys,
@@ -278,6 +306,27 @@ namespace persistence
                     (void)m_entries.read(buffer.data(), a.it, count);
                     accumulateStatsFromEntries(buffer, query, key, queries[i].origin, stats[i]);
                 }
+            }
+
+            void File::queryRetractions(
+                const query::Request& query,
+                const Position& pos,
+                std::map<
+                    ReverseMove,
+                    EnumArray2<GameLevel, GameResult, Entry>,
+                    ReverseMoveCompareLess
+                >& retractionsStats
+            )
+            {
+                const auto key = Entry(PositionWithZobrist(pos));
+                auto [a, b] = m_index.equal_range(key);
+
+                const std::size_t count = b.it - a.it;
+                if (count == 0) return; // the range is empty, the value certainly does not exist
+
+                std::vector<Entry> buffer(count);
+                (void)m_entries.read(buffer.data(), a.it, count);
+                accumulateRetractionsStatsFromEntries(buffer, query, pos, retractionsStats);
             }
 
             FutureFile::FutureFile(std::future<Index>&& future, std::filesystem::path path) :
@@ -524,6 +573,30 @@ namespace persistence
                 {
                     file.executeQuery(query, keys, queries, stats);
                 }
+            }
+
+            [[nodiscard]] std::map<
+                ReverseMove,
+                EnumArray2<GameLevel, GameResult, Entry>,
+                ReverseMoveCompareLess
+            >
+                Partition::queryRetractions(
+                    const query::Request& query,
+                    const Position& pos
+                )
+            {
+                std::map<
+                    ReverseMove,
+                    EnumArray2<GameLevel, GameResult, Entry>,
+                    ReverseMoveCompareLess
+                > retractionsStats;
+
+                for (auto&& file : m_files)
+                {
+                    file.queryRetractions(query, pos, retractionsStats);
+                }
+
+                return retractionsStats;
             }
 
             void Partition::mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback)
@@ -846,6 +919,21 @@ namespace persistence
             // So we don't unsort any.
             auto unflattened = query::unflatten(std::move(results), query, posQueries);
 
+            if (query.retractionsFetchingOptions.has_value())
+            {
+                for (auto&& resultForRoot : unflattened)
+                {
+                    resultForRoot.retractionsResults.retractions =
+                        segregateRetractions(
+                            query,
+                            m_partition.queryRetractions(
+                                query,
+                                *resultForRoot.position.tryGet()
+                            )
+                        );
+                }
+            }
+
             return { std::move(query), std::move(unflattened) };
         }
 
@@ -1090,7 +1178,39 @@ namespace persistence
             return m_headers[level].queryByIndices(indices);
         }
 
+        // TODO: we have two functions that do basically the same thing here and below.
         [[nodiscard]] std::vector<GameHeader> Database::queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestination>& destinations)
+        {
+            EnumArray<GameLevel, std::vector<std::uint32_t>> indicesByLevel;
+            EnumArray<GameLevel, std::vector<std::size_t>> localIndices;
+
+            for (std::size_t i = 0; i < indices.size(); ++i)
+            {
+                indicesByLevel[destinations[i].level].emplace_back(indices[i]);
+                localIndices[destinations[i].level].emplace_back(i);
+            }
+
+            EnumArray<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
+            for (GameLevel level : values<GameLevel>())
+            {
+                packedHeadersByLevel[level] = queryHeadersByIndices(indicesByLevel[level], level);
+            }
+
+            std::vector<GameHeader> headers(indices.size());
+
+            for (GameLevel level : values<GameLevel>())
+            {
+                const auto size = indicesByLevel[level].size();
+                for (std::size_t i = 0; i < size; ++i)
+                {
+                    headers[localIndices[level][i]] = packedHeadersByLevel[level][i];
+                }
+            }
+
+            return headers;
+        }
+
+        [[nodiscard]] std::vector<GameHeader> Database::queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestinationForRetraction>& destinations)
         {
             EnumArray<GameLevel, std::vector<std::uint32_t>> indicesByLevel;
             EnumArray<GameLevel, std::vector<std::size_t>> localIndices;
@@ -1179,6 +1299,59 @@ namespace persistence
             query::assignGameHeaders(results, lastGameDestinations, queryHeadersByIndices(lastGameIndices, lastGameDestinations));
 
             return results;
+        }
+
+        [[nodiscard]] query::RetractionsQueryResults
+            Database::segregateRetractions(
+                const query::Request& query,
+                std::map<
+                ReverseMove,
+                EnumArray2<GameLevel, GameResult, detail::Entry>,
+                ReverseMoveCompareLess>&& unsegregated
+            )
+        {
+            const auto& fetching = *query.retractionsFetchingOptions;
+
+            query::RetractionsQueryResults segregated;
+
+            std::vector<std::uint32_t> firstGameIndices;
+            std::vector<std::uint32_t> lastGameIndices;
+            std::vector<query::GameHeaderDestinationForRetraction> firstGameDestinations;
+            std::vector<query::GameHeaderDestinationForRetraction> lastGameDestinations;
+            query::FetchLookups lookup = query::buildGameHeaderFetchLookup(query);
+
+            for (auto&& [reverseMove, stat] : unsegregated)
+            {
+                auto segregatedEntries = query::SegregatedEntries();
+                for (GameLevel level : query.levels)
+                {
+                    for (GameResult result : query.results)
+                    {
+                        auto& entry = stat[level][result];
+                        auto& segregatedEntry = segregatedEntries.emplace(level, result, entry.count());
+                        segregatedEntry.second.eloDiff = entry.eloDiff();
+
+                        if (entry.count() > 0)
+                        {
+                            if (fetching.fetchFirstGameForEach)
+                            {
+                                firstGameIndices.emplace_back(entry.firstGameIndex());
+                                firstGameDestinations.emplace_back(reverseMove, level, result, &query::Entry::firstGame);
+                            }
+                            if (fetching.fetchLastGameForEach)
+                            {
+                                lastGameIndices.emplace_back(entry.firstGameIndex());
+                                lastGameDestinations.emplace_back(reverseMove, level, result, &query::Entry::lastGame);
+                            }
+                        }
+                    }
+                }
+            }
+
+            query::assignGameHeaders(segregated, firstGameDestinations, queryHeadersByIndices(firstGameIndices, firstGameDestinations));
+            query::assignGameHeaders(segregated, lastGameDestinations, queryHeadersByIndices(lastGameIndices, lastGameDestinations));
+
+            return segregated;
         }
 
         [[nodiscard]] std::vector<detail::Key> Database::getKeys(const query::PositionQueries& queries)
