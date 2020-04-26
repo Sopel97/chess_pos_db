@@ -1228,6 +1228,11 @@ struct ReverseMove
     {
     }
 
+    constexpr bool isNull() const
+    {
+        return move.from == move.to;
+    }
+
     [[nodiscard]] constexpr CompressedReverseMove compress() const noexcept;
 };
 

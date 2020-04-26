@@ -267,6 +267,7 @@ namespace persistence
                 const std::vector<Entry>& entries,
                 const query::Request& query,
                 const Position& pos,
+                const Key& key,
                 std::map<
                     ReverseMove,
                     EnumArray2<GameLevel, GameResult, Entry>,
@@ -276,9 +277,19 @@ namespace persistence
             {
                 for (auto&& entry : entries)
                 {
+                    if (!Entry::CompareEqualWithoutReverseMove{}(entry, key))
+                    {
+                        continue;
+                    }
+
                     const GameLevel level = entry.level();
                     const GameResult result = entry.result();
                     const ReverseMove rmove = entry.reverseMove(!pos.sideToMove());
+
+                    if (rmove.isNull())
+                    {
+                        continue;
+                    }
 
                     retractionsStats[rmove][level][result].combine(entry);
                 }
@@ -326,7 +337,7 @@ namespace persistence
 
                 std::vector<Entry> buffer(count);
                 (void)m_entries.read(buffer.data(), a.it, count);
-                accumulateRetractionsStatsFromEntries(buffer, query, pos, retractionsStats);
+                accumulateRetractionsStatsFromEntries(buffer, query, pos, key, retractionsStats);
             }
 
             FutureFile::FutureFile(std::future<Index>&& future, std::filesystem::path path) :
@@ -923,14 +934,17 @@ namespace persistence
             {
                 for (auto&& resultForRoot : unflattened)
                 {
-                    resultForRoot.retractionsResults.retractions =
-                        segregateRetractions(
-                            query,
-                            m_partition.queryRetractions(
-                                query,
-                                *resultForRoot.position.tryGet()
-                            )
-                        );
+                    auto queried = m_partition.queryRetractions(
+                        query,
+                        *resultForRoot.position.tryGet()
+                    );
+
+                    auto segregated = segregateRetractions(
+                        query,
+                        std::move(queried)
+                    );
+
+                    resultForRoot.retractionsResults.retractions = std::move(segregated);
                 }
             }
 
@@ -1346,6 +1360,8 @@ namespace persistence
                         }
                     }
                 }
+
+                segregated[reverseMove] = segregatedEntries;
             }
 
             query::assignGameHeaders(segregated, firstGameDestinations, queryHeadersByIndices(firstGameIndices, firstGameDestinations));

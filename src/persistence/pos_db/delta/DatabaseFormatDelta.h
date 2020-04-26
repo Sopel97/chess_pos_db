@@ -230,6 +230,7 @@ namespace persistence
                     const std::vector<Entry>& entries,
                     const query::Request& query,
                     const Position& pos,
+                    const Key& key,
                     std::map<
                         ReverseMove,
                         EnumArray2<GameLevel, GameResult, Entry>,

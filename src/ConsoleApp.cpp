@@ -5,6 +5,7 @@
 #include "algorithm/Unsort.h"
 
 #include "chess/Bitboard.h"
+#include "chess/Eran.h"
 #include "chess/MoveGenerator.h"
 #include "chess/Pgn.h"
 #include "chess/Position.h"
@@ -140,6 +141,54 @@ namespace console_app
         }
     }
 
+    static void printAggregatedResult(const query::SegregatedEntries& entries)
+    {
+        std::size_t total = 0;
+        std::size_t totalDirect = 0;
+
+        EnumArray2<GameLevel, GameResult, std::pair<std::size_t, std::size_t>> cc{};
+
+        for (auto& [origin, e] : entries)
+        {
+            totalDirect += e.count;
+            cc[origin.level][origin.result].first += e.count;
+        }
+        std::cout << std::setw(5) << total << ' ';
+
+        for (auto&& c : cc)
+            std::cout << std::setw(19) << resultsToString(c) << ' ';
+
+        std::cout << '\n';
+
+        const persistence::GameHeader* firstGame = nullptr;
+        for (auto& [origin, e] : entries)
+        {
+            if (!e.firstGame.has_value())
+            {
+                continue;
+            }
+
+            if (firstGame == nullptr || e.firstGame->gameIdx() < firstGame->gameIdx())
+            {
+                firstGame = &*(e.firstGame);
+            }
+        }
+
+        if (firstGame)
+        {
+            std::string plyCount = firstGame->plyCount() ? std::to_string(*firstGame->plyCount()) : "-"s;
+            std::cout
+                << firstGame->date().toString()
+                << ' ' << toString(GameResultWordFormat{}, firstGame->result())
+                << ' ' << firstGame->eco().toString()
+                << ' ' << firstGame->event()
+                << ' ' << plyCount
+                << ' ' << firstGame->white()
+                << ' ' << firstGame->black()
+                << '\n';
+        }
+    }
+
     static void printAggregatedResults(const query::Response& res)
     {
         for (auto&& result : res.results)
@@ -154,6 +203,17 @@ namespace console_app
                 auto&& transE = trans.children.at(move);
                 std::cout << std::setw(8) << san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check | san::SanSpec::Compact>(pos, move) << " ";
                 printAggregatedResult(e, transE);
+            }
+
+            if (!result.retractionsResults.retractions.empty())
+            {
+                std::cout << "\n\nRetractions:\n\n";
+
+                for (auto&& [rmove, e] : result.retractionsResults.retractions)
+                {
+                    std::cout << std::setw(16) << eran::reverseMoveToEran(pos, rmove);
+                    printAggregatedResult(e);
+                }
             }
         }
     }
@@ -277,6 +337,9 @@ namespace console_app
         query.fetchingOptions[query::Select::Transpositions].fetchFirstGameForEachChild = true;
         query.fetchingOptions[query::Select::Transpositions].fetchLastGameForEachChild = false;
         query.fetchingOptions[query::Select::Transpositions].fetchChildren = true;
+        query.retractionsFetchingOptions = query::AdditionalRetractionsFetchingOptions{};
+        query.retractionsFetchingOptions->fetchFirstGameForEach = true;
+        query.retractionsFetchingOptions->fetchLastGameForEach = false;
         query.levels = { GameLevel::Human, GameLevel::Engine, GameLevel::Server };
         query.results = { GameResult::WhiteWin, GameResult::BlackWin, GameResult::Draw };
 
@@ -494,7 +557,7 @@ namespace console_app
             std::string cmdline;
             std::getline(std::cin, cmdline);
             auto [cmd, args] = parseCommand(cmdline);
-
+            
             if (cmd == "exit"sv)
             {
                 return;
