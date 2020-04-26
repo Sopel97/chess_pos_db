@@ -125,6 +125,16 @@ namespace query
         friend void from_json(const nlohmann::json& j, AdditionalFetchingOptions& opt);
     };
 
+    struct AdditionalRetractionsFetchingOptions
+    {
+        bool fetchFirstGameForEach;
+        bool fetchLastGameForEach;
+
+        friend void to_json(nlohmann::json& j, const AdditionalRetractionsFetchingOptions& opt);
+
+        friend void from_json(const nlohmann::json& j, AdditionalRetractionsFetchingOptions& opt);
+    };
+
     struct Request
     {
         // token can be used to match queries to results by the client
@@ -135,6 +145,7 @@ namespace query
         std::vector<GameLevel> levels;
         std::vector<GameResult> results;
         std::map<Select, AdditionalFetchingOptions> fetchingOptions;
+        std::optional<AdditionalRetractionsFetchingOptions> retractionsFetchingOptions;
 
         friend void to_json(nlohmann::json& j, const Request& query);
 
@@ -216,14 +227,25 @@ namespace query
             [[nodiscard]] bool operator()(const Move& lhs, const Move& rhs) const noexcept;
         };
 
+        struct ReverseMoveCompareLess
+        {
+            [[nodiscard]] bool operator()(const ReverseMove& lhs, const ReverseMove& rhs) const noexcept;
+        };
+
         struct SelectResult
         {
             SegregatedEntries root;
             std::map<Move, SegregatedEntries, MoveCompareLess> children;
         };
 
+        struct RetractionsResult
+        {
+            std::map<ReverseMove, SegregatedEntries, ReverseMoveCompareLess> retractions;
+        };
+
         RootPosition position;
         std::map<Select, SelectResult> resultsBySelect;
+        RetractionsResult retractionsResults;
 
         ResultForRoot(const RootPosition& pos);
 

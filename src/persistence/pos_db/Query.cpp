@@ -2,6 +2,7 @@
 
 #include "StorageHeader.h"
 
+#include "chess/Eran.h"
 #include "chess/GameClassification.h"
 #include "chess/MoveGenerator.h"
 #include "chess/Position.h"
@@ -118,6 +119,20 @@ namespace query
         }
     }
 
+    void to_json(nlohmann::json& j, const AdditionalRetractionsFetchingOptions& opt)
+    {
+        j = nlohmann::json{
+            { "fetch_first_game_for_each", opt.fetchFirstGameForEach },
+            { "fetch_last_game_for_each", opt.fetchLastGameForEach }
+        };
+    }
+
+    void from_json(const nlohmann::json& j, AdditionalRetractionsFetchingOptions& opt)
+    {
+        j["fetch_first_game_for_each"].get_to(opt.fetchFirstGameForEach);
+        j["fetch_last_game_for_each"].get_to(opt.fetchLastGameForEach);
+    }
+
     void to_json(nlohmann::json& j, const Request& query)
     {
         j = nlohmann::json{
@@ -141,6 +156,11 @@ namespace query
         for (auto&& [select, opt] : query.fetchingOptions)
         {
             j[std::string(toString(select))] = opt;
+        }
+
+        if (query.retractionsFetchingOptions.has_value())
+        {
+            j["retractions"] = *query.retractionsFetchingOptions;
         }
     }
 
@@ -302,6 +322,23 @@ namespace query
         return false;
     }
 
+    [[nodiscard]] bool ResultForRoot::ReverseMoveCompareLess::operator()(const ReverseMove& lhs, const ReverseMove& rhs) const noexcept
+    {
+        if (MoveCompareLess{}(lhs.move, rhs.move)) return true;
+        if (MoveCompareLess{}(rhs.move, lhs.move)) return false;
+
+        if (ordinal(lhs.capturedPiece) < ordinal(rhs.capturedPiece)) return true;
+        if (ordinal(lhs.capturedPiece) > ordinal(rhs.capturedPiece)) return false;
+
+        if (static_cast<unsigned>(lhs.oldCastlingRights) < static_cast<unsigned>(rhs.oldCastlingRights)) return true;
+        if (static_cast<unsigned>(lhs.oldCastlingRights) > static_cast<unsigned>(rhs.oldCastlingRights)) return false;
+
+        if (ordinal(lhs.oldEpSquare) < ordinal(rhs.oldEpSquare)) return true;
+        if (ordinal(lhs.oldEpSquare) > ordinal(rhs.oldEpSquare)) return false;
+
+        return false;
+    }
+
     ResultForRoot::ResultForRoot(const RootPosition& pos) :
         position(pos)
     {
@@ -336,6 +373,18 @@ namespace query
                     const auto sanStr = san::moveToSan<san::SanSpec::Capture | san::SanSpec::Check | san::SanSpec::Compact>(position, move);
                     jsonSubresult[sanStr] = entries;
                 }
+            }
+        }
+
+        if (!result.retractionsResults.retractions.empty())
+        {
+            auto& jsonSubresult = j["retractions"];
+
+            for (auto&& [rmove, entries] : result.retractionsResults.retractions)
+            {
+                // Move as a key
+                const auto eranStr = eran::reverseMoveToEran(position, rmove);
+                jsonSubresult[eranStr] = entries;
             }
         }
     }
