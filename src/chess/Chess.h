@@ -948,6 +948,9 @@ struct CompressedMove;
 // ep is encoded as a normal pawn capture (move.to is empty on the board)
 struct Move
 {
+    static constexpr EnumArray2<Color, CastleType, Square> rookCastleDestinations = { { {{ f1, d1 }}, {{ f8, d8 }} } };
+    static constexpr EnumArray2<Color, CastleType, Square> kingCastleDestinations = { { {{ g1, c1 }}, {{ g8, c8 }} } };
+
     Square from;
     Square to;
     MoveType type = MoveType::Normal;
@@ -990,6 +993,19 @@ struct Move
         return Move{ from, to, MoveType::Promotion, piece };
     }
 };
+
+namespace detail::castle
+{
+    constexpr EnumArray2<CastleType, Color, Move> moves = { {
+        {{ { e1, h1, MoveType::Castle }, { e8, h8, MoveType::Castle } }},
+        {{ { e1, a1, MoveType::Castle }, { e8, a8, MoveType::Castle } }}
+    } };
+}
+
+[[nodiscard]] constexpr Move Move::castle(CastleType ct, Color c)
+{
+    return detail::castle::moves[ct][c];
+}
 
 static_assert(sizeof(Move) == 4);
 
@@ -1132,19 +1148,6 @@ static_assert(sizeof(CompressedMove) == 2);
 [[nodiscard]] constexpr CompressedMove Move::compress() const noexcept
 {
     return CompressedMove(*this);
-}
-
-namespace detail::castle
-{
-    constexpr EnumArray2<CastleType, Color, Move> moves = { {
-        {{ { e1, h1, MoveType::Castle }, { e8, h8, MoveType::Castle } }},
-        {{ { e1, a1, MoveType::Castle }, { e8, a8, MoveType::Castle } }}
-    } };
-}
-
-[[nodiscard]] constexpr Move Move::castle(CastleType ct, Color c)
-{
-    return detail::castle::moves[ct][c];
 }
 
 static_assert(a4 + Offset{ 0, 1 } == a5);

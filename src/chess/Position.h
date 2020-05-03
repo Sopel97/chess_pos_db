@@ -16,12 +16,6 @@
 
 struct Board
 {
-private:
-    static constexpr EnumArray2<Color, CastleType, Square> m_rookCastleDestinations = { { {{ f1, d1 }}, {{ f8, d8 }} } };
-    static constexpr EnumArray2<Color, CastleType, Square> m_kingCastleDestinations = { { {{ g1, c1 }}, {{ g8, c8 }} } };
-
-public:
-
     constexpr Board() noexcept :
         m_pieces{},
         m_pieceBB{},
@@ -412,8 +406,8 @@ public:
             const Color color = king.color();
             const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = m_rookCastleDestinations[color][castleType];
-            const Square kingToSq = m_kingCastleDestinations[color][castleType];
+            const Square rookToSq = Move::rookCastleDestinations[color][castleType];
+            const Square kingToSq = Move::kingCastleDestinations[color][castleType];
 
             // 4 squares are involved
             m_pieces[rookFromSq] = Piece::none();
@@ -566,8 +560,8 @@ public:
             const Color color = king.color();
             const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = m_rookCastleDestinations[color][castleType];
-            const Square kingToSq = m_kingCastleDestinations[color][castleType];
+            const Square rookToSq = Move::rookCastleDestinations[color][castleType];
+            const Square kingToSq = Move::kingCastleDestinations[color][castleType];
 
             // 4 squares are involved
             m_pieces[rookFromSq] = Piece::none();
@@ -665,8 +659,8 @@ public:
             const Color color = move.to.rank() == rank1 ? Color::White : Color::Black;
             const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = m_rookCastleDestinations[color][castleType];
-            const Square kingToSq = m_kingCastleDestinations[color][castleType];
+            const Square rookToSq = Move::rookCastleDestinations[color][castleType];
+            const Square kingToSq = Move::kingCastleDestinations[color][castleType];
 
             const Piece rook = m_pieces[rookToSq];
             const Piece king = m_pieces[kingToSq];

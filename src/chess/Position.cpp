@@ -116,9 +116,9 @@
                     : CastleType::Long;
 
                 king ^= move.from;
-                king ^= m_kingCastleDestinations[attackerColor][castleType];
+                king ^= Move::kingCastleDestinations[attackerColor][castleType];
                 rooks ^= move.to;
-                rooks ^= m_rookCastleDestinations[attackerColor][castleType];
+                rooks ^= Move::rookCastleDestinations[attackerColor][castleType];
 
                 break;
             }

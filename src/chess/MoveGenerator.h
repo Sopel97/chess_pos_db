@@ -163,14 +163,6 @@ namespace movegen
             }
         };
 
-        // this square must not be attacked by the enemy
-        constexpr EnumArray2<Color, CastleType, Square> kingDestination = {
-            {
-                {{ g1, c1 }},
-                {{ g8, c8 }}
-            }
-        };
-
         // we can't use CastlingRights directly as it is a flag set
         constexpr EnumArray2<Color, CastleType, CastlingRights> castlingRightsMap = {
             {
@@ -229,7 +221,7 @@ namespace movegen
             // If it's a castling move then the change in square occupation
             // cannot have an effect because otherwise there would be
             // a slider attacker attacking the castling king.
-            if (pos.isSquareAttacked(kingDestination[sideToMove][castlingType], !sideToMove))
+            if (pos.isSquareAttacked(Move::kingCastleDestinations[sideToMove][castlingType], !sideToMove))
             {
                 continue;
             }
