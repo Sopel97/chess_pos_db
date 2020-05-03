@@ -852,8 +852,6 @@ struct Position : public Board
         return m_sideToMove;
     }
 
-    [[nodiscard]] bool isLegal() const;
-
     [[nodiscard]] bool isCheck() const;
 
     [[nodiscard]] bool isCheckAfterMove(Move move) const;

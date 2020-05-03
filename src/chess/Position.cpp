@@ -520,13 +520,6 @@ ReverseMove Position::doMove(const Move& move)
     return { move, captured, oldEpSquare, oldCastlingRights };
 }
 
-[[nodiscard]] bool Position::isLegal() const
-{
-    return piecesBB(Piece(PieceType::King, Color::White)).count() == 1
-        && piecesBB(Piece(PieceType::King, Color::Black)).count() == 1
-        && !isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove);
-}
-
 [[nodiscard]] bool Position::isCheck() const
 {
     return BaseType::isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove);

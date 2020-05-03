@@ -223,8 +223,6 @@ namespace movegen
     template <typename FuncT>
     inline void forEachPseudoLegalMove(const Position& pos, FuncT&& func)
     {
-        if (!pos.isLegal()) return;
-
         forEachPseudoLegalPieceMove<PieceType::Pawn>(pos, func);
         forEachPseudoLegalPieceMove<PieceType::Knight>(pos, func);
         forEachPseudoLegalPieceMove<PieceType::Bishop>(pos, func);
@@ -237,8 +235,6 @@ namespace movegen
     template <typename FuncT>
     inline void forEachLegalMove(const Position& pos, FuncT&& func)
     {
-        if (!pos.isLegal()) return;
-
         auto funcIfLegal = [&](Move move) {
             if (pos.isPseudoLegalMoveLegal(move))
             {

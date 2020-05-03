@@ -10,8 +10,6 @@ namespace movegen
     // pos must not have a 'king capture' available
     [[nodiscard]] std::vector<Move> generatePseudoLegalMoves(const Position& pos)
     {
-        if (!pos.isLegal()) return {};
-
         std::vector<Move> moves;
 
         auto addMove = [&moves](Move move) {
@@ -25,8 +23,6 @@ namespace movegen
 
     [[nodiscard]] std::vector<Move> generateLegalMoves(const Position& pos)
     {
-        if (!pos.isLegal()) return {};
-
         std::vector<Move> moves;
 
         auto addMove = [&moves](Move move) {
