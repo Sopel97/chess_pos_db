@@ -6,6 +6,8 @@
 
 #include <vector>
 
+// TODO: iterators
+
 namespace movegen
 {
     // For a pseudo-legal move the following are true:

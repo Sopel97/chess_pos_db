@@ -4,6 +4,7 @@
 
 #include "Bitboard.h"
 #include "Chess.h"
+#include "MoveGenerator.h"
 
 #include "enum/EnumArray.h"
 
@@ -526,14 +527,21 @@ ReverseMove Position::doMove(const Move& move)
         && !isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove);
 }
 
-[[nodiscard]] bool Position::isCheck(Move move) const
+[[nodiscard]] bool Position::isCheck() const
+{
+    return BaseType::isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove);
+}
+
+[[nodiscard]] bool Position::isCheckAfterMove(Move move) const
 {
     return BaseType::isSquareAttackedAfterMove(move, kingSquare(!m_sideToMove), m_sideToMove);
 }
 
 [[nodiscard]] bool Position::isMoveLegal(Move move) const
 {
-
+    return
+        isMovePseudoLegal(move)
+        && isPseudoLegalMoveLegal(move);
 }
 
 [[nodiscard]] bool Position::isPseudoLegalMoveLegal(Move move) const
@@ -545,7 +553,81 @@ ReverseMove Position::doMove(const Move& move)
 
 [[nodiscard]] bool Position::isMovePseudoLegal(Move move) const
 {
+    if (!move.from.isOk() || !move.to.isOk())
+    {
+        return false;
+    }
 
+    if (move.from == move.to)
+    {
+        return false;
+    }
+
+    const Piece movedPiece = pieceAt(move.from);
+    if (movedPiece == Piece::none())
+    {
+        return false;
+    }
+
+    if (movedPiece.color() != m_sideToMove)
+    {
+        return false;
+    }
+
+    const Bitboard occupied = piecesBB();
+    const Bitboard ourPieces = piecesBB(m_sideToMove);
+    const bool isNormal = move.type == MoveType::Normal;
+
+    switch (movedPiece.type())
+    {
+    case PieceType::Pawn:
+    {
+        bool isValid = false;
+        // TODO: use iterators so we don't loop over all moves
+        //       when we can avoid it.
+        movegen::forEachPseudoLegalPawnMove(*this, [&isValid, &move](const Move& genMove) {
+            if (move == genMove)
+            {
+                isValid = true;
+            }
+            });
+        return isValid;
+    }
+
+    case PieceType::Bishop:
+        return isNormal && (bb::attacks<PieceType::Bishop>(move.from, occupied) & ~ourPieces).isSet(move.to);
+
+    case PieceType::Knight:
+        return isNormal && (bb::pseudoAttacks<PieceType::Knight>(move.from) & ~ourPieces).isSet(move.to);
+
+    case PieceType::Rook:
+        return isNormal && (bb::attacks<PieceType::Rook>(move.from, occupied) & ~ourPieces).isSet(move.to);
+
+    case PieceType::Queen:
+        return isNormal && (bb::attacks<PieceType::Queen>(move.from, occupied) & ~ourPieces).isSet(move.to);
+
+    case PieceType::King:
+    {
+        if (move.type == MoveType::Castle)
+        {
+            bool isValid = false;
+            movegen::forEachCastlingMove(*this, [&isValid, &move](const Move& genMove) {
+                if (move == genMove)
+                {
+                    isValid = true;
+                }
+                });
+            return isValid;
+        }
+        else
+        {
+            return isNormal && (bb::pseudoAttacks<PieceType::King>(move.from) & ~ourPieces).isSet(move.to);
+        }
+    }
+
+    default:
+        return false;
+    }
 }
 
 [[nodiscard]] Position Position::afterMove(Move move) const

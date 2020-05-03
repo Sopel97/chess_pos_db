@@ -854,7 +854,9 @@ struct Position : public Board
 
     [[nodiscard]] bool isLegal() const;
 
-    [[nodiscard]] bool isCheck(Move move) const;
+    [[nodiscard]] bool isCheck() const;
+
+    [[nodiscard]] bool isCheckAfterMove(Move move) const;
 
     [[nodiscard]] bool isMoveLegal(Move move) const;
 

@@ -905,7 +905,7 @@ namespace san
 
         if constexpr (contains(SpecV, SanSpec::Check))
         {
-            if (pos.isCheck(move))
+            if (pos.isCheckAfterMove(move))
             {
                 san += '+';
             }

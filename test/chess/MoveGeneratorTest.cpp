@@ -11,7 +11,7 @@ static std::size_t perft(Position&& pos, int depth)
         std::size_t c = 0;
         movegen::forEachLegalMove(pos, [&pos, depth, &c](Move move) {
             auto rmove = pos.doMove(move);
-            c += perft<false>(pos, depth - 1);
+            c += perft(std::move(pos), depth - 1);
             pos.undoMove(rmove);
             });
         return c;
