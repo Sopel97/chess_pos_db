@@ -698,29 +698,20 @@ public:
 
     [[nodiscard]] bool isSquareAttacked(Square sq, Color attackerColor) const;
 
+    // Move must be pseudo legal.
     [[nodiscard]] bool isSquareAttackedAfterMove(Move move, Square sq, Color attackerColor) const;
 
     [[nodiscard]] bool isPieceAttacked(Square sq) const;
 
+    // Move must be pseudo legal.
     [[nodiscard]] bool isPieceAttackedAfterMove(Move move, Square sq) const;
 
-    [[nodiscard]] bool createsDiscoveredAttackOnOwnKing(Move move) const;
-
-    [[nodiscard]] bool createsAttackOnOwnKing(Move move) const;
+    // Move must be pseudo legal.
+    [[nodiscard]] bool isOwnKingAttackedAfterMove(Move move) const;
 
     [[nodiscard]] Bitboard attacks(Square sq) const;
 
     [[nodiscard]] Bitboard attackers(Square sq, Color attackerColor) const;
-
-    [[nodiscard]] bool createsDiscoveredAttackOnOwnKingOld(Move move, Color color) const;
-
-    [[nodiscard]] bool isSquareAttackedOld(Square sq, Color attackerColor, Bitboard occupied, Bitboard captured) const;
-
-    [[nodiscard]] bool isSquareAttackedOld(Square sq, Color attackerColor) const;
-
-    [[nodiscard]] bool isSquareAttackedAfterMoveOld(Square sq, Move move, Color attackerColor) const;
-
-    [[nodiscard]] bool isKingAttackedAfterMove(Move move, Color kingColor) const;
 
     [[nodiscard]] constexpr Piece pieceAt(Square sq) const
     {
@@ -866,14 +857,6 @@ struct Position : public Board
     {
         return m_sideToMove;
     }
-
-    [[nodiscard]] bool createsDiscoveredAttackOnOwnKingOld(Move move) const;
-
-    [[nodiscard]] bool createsAttackOnOwnKing(Move move) const;
-
-    [[nodiscard]] bool isSquareAttackedAfterMoveOld(Square sq, Move move, Color attackerColor) const;
-
-    [[nodiscard]] bool isSquareAttackedOld(Square sq, Color attackerColor) const;
 
     [[nodiscard]] bool isLegal() const;
 

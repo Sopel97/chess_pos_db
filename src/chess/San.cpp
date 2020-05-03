@@ -351,7 +351,7 @@ namespace san
             for (Square fromSq : candidates)
             {
                 const Move move{ fromSq, toSq };
-                if (!pos.createsDiscoveredAttackOnOwnKing(move))
+                if (!pos.isOwnKingAttackedAfterMove(move))
                 {
                     ASSERT(pos.pieceAt(fromSq).type() == PieceTypeV);
 
@@ -513,7 +513,7 @@ namespace san
             if (pos.pieceAt(move.from).color() != pos.sideToMove()) return {};
             if (!move.from.isOk()) return {};
             if (!move.to.isOk()) return {};
-            if (pos.createsAttackOnOwnKing(move)) return {};
+            if (pos.isOwnKingAttackedAfterMove(move)) return {};
 
             return move;
         }
@@ -538,7 +538,7 @@ namespace san
                 if (pos.pieceAt(move.from).type() != PieceTypeV) return false;
                 if (pos.pieceAt(move.from).color() != pos.sideToMove()) return false;
                 if (pos.pieceAt(move.to) != Piece::none() && pos.pieceAt(move.to).color() == pos.sideToMove()) return false;
-                if (pos.createsDiscoveredAttackOnOwnKing(move)) return false;
+                if (pos.isOwnKingAttackedAfterMove(move)) return false;
                 return true;
             };
 
@@ -618,17 +618,22 @@ namespace san
             // if we are here then there are (should be) many pseudo-legal moves
             // but only one of them is legal
 
+            Bitboard passedCandidates = Bitboard::none();
             for (Square fromSq : candidates)
             {
                 const Move move{ fromSq, toSq };
-                if (!pos.createsDiscoveredAttackOnOwnKing(move))
+                if (isValid(move))
                 {
-                    if (!isValid(move)) return {};
-                    return move;
+                    passedCandidates |= fromSq;
                 }
             }
 
-            return {};
+            if (passedCandidates.moreThanOne() || passedCandidates.isEmpty())
+            {
+                return {};
+            }
+
+            return Move{ passedCandidates.first(), toSq };
         }
 
         template std::optional<Move> trySanToMove<PieceType::Knight>(const Position&, const char*, std::size_t);
@@ -648,7 +653,7 @@ namespace san
             const Square toSq = parser_bits::parseSquare(san + 1);
 
             const Move move{ fromSq, toSq };
-            if (pos.createsAttackOnOwnKing(move)) return {};
+            if (pos.isOwnKingAttackedAfterMove(move)) return {};
 
             return move;
         }
@@ -800,7 +805,7 @@ namespace san
             for (Square fromSq : candidates)
             {
                 const Move candidateMove{ fromSq, move.to };
-                if (pos.createsDiscoveredAttackOnOwnKing(candidateMove))
+                if (pos.isOwnKingAttackedAfterMove(candidateMove))
                 {
                     candidates ^= fromSq;
                 }

@@ -17,7 +17,7 @@ TEST(PositionTest, GeneralPositionTest) {
 
     ASSERT_TRUE((Position::fromFen("rnbqkbnr/ppp2ppp/8/3ppP2/8/4P3/PPPP2PP/RNBQKBNR b KQkq - 0 3").afterMove(Move{ g7, g5 }).isEpPossible()));
     ASSERT_TRUE((!Position::fromFen("rnb1kbnr/pp3ppp/5q2/2pppP2/8/2N1P3/PPPP1KPP/R1BQ1BNR b kq - 3 5").afterMove(Move{ g7, g5 }).isEpPossible()));
-    ASSERT_TRUE((Position::fromFen("rnb1kbnr/pp3ppp/5q2/2pppP2/8/2N1P3/PPPP1KPP/R1BQ1BNR b kq - 3 5").afterMove(Move{ g7, g5 }).createsDiscoveredAttackOnOwnKing(Move{ f5, g6, MoveType::EnPassant })));
+    ASSERT_TRUE((Position::fromFen("rnb1kbnr/pp3ppp/5q2/2pppP2/8/2N1P3/PPPP1KPP/R1BQ1BNR b kq - 3 5").afterMove(Move{ g7, g5 }).isOwnKingAttackedAfterMove(Move{ f5, g6, MoveType::EnPassant })));
 
     ASSERT_TRUE((Position::startPosition().afterMove(Move{ a2, a4 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/P7/8/1PPPPPPP/RNBQKBNR b KQkq -")));
     ASSERT_TRUE((Position::startPosition().afterMove(Move{ e2, e3 }) == Position::fromFen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq -")));
@@ -60,11 +60,10 @@ TEST(PositionTest, GeneralPositionTest) {
     ASSERT_TRUE((Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ e2, e1, MoveType::Promotion, blackBishop }) == Position::fromFen("k7/8/8/8/8/8/8/K3b3 w - - 0 2")));
     ASSERT_TRUE((Position::fromFen("k7/8/8/8/8/8/4p3/K7 b - -").afterMove(Move{ e2, e1, MoveType::Promotion, blackKnight }) == Position::fromFen("k7/8/8/8/8/8/8/K3n3 w - - 0 2")));
 
-
-    ASSERT_TRUE((Position::fromFen("k7/8/8/q2pP2K/8/8/8/8 w - d6 0 2").createsDiscoveredAttackOnOwnKing(Move{ e5, d6, MoveType::EnPassant })));
-    ASSERT_TRUE((!Position::fromFen("k7/8/q7/3pP2K/8/8/8/8 w - d6 0 1").createsDiscoveredAttackOnOwnKing(Move{ e5, d6, MoveType::EnPassant })));
-    ASSERT_TRUE((Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").createsDiscoveredAttackOnOwnKing(Move{ e5, d6, MoveType::EnPassant })));
-    ASSERT_TRUE((!Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").createsDiscoveredAttackOnOwnKing(Move{ e5, e6 })));
+    ASSERT_TRUE((Position::fromFen("k7/8/8/q2pP2K/8/8/8/8 w - d6 0 2").isOwnKingAttackedAfterMove(Move{ e5, d6, MoveType::EnPassant })));
+    ASSERT_TRUE((!Position::fromFen("k7/8/q7/3pP2K/8/8/8/8 w - d6 0 1").isOwnKingAttackedAfterMove(Move{ e5, d6, MoveType::EnPassant })));
+    ASSERT_TRUE((Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isOwnKingAttackedAfterMove(Move{ e5, d6, MoveType::EnPassant })));
+    ASSERT_TRUE((!Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isOwnKingAttackedAfterMove(Move{ e5, e6 })));
 
 
     ASSERT_TRUE((Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isSquareAttacked(c6, Color::Black)));
@@ -74,13 +73,13 @@ TEST(PositionTest, GeneralPositionTest) {
     ASSERT_TRUE((Position::fromFen("k7/1b6/q7/3pP3/8/5K2/8/8 w - d6 0 1").isSquareAttacked(d6, Color::White)));
     ASSERT_TRUE((!Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttacked(h7, Color::Black)));
 
-    ASSERT_TRUE((!Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttackedAfterMove(g7, Move{ a8, b8 }, Color::Black)));
-    ASSERT_TRUE((Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttackedAfterMove(g7, Move{ a7, g1 }, Color::Black)));
-    ASSERT_TRUE((Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(h5, Move{ e5, d6, MoveType::EnPassant }, Color::Black)));
-    ASSERT_TRUE((Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(e4, Move{ e5, d6, MoveType::EnPassant }, Color::Black)));
-    ASSERT_TRUE((!Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(h1, Move{ e5, d6, MoveType::EnPassant }, Color::Black)));
+    ASSERT_TRUE((!Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttackedAfterMove(Move{ a8, b8 }, g7, Color::Black)));
+    ASSERT_TRUE((Position::fromFen("k7/qb6/8/3pP3/8/5K2/8/8 w - -").isSquareAttackedAfterMove(Move{ a7, g1 }, g7, Color::Black)));
+    ASSERT_TRUE((Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(Move{ e5, d6, MoveType::EnPassant }, h5, Color::Black)));
+    ASSERT_TRUE((Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(Move{ e5, d6, MoveType::EnPassant }, e4, Color::Black)));
+    ASSERT_TRUE((!Position::fromFen("k7/1b6/8/q2pP3/8/5K2/8/8 w - d6").isSquareAttackedAfterMove(Move{ e5, d6, MoveType::EnPassant }, h1, Color::Black)));
 
-    ASSERT_TRUE((!Position::fromFen("rnb2k1r/pp1Pbppp/2p5/q7/2B5/8/PPPQNnPP/RNB1K2R w KQ - 0 1").createsAttackOnOwnKing(Move{ e1, h1, MoveType::Castle })));
+    ASSERT_TRUE((!Position::fromFen("rnb2k1r/pp1Pbppp/2p5/q7/2B5/8/PPPQNnPP/RNB1K2R w KQ - 0 1").isOwnKingAttackedAfterMove(Move{ e1, h1, MoveType::Castle })));
 
     ASSERT_EQ(Position::fromFen("rnbqkbnr/p1p1pppp/1p1p4/8/8/6P1/PPPPPPBP/RNBQK1NR w KQkq - 0 3").afterMove(Move{ g2, a8 }).castlingRights(), CastlingRights::All & ~CastlingRights::BlackQueenSide);
 }

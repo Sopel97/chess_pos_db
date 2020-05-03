@@ -27,7 +27,7 @@ namespace movegen
                 return true;
             }
 
-            return !pos.createsAttackOnOwnKing(move);
+            return !pos.isOwnKingAttackedAfterMove(move);
         }
     }
 
@@ -163,6 +163,14 @@ namespace movegen
             }
         };
 
+        // this square must not be attacked by the enemy
+        constexpr EnumArray2<Color, CastleType, Square> kingDestination = {
+            {
+                {{ g1, c1 }},
+                {{ g8, c8 }}
+            }
+        };
+
         // we can't use CastlingRights directly as it is a flag set
         constexpr EnumArray2<Color, CastleType, CastlingRights> castlingRightsMap = {
             {
@@ -218,13 +226,16 @@ namespace movegen
                 continue;
             }
 
-            Move move = Move::castle(castlingType, sideToMove);
-            if (pos.createsAttackOnOwnKing(move))
+            // If it's a castling move then the change in square occupation
+            // cannot have an effect because otherwise there would be
+            // a slider attacker attacking the castling king.
+            if (pos.isSquareAttacked(kingDestination[sideToMove][castlingType], !sideToMove))
             {
                 continue;
             }
 
             // If not we can castle.
+            Move move = Move::castle(castlingType, sideToMove);
             f(move);
         }
     }

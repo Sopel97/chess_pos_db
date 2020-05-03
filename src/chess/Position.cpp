@@ -17,73 +17,17 @@
 
 #include "xxhash/xxhash_cpp.h"
 
-[[nodiscard]] bool Board::createsDiscoveredAttackOnOwnKing(Move move, Color color) const
-{
-    // checks whether by doing a move we uncover our king to a check
-    // doesn't verify castlings as it is supposed to only cover undiscovered checks
-
-    ASSERT(move.from.isOk() && move.to.isOk());
-    ASSERT(move.type != MoveType::Castle);
-
-    const Square ksq = kingSquare(color);
-
-    ASSERT(ksq != move.from);
-
-    if (move.type == MoveType::Castle)
-    {
-        return false;
-    }
-
-    Bitboard occupied = (piecesBB() ^ move.from) | move.to;
-    Bitboard captured = Bitboard::none();
-    Bitboard removed = Bitboard::square(move.from);
-
-    if (move.type == MoveType::EnPassant)
-    {
-        const Square capturedPieceSq(move.to.file(), move.from.rank());
-        occupied ^= capturedPieceSq;
-        removed |= capturedPieceSq;
-        // We don't update captured becuase it only affects pawns - we don't care.
-    }
-    else if (m_pieces[move.to] != Piece::none())
-    {
-        // A capture happened.
-        // We have to exclude the captured piece.
-        captured |= move.to;
-    }
-
-    const Bitboard allSliderPseudoAttacks = bb::pseudoAttacks<PieceType::Queen>(ksq);
-    if (!(allSliderPseudoAttacks & removed).any())
-    {
-        // if the square is not aligned with the king we don't have to check anything
-        return false;
-    }
-
-    const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, !color)) & ~captured;
-    const Bitboard rooks = piecesBB(Piece(PieceType::Rook, !color)) & ~captured;
-    const Bitboard queens = piecesBB(Piece(PieceType::Queen, !color)) & ~captured;
-    if (!(allSliderPseudoAttacks & (bishops | rooks | queens)).any())
-    {
-        return false;
-    }
-
-    return bb::isAttackedBySlider(
-        ksq,
-        bishops,
-        rooks,
-        queens,
-        occupied
-    );
-}
-
-[[nodiscard]] bool Board::isSquareAttacked(Square sq, Color attackerColor, Bitboard occupied, Bitboard captured) const
+[[nodiscard]] bool Board::isSquareAttacked(Square sq, Color attackerColor) const
 {
     ASSERT(sq.isOk());
 
-    const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor)) & ~captured;
-    const Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor)) & ~captured;
-    const Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor)) & ~captured;
-    if ((bb::pseudoAttacks<PieceType::Queen>(sq) & (bishops | rooks | queens)).any())
+    const Bitboard occupied = piecesBB();
+    const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor));
+    const Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor));
+    const Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor));
+
+    const Bitboard allSliders = (bishops | rooks | queens);
+    if ((bb::pseudoAttacks<PieceType::Queen>(sq) & allSliders).any())
     {
         if (bb::isAttackedBySlider(
             sq,
@@ -97,42 +41,234 @@
         }
     }
 
-    if (bb::pseudoAttacks<PieceType::King>(sq).isSet(kingSquare(attackerColor)))
+    const Bitboard king = piecesBB(Piece(PieceType::King, attackerColor));
+    if ((bb::pseudoAttacks<PieceType::King>(sq) & king).any())
     {
         return true;
     }
 
-    if ((bb::pseudoAttacks<PieceType::Knight>(sq) & m_pieceBB[Piece(PieceType::Knight, attackerColor)] & ~captured).any())
+    const Bitboard knights = piecesBB(Piece(PieceType::Knight, attackerColor));
+    if ((bb::pseudoAttacks<PieceType::Knight>(sq) & knights).any())
     {
         return true;
     }
 
-    // Check pawn attacks. Nothing else can attack the square at this point.
-    const Bitboard pawns = m_pieceBB[Piece(PieceType::Pawn, attackerColor)] & ~captured;
+    const Bitboard pawns = piecesBB(Piece(PieceType::Pawn, attackerColor));
     const Bitboard pawnAttacks = bb::pawnAttacks(pawns, attackerColor);
 
     return pawnAttacks.isSet(sq);
 }
 
-[[nodiscard]] bool Board::isSquareAttacked(Square sq, Color attackerColor) const
+[[nodiscard]] bool Board::isSquareAttackedAfterMove(Move move, Square sq, Color attackerColor) const
 {
-    return isSquareAttacked(sq, attackerColor, piecesBB(), Bitboard::none());
+    const Bitboard occupiedChange = Bitboard::square(move.from) | move.to;
+
+    Bitboard occupied = piecesBB() ^ occupiedChange;
+
+    Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor));
+    Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor));
+    Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor));
+    Bitboard king = piecesBB(Piece(PieceType::King, attackerColor));
+    Bitboard knights = piecesBB(Piece(PieceType::Knight, attackerColor));
+    Bitboard pawns = piecesBB(Piece(PieceType::Pawn, attackerColor));
+
+    if (move.type == MoveType::EnPassant)
+    {
+        const Square capturedPawnSq(move.to.file(), move.from.rank());
+        occupied ^= capturedPawnSq;
+    }
+    else if (pieceAt(move.to) != Piece::none())
+    {
+        const Bitboard notCaptured = ~Bitboard::square(move.to);
+        bishops &= notCaptured;
+        rooks &= notCaptured;
+        queens &= notCaptured;
+    }
+
+    // Potential attackers may have moved.
+    const Piece movedPiece = pieceAt(move.from);
+    if (movedPiece.color() == attackerColor)
+    {
+        switch (movedPiece.type())
+        {
+        case PieceType::Pawn:
+            pawns ^= occupiedChange;
+            break;
+        case PieceType::Knight:
+            knights ^= occupiedChange;
+            break;
+        case PieceType::Bishop:
+            bishops ^= occupiedChange;
+            break;
+        case PieceType::Rook:
+            rooks ^= occupiedChange;
+            break;
+        case PieceType::Queen:
+            queens ^= occupiedChange;
+            break;
+        case PieceType::King:
+        {
+            if (move.type == MoveType::Castle)
+            {
+                const CastleType castleType = 
+                    (move.to.file() == fileH)
+                    ? CastleType::Short 
+                    : CastleType::Long;
+
+                king ^= move.from;
+                king ^= m_kingCastleDestinations[attackerColor][castleType];
+                rooks ^= move.to;
+                rooks ^= m_rookCastleDestinations[attackerColor][castleType];
+
+                break;
+            }
+            else
+            {
+                king ^= occupiedChange;
+            }
+        }
+        }
+    }
+
+    // If it's a castling move then the change in square occupation
+    // cannot have an effect because otherwise there would be
+    // a slider attacker attacking the castling king.
+    // (It could have an effect in chess960 if the slider
+    // attacker was behind the rook involved in castling,
+    // but we don't care about chess960.)
+
+    const Bitboard allSliders = (bishops | rooks | queens);
+    if ((bb::pseudoAttacks<PieceType::Queen>(sq) & allSliders).any())
+    {
+        if (bb::isAttackedBySlider(
+            sq,
+            bishops,
+            rooks,
+            queens,
+            occupied
+        ))
+        {
+            return true;
+        }
+    }
+
+    if ((bb::pseudoAttacks<PieceType::King>(sq) & king).any())
+    {
+        return true;
+    }
+
+    if ((bb::pseudoAttacks<PieceType::Knight>(sq) & knights).any())
+    {
+        return true;
+    }
+
+    const Bitboard pawnAttacks = bb::pawnAttacks(pawns, attackerColor);
+
+    return pawnAttacks.isSet(sq);
 }
 
-[[nodiscard]] bool Board::isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
+[[nodiscard]] bool Board::isPieceAttacked(Square sq) const
 {
-    // TODO: See whether this can be done better.
-    Board cpy(*this);
-    cpy.doMove(move);
-    return cpy.isSquareAttacked(sq, attackerColor);
+    const Piece piece = pieceAt(sq);
+
+    if (piece == Piece::none())
+    {
+        return false;
+    }
+
+    return isSquareAttacked(sq, !piece.color());
 }
 
-[[nodiscard]] bool Board::isKingAttackedAfterMove(Move move, Color kingColor) const
+[[nodiscard]] bool Board::isPieceAttackedAfterMove(Move move, Square sq) const
 {
-    // TODO: See whether this can be done better.
-    Board cpy(*this);
-    cpy.doMove(move);
-    return cpy.isSquareAttacked(cpy.kingSquare(kingColor), !kingColor);
+    const Piece piece = pieceAt(sq);
+
+    if (piece == Piece::none())
+    {
+        return false;
+    }
+
+    if (sq == move.from)
+    {
+        // We moved the piece we're interested in.
+        // For every move the piece ends up on the move.to except
+        // for the case of castling moves.
+        // But we know pseudo legal castling moves
+        // are already legal, so the king cannot be in check after.
+        if (move.type == MoveType::Castle)
+        {
+            return false;
+        }
+
+        // So update the square we're interested in.
+        sq = move.to;
+    }
+    
+    return isSquareAttackedAfterMove(move, sq, !piece.color());
+}
+
+[[nodiscard]] bool Board::isOwnKingAttackedAfterMove(Move move) const
+{
+    if (move.type == MoveType::Castle)
+    {
+        // Pseudo legal castling moves are already legal.
+        // This is ensured by the move generator.
+        return false;
+    }
+
+    const Piece movedPiece = pieceAt(move.from);
+
+    return isPieceAttackedAfterMove(move, kingSquare(movedPiece.color()));
+}
+
+[[nodiscard]] Bitboard Board::attacks(Square sq) const
+{
+    const Piece piece = pieceAt(sq);
+    if (piece == Piece::none())
+    {
+        return Bitboard::none();
+    }
+
+    if (piece.type() == PieceType::Pawn)
+    {
+        return bb::pawnAttacks(Bitboard::square(sq), piece.color());
+    }
+    else
+    {
+        return bb::attacks(piece.type(), sq, piecesBB());
+    }
+}
+
+[[nodiscard]] Bitboard Board::attackers(Square sq, Color attackerColor) const
+{
+    // En-passant square is not included.
+
+    Bitboard allAttackers = Bitboard::none();
+
+    const Bitboard occupied = piecesBB();
+
+    const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor));
+    const Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor));
+    const Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor));
+
+    const Bitboard bishopLikePieces = (bishops | queens);
+    const Bitboard bishopAttacks = bb::attacks<PieceType::Bishop>(sq, occupied);
+    allAttackers |= bishopAttacks & bishopLikePieces;
+
+    const Bitboard rookLikePieces = (rooks | queens);
+    const Bitboard rookAttacks = bb::attacks<PieceType::Rook>(sq, occupied);
+    allAttackers |= rookAttacks & rookLikePieces;
+
+    const Bitboard king = piecesBB(Piece(PieceType::King, attackerColor));
+    allAttackers |= bb::pseudoAttacks<PieceType::King>(sq) & king;
+
+    const Bitboard knights = piecesBB(Piece(PieceType::Knight, attackerColor));
+    allAttackers |= bb::pseudoAttacks<PieceType::Knight>(sq) & knights;
+
+    const Bitboard pawns = piecesBB(Piece(PieceType::Pawn, attackerColor));
+    allAttackers |= bb::pawnAttacks(Bitboard::square(sq), !attackerColor) & pawns;
+
+    return allAttackers;
 }
 
 const Piece* Board::piecesRaw() const
@@ -330,26 +466,6 @@ void Position::set(const char* fen)
     return fen;
 }
 
-[[nodiscard]] bool Position::createsDiscoveredAttackOnOwnKing(Move move) const
-{
-    return BaseType::createsDiscoveredAttackOnOwnKing(move, m_sideToMove);
-}
-
-[[nodiscard]] bool Position::createsAttackOnOwnKing(Move move) const
-{
-    return BaseType::isKingAttackedAfterMove(move, m_sideToMove);
-}
-
-[[nodiscard]] bool Position::isSquareAttackedAfterMove(Square sq, Move move, Color attackerColor) const
-{
-    return BaseType::isSquareAttackedAfterMove(sq, move, attackerColor);
-}
-
-[[nodiscard]] bool Position::isSquareAttacked(Square sq, Color attackerColor) const
-{
-    return BaseType::isSquareAttacked(sq, attackerColor);
-}
-
 namespace detail::lookup
 {
     static constexpr EnumArray<Square, CastlingRights> preservedCastlingRights = []() {
@@ -409,7 +525,7 @@ ReverseMove Position::doMove(const Move& move)
 
 [[nodiscard]] bool Position::isCheck(Move move) const
 {
-    return BaseType::isSquareAttackedAfterMove(kingSquare(!m_sideToMove), move, m_sideToMove);
+    return BaseType::isSquareAttackedAfterMove(move, kingSquare(!m_sideToMove), m_sideToMove);
 }
 
 [[nodiscard]] Position Position::afterMove(Move move) const
@@ -459,8 +575,40 @@ ReverseMove Position::doMove(const Move& move)
     // the opposite side can actually capture
     for (Square sq : pawnsAttackingEpSquare)
     {
-        if (!BaseType::createsDiscoveredAttackOnOwnKing(Move{ sq, epSquare, MoveType::EnPassant }, sideToMove))
+        // If we're here the previous move by other side
+        // was a double pawn move so our king is either not in check
+        // or is attacked only by the moved pawn - in which
+        // case it can be captured by our pawn if it doesn't
+        // create a discovered check on our king.
+        // So overall we only have to check whether our king
+        // ends up being uncovered to a slider attack.
+
+        const Square ksq = kingSquare(sideToMove);
+
+        const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, !sideToMove));
+        const Bitboard rooks = piecesBB(Piece(PieceType::Rook, !sideToMove));
+        const Bitboard queens = piecesBB(Piece(PieceType::Queen, !sideToMove));
+
+        const Bitboard relevantAttackers = bishops | rooks | queens;
+        const Bitboard pseudoSliderAttacksFromKing = bb::pseudoAttacks<PieceType::Queen>(ksq);
+        if ((relevantAttackers & pseudoSliderAttacksFromKing).isEmpty())
         {
+            // It's enough that one pawn can capture.
+            return true;
+        }
+
+        const Square capturedPawnSq(epSquare.file(), sq.rank());
+        const Bitboard occupied = ((piecesBB() ^ sq) | epSquare) ^ capturedPawnSq;
+
+        if (!bb::isAttackedBySlider(
+            ksq,
+            bishops,
+            rooks,
+            queens,
+            occupied
+        ))
+        {
+            // It's enough that one pawn can capture.
             return true;
         }
     }
