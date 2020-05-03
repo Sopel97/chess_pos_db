@@ -76,6 +76,7 @@
     {
         const Square capturedPawnSq(move.to.file(), move.from.rank());
         occupied ^= capturedPawnSq;
+        pawns ^= capturedPawnSq;
     }
     else if (pieceAt(move.to) != Piece::none())
     {
@@ -83,6 +84,8 @@
         bishops &= notCaptured;
         rooks &= notCaptured;
         queens &= notCaptured;
+        knights &= notCaptured;
+        pawns &= notCaptured;
     }
 
     // Potential attackers may have moved.
