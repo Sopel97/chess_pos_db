@@ -810,14 +810,14 @@ struct EnumTraits<Square>
 
         return
             std::string_view(
-                "a1a2a3a4a5a6a7a8"
-                "b1b2b3b4b5b6b7b8"
-                "c1c2c3c4c5c6c7c8"
-                "d1d2d3d4d5d6d7d8"
-                "e1e2e3e4e5e6e7e8"
-                "f1f2f3f4f5f6f7f8"
-                "g1g2g3g4g5g6g7g8"
-                "h1h2h3h4h5h6h7h8"
+                "a1b1c1d1e1f1g1h1"
+                "a2b2c2d2e2f2g2h2"
+                "a3b3c3d3e3f3g3h3"
+                "a4b4c4d4e4f4g4h4"
+                "a5b5c5d5e5f5g5h5"
+                "a6b6c6d6e6f6g6h6"
+                "a7b7c7d7e7f7g7h7"
+                "a8b8c8d8e8f8g8h8"
                 + (ordinal(sq) * 2),
                 2
             );
@@ -835,6 +835,8 @@ struct EnumTraits<Square>
         return Square(static_cast<File>(f - 'a'), static_cast<Rank>(r - '1'));
     }
 };
+
+static_assert(toString(d1) == std::string_view("d1"));
 
 enum struct MoveType : std::uint8_t
 {

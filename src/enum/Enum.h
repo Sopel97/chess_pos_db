@@ -52,43 +52,43 @@ template <typename EnumT>
 }
 
 template <typename EnumT, typename... ArgsTs, typename SFINAE = std::enable_if_t<hasEnumTraits<EnumT>()>>
-[[nodiscard]] decltype(auto) toString(EnumT v, ArgsTs&&... args)
+[[nodiscard]] constexpr decltype(auto) toString(EnumT v, ArgsTs&&... args)
 {
     return EnumTraits<EnumT>::toString(v, std::forward<ArgsTs>(args)...);
 }
 
 template <typename EnumT>
-[[nodiscard]] decltype(auto) toString(EnumT v)
+[[nodiscard]] constexpr decltype(auto) toString(EnumT v)
 {
     return EnumTraits<EnumT>::toString(v);
 }
 
 template <typename EnumT, typename FormatT, typename SFINAE = std::enable_if_t<!hasEnumTraits<FormatT>()>>
-[[nodiscard]] decltype(auto) toString(FormatT&& f, EnumT v)
+[[nodiscard]] constexpr decltype(auto) toString(FormatT&& f, EnumT v)
 {
     return EnumTraits<EnumT>::toString(std::forward<FormatT>(f), v);
 }
 
 template <typename EnumT>
-[[nodiscard]] decltype(auto) toChar(EnumT v)
+[[nodiscard]] constexpr decltype(auto) toChar(EnumT v)
 {
     return EnumTraits<EnumT>::toChar(v);
 }
 
 template <typename EnumT, typename FormatT>
-[[nodiscard]] decltype(auto) toChar(FormatT&& f, EnumT v)
+[[nodiscard]] constexpr decltype(auto) toChar(FormatT&& f, EnumT v)
 {
     return EnumTraits<EnumT>::toChar(std::forward<FormatT>(f), v);
 }
 
 template <typename EnumT, typename... ArgsTs>
-[[nodiscard]] decltype(auto) fromString(ArgsTs&& ... args)
+[[nodiscard]] constexpr decltype(auto) fromString(ArgsTs&& ... args)
 {
     return EnumTraits<EnumT>::fromString(std::forward<ArgsTs>(args)...);
 }
 
 template <typename EnumT, typename... ArgsTs>
-[[nodiscard]] decltype(auto) fromChar(ArgsTs&& ... args)
+[[nodiscard]] constexpr decltype(auto) fromChar(ArgsTs&& ... args)
 {
     return EnumTraits<EnumT>::fromChar(std::forward<ArgsTs>(args)...);
 }
