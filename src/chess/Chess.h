@@ -697,12 +697,22 @@ public:
 
     constexpr void flipVertically()
     {
-        m_id ^= 0b111;
+        m_id ^= rankMask;
     }
 
     constexpr void flipHorizontally()
     {
-        m_id ^= 0b111000;
+        m_id ^= fileMask;
+    }
+
+    constexpr Square flippedVertically() const
+    {
+        return Square(m_id ^ rankMask);
+    }
+
+    constexpr Square flippedHorizontally() const 
+    {
+        return Square(m_id ^ fileMask);
     }
 
     [[nodiscard]] constexpr bool isOk() const
@@ -788,6 +798,12 @@ constexpr Square h8(fileH, rank8);
 
 static_assert(e1.color() == Color::Black);
 static_assert(e8.color() == Color::White);
+
+static_assert(e1.file() == fileE);
+static_assert(e1.rank() == rank1);
+
+static_assert(e1.flippedHorizontally() == d1);
+static_assert(e1.flippedVertically() == e8);
 
 template <>
 struct EnumTraits<Square>
