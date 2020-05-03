@@ -63,7 +63,7 @@
 {
     const Bitboard occupiedChange = Bitboard::square(move.from) | move.to;
 
-    Bitboard occupied = piecesBB() ^ occupiedChange;
+    Bitboard occupied = (piecesBB() ^ move.from) | move.to;
 
     Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor));
     Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor));
