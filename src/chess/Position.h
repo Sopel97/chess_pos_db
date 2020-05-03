@@ -856,6 +856,10 @@ struct Position : public Board
 
     [[nodiscard]] bool isCheck(Move move) const;
 
+    [[nodiscard]] bool isMoveLegal(Move move) const;
+
+    [[nodiscard]] bool isPseudoLegalMoveLegal(Move move) const;
+
     [[nodiscard]] bool isMovePseudoLegal(Move move) const;
 
     [[nodiscard]] constexpr Square epSquare() const
