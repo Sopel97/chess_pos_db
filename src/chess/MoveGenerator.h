@@ -220,6 +220,8 @@ namespace movegen
         }
     }
 
+    // Calls a given function for all pseudo legal moves for the position.
+    // `pos` must be a legal chess position
     template <typename FuncT>
     inline void forEachPseudoLegalMove(const Position& pos, FuncT&& func)
     {
@@ -232,6 +234,8 @@ namespace movegen
         forEachCastlingMove(pos, func);
     }
 
+    // Calls a given function for all legal moves for the position.
+    // `pos` must be a legal chess position
     template <typename FuncT>
     inline void forEachLegalMove(const Position& pos, FuncT&& func)
     {
@@ -251,7 +255,11 @@ namespace movegen
         forEachCastlingMove(pos, func);
     }
 
-    // pos must not have a 'king capture' available
+    // Generates all pseudo legal moves for the position.
+    // `pos` must be a legal chess position
     [[nodiscard]] std::vector<Move> generatePseudoLegalMoves(const Position& pos);
+
+    // Generates all legal moves for the position.
+    // `pos` must be a legal chess position
     [[nodiscard]] std::vector<Move> generateLegalMoves(const Position& pos);
 }

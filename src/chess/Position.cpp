@@ -556,6 +556,11 @@ ReverseMove Position::doMove(const Move& move)
         return false;
     }
 
+    if (move.type != MoveType::Promotion && move.promotedPiece != Piece::none())
+    {
+        return false;
+    }
+
     const Piece movedPiece = pieceAt(move.from);
     if (movedPiece == Piece::none())
     {

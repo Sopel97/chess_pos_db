@@ -7,7 +7,6 @@
 
 namespace movegen
 {
-    // pos must not have a 'king capture' available
     [[nodiscard]] std::vector<Move> generatePseudoLegalMoves(const Position& pos)
     {
         std::vector<Move> moves;
@@ -21,6 +20,8 @@ namespace movegen
         return moves;
     }
 
+    // Generates all legal moves for the position.
+    // `pos` must be a legal chess position
     [[nodiscard]] std::vector<Move> generateLegalMoves(const Position& pos)
     {
         std::vector<Move> moves;

@@ -690,21 +690,35 @@ struct Board
         }
     }
 
+    // Returns whether a given square is attacked by any piece
+    // of `attackerColor` side.
     [[nodiscard]] bool isSquareAttacked(Square sq, Color attackerColor) const;
 
+    // Returns whether a given square is attacked by any piece
+    // of `attackerColor` side after `move` is made.
     // Move must be pseudo legal.
     [[nodiscard]] bool isSquareAttackedAfterMove(Move move, Square sq, Color attackerColor) const;
 
+    // Returns whether a piece on a given square is attacked
+    // by any enemy piece. False if square is empty.
     [[nodiscard]] bool isPieceAttacked(Square sq) const;
 
+    // Returns whether a piece on a given square is attacked
+    // by any enemy piece after `move` is made. False if square is empty.
     // Move must be pseudo legal.
     [[nodiscard]] bool isPieceAttackedAfterMove(Move move, Square sq) const;
 
+    // Returns whether the king of the moving side is attacked
+    // by any enemy piece after a move is made.
     // Move must be pseudo legal.
     [[nodiscard]] bool isOwnKingAttackedAfterMove(Move move) const;
 
+    // Return a bitboard with all (pseudo legal) attacks by the piece on 
+    // the given square. Empty if no piece on the square.
     [[nodiscard]] Bitboard attacks(Square sq) const;
 
+    // Returns a bitboard with all squared that have pieces
+    // that attack a given square (pseudo legally)
     [[nodiscard]] Bitboard attackers(Square sq, Color attackerColor) const;
 
     [[nodiscard]] constexpr Piece pieceAt(Square sq) const
@@ -855,7 +869,8 @@ struct Position : public Board
     [[nodiscard]] bool isCheck() const;
 
     [[nodiscard]] bool isCheckAfterMove(Move move) const;
-
+    
+    // Checks whether ANY `move` is legal.
     [[nodiscard]] bool isMoveLegal(Move move) const;
 
     [[nodiscard]] bool isPseudoLegalMoveLegal(Move move) const;
