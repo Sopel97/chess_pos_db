@@ -565,6 +565,10 @@ struct Square
 private:
     static constexpr std::int8_t m_noneId = cardinality<Rank>() * cardinality<File>();
 
+    static constexpr std::uint8_t fileMask = 0b111;
+    static constexpr std::uint8_t rankMask = 0b111000;
+    static constexpr std::uint8_t rankShift = 3;
+
 public:
     [[nodiscard]] static constexpr Square none()
     {
@@ -591,6 +595,16 @@ public:
     constexpr explicit Square(SquareCoords coords) noexcept :
         Square(coords.file, coords.rank)
     {
+    }
+
+    [[nodiscard]] constexpr friend bool operator<(Square lhs, Square rhs) noexcept
+    {
+        return lhs.m_id < rhs.m_id;
+    }
+
+    [[nodiscard]] constexpr friend bool operator>(Square lhs, Square rhs) noexcept
+    {
+        return lhs.m_id > rhs.m_id;
     }
 
     [[nodiscard]] constexpr friend bool operator<=(Square lhs, Square rhs) noexcept
@@ -661,13 +675,13 @@ public:
     [[nodiscard]] constexpr File file() const
     {
         ASSERT(isOk());
-        return File(static_cast<unsigned>(m_id) % cardinality<Rank>());
+        return File(static_cast<unsigned>(m_id) & fileMask);
     }
 
     [[nodiscard]] constexpr Rank rank() const
     {
         ASSERT(isOk());
-        return Rank(static_cast<unsigned>(m_id) / cardinality<Rank>());
+        return Rank(static_cast<unsigned>(m_id) >> rankShift);
     }
 
     [[nodiscard]] constexpr SquareCoords coords() const
