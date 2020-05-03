@@ -4,13 +4,15 @@
 #include "chess/MoveGenerator.h"
 #include "chess/Position.h"
 
-static std::size_t perft(const Position& pos, int depth)
+static std::size_t perft(Position&& pos, int depth)
 {
     if (depth > 1)
     {
         std::size_t c = 0;
         movegen::forEachLegalMove(pos, [&pos, depth, &c](Move move) {
-            c += perft(pos.afterMove(move), depth - 1);
+            auto rmove = pos.doMove(move);
+            c += perft<false>(pos, depth - 1);
+            pos.undoMove(rmove);
             });
         return c;
     }
@@ -167,4 +169,5 @@ TEST(MoveGeneratorTest, GeneralMoveGeneratorTest) {
     ASSERT_TRUE(movegen::generateLegalMoves(Position::fromFen("n1n5/1Pk5/8/8/8/8/5Kp1/5N1N b - - 0 1")).size() == 24);
     ASSERT_TRUE(movegen::generateLegalMoves(Position::fromFen("n1n5/PPPk4/8/8/8/8/4Kppp/5N1N w - - 0 1")).size() == 24);
     ASSERT_TRUE(movegen::generateLegalMoves(Position::fromFen("n1n5/PPPk4/8/8/8/8/4Kppp/5N1N b - - 0 1")).size() == 24);
+    ASSERT_TRUE(movegen::generateLegalMoves(Position::fromFen("rnbqkbnr/pppp1ppp/8/8/3p4/4P3/PPP1QPPP/RNB1KBNR b KQkq - 1 3")).size() == 31);
 }
