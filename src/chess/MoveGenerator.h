@@ -17,20 +17,6 @@ namespace movegen
     //  - a move other than castling may create a discovered attack on the king
     //  - a king may walk into a check
 
-    namespace detail
-    {
-        // move has to be pseudo-legal
-        [[nodiscard]] inline bool isLegal(const Position& pos, Move move)
-        {
-            if (move.type == MoveType::Castle)
-            {
-                return true;
-            }
-
-            return !pos.isOwnKingAttackedAfterMove(move);
-        }
-    }
-
     template <typename FuncT>
     inline void forEachPseudoLegalPawnMove(const Position& pos, FuncT&& f)
     {
@@ -252,7 +238,7 @@ namespace movegen
         if (!pos.isLegal()) return;
 
         auto funcIfLegal = [&](Move move) {
-            if (detail::isLegal(pos, move))
+            if (pos.isPseudoLegalMoveLegal(move))
             {
                 func(move);
             }

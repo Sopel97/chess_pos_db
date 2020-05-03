@@ -531,6 +531,13 @@ ReverseMove Position::doMove(const Move& move)
     return BaseType::isSquareAttackedAfterMove(move, kingSquare(!m_sideToMove), m_sideToMove);
 }
 
+[[nodiscard]] bool Position::isMovePseudoLegal(Move move) const
+{
+    return 
+        (move.type == MoveType::Castle)
+        || !isOwnKingAttackedAfterMove(move);
+}
+
 [[nodiscard]] Position Position::afterMove(Move move) const
 {
     Position cpy(*this);
