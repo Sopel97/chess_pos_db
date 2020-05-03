@@ -76,7 +76,7 @@ private:
 struct Bitboard
 {
     // bits counted from the LSB
-    // order is A1 A2 ... H7 H8
+    // order is A1 B2 ... G8 H8
     // just like in Square
 
 public:
