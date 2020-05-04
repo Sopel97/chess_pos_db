@@ -296,6 +296,21 @@ namespace bb
             return bb;
         }
 
+        static Bitboard generateLine(Square s1, Square s2)
+        {
+            for (PieceType pt : { PieceType::Bishop, PieceType::Rook })
+            {
+                const Bitboard s1Attacks = pseudoAttacks[pt][s1];
+                if (s1Attacks.isSet(s2))
+                {
+                    const Bitboard s2Attacks = pseudoAttacks[pt][s2];
+                    return (s1Attacks & s2Attacks) | s1 | s2;
+                }
+            }
+
+            return Bitboard::none();
+        }
+
         static const EnumArray2<Square, Square, Bitboard> between = []()
         {
             EnumArray2<Square, Square, Bitboard> between;
@@ -310,11 +325,31 @@ namespace bb
 
             return between;
         }();
+
+        static const EnumArray2<Square, Square, Bitboard> line = []()
+        {
+            EnumArray2<Square, Square, Bitboard> line;
+
+            for (Square s1 : values<Square>())
+            {
+                for (Square s2 : values<Square>())
+                {
+                    line[s1][s2] = generateLine(s1, s2);
+                }
+            }
+
+            return line;
+        }();
     }
 
     [[nodiscard]] Bitboard between(Square s1, Square s2)
     {
         return detail::between[s1][s2];
+    }
+
+    [[nodiscard]] Bitboard line(Square s1, Square s2)
+    {
+        return detail::line[s1][s2];
     }
 
     template <PieceType PieceTypeV>

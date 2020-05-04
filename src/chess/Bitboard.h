@@ -653,6 +653,8 @@ namespace bb
 
     [[nodiscard]] Bitboard between(Square s1, Square s2);
 
+    [[nodiscard]] Bitboard line(Square s1, Square s2);
+
     template <PieceType PieceTypeV>
     [[nodiscard]] Bitboard pseudoAttacks(Square sq);
 

@@ -455,9 +455,15 @@ MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
         {
             return m_position->isPseudoLegalMoveLegal(move);
         }
-        else if (move.type == MoveType::EnPassant || m_ourBlockersForKing.isSet(move.from))
+        else if (move.type == MoveType::EnPassant)
         {
             return !m_position->createsDiscoveredAttackOnOwnKing(move);
+        }
+        else if (m_ourBlockersForKing.isSet(move.from))
+        {
+            // If it was a blocker it may have only moved in line with our king.
+            // Otherwise it's a discovered check.
+            return bb::line(m_position->kingSquare(m_position->sideToMove()), move.from).isSet(move.to);
         }
         else
         {
