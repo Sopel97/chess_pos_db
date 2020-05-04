@@ -57,6 +57,7 @@
     <ClInclude Include="src\chess\Pgn.h" />
     <ClInclude Include="src\chess\Position.h" />
     <ClInclude Include="src\chess\San.h" />
+    <ClInclude Include="src\chess\Uci.h" />
     <ClInclude Include="src\chess\Zobrist.h" />
     <ClInclude Include="src\coding\BitStream.h" />
     <ClInclude Include="src\coding\Coding.h" />
@@ -97,6 +98,7 @@
     <ClCompile Include="src\chess\Pgn.cpp" />
     <ClCompile Include="src\chess\Position.cpp" />
     <ClCompile Include="src\chess\San.cpp" />
+    <ClCompile Include="src\chess\Uci.cpp" />
     <ClCompile Include="src\chess_pos_db.cpp" />
     <ClCompile Include="src\CommandLineTool.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>

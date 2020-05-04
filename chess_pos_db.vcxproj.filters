@@ -243,6 +243,9 @@
     <ClInclude Include="src\chess\Eran.h">
       <Filter>Header Files\src\chess</Filter>
     </ClInclude>
+    <ClInclude Include="src\chess\Uci.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -333,6 +336,9 @@
       <Filter>Source Files\src\persistence\pos_db\epsilon</Filter>
     </ClCompile>
     <ClCompile Include="src\chess\Eran.cpp">
+      <Filter>Source Files\src\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess\Uci.cpp">
       <Filter>Source Files\src\chess</Filter>
     </ClCompile>
   </ItemGroup>
