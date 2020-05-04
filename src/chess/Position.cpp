@@ -400,15 +400,16 @@ namespace detail::lookup
 
 MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
     m_position(&position),
-    m_checkers(position.checkers())
+    m_checkers(position.checkers()),
+    m_ourBlockersForKing(
+        position.blockersForKing(position.sideToMove()) 
+        & position.piecesBB(position.sideToMove())
+    ),
+    m_ksq(position.kingSquare(position.sideToMove()))
 {
-    const Color us = position.sideToMove();
-    const Square ksq = position.kingSquare(us);
-
-    m_ourBlockersForKing = position.blockersForKing(us) & position.piecesBB(us);
     if (m_checkers.exactlyOne())
     {
-        const Bitboard knightCheckers = m_checkers & bb::pseudoAttacks<PieceType::Knight>(ksq);
+        const Bitboard knightCheckers = m_checkers & bb::pseudoAttacks<PieceType::Knight>(m_ksq);
         if (knightCheckers.any())
         {
             // We're checked by a knight, we have to remove it or move the king.
@@ -417,7 +418,7 @@ MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
         else
         {
             // If we're not checked by a knight we can block it.
-            m_potentialCheckRemovals = bb::between(ksq, m_checkers.first()) | m_checkers;
+            m_potentialCheckRemovals = bb::between(m_ksq, m_checkers.first()) | m_checkers;
         }
     }
     else
@@ -433,11 +434,7 @@ MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
 
     if (m_checkers.any())
     {
-        if (movedPiece.type() == PieceType::King)
-        {
-            return m_position->isPseudoLegalMoveLegal(move);
-        }
-        else if (move.type == MoveType::EnPassant)
+        if (move.from == m_ksq || move.type == MoveType::EnPassant)
         {
             return m_position->isPseudoLegalMoveLegal(move);
         }
@@ -446,12 +443,14 @@ MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
             // This means there's only one check and we either
             // blocked it or removed the piece that attacked
             // our king. So the only threat is if it's a discovered check.
-            return m_potentialCheckRemovals.isSet(move.to) && !m_ourBlockersForKing.isSet(move.from);
+            return 
+                m_potentialCheckRemovals.isSet(move.to) 
+                && !m_ourBlockersForKing.isSet(move.from);
         }
     }
     else
     {
-        if (movedPiece.type() == PieceType::King)
+        if (move.from == m_ksq)
         {
             return m_position->isPseudoLegalMoveLegal(move);
         }
@@ -463,7 +462,7 @@ MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
         {
             // If it was a blocker it may have only moved in line with our king.
             // Otherwise it's a discovered check.
-            return bb::line(m_position->kingSquare(m_position->sideToMove()), move.from).isSet(move.to);
+            return bb::line(m_ksq, move.from).isSet(move.to);
         }
         else
         {

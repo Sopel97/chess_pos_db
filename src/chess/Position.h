@@ -808,6 +808,7 @@ private:
     Bitboard m_checkers;
     Bitboard m_ourBlockersForKing;
     Bitboard m_potentialCheckRemovals;
+    Square m_ksq;
 };
 
 struct CompressedPosition;
