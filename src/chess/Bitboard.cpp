@@ -359,11 +359,11 @@ namespace bb
     {
         if (color == Color::White)
         {
-            return (pawns + Offset{ 1, 1 }) | (pawns + Offset{ -1, 1 });
+            return pawns.shifted<1, 1>() | pawns.shifted<-1, 1>();
         }
         else
         {
-            return (pawns + Offset{ 1, -1 }) | (pawns + Offset{ -1, -1 });
+            return pawns.shifted<1, -1>() | pawns.shifted<-1, -1>();
         }
     }
 
@@ -371,11 +371,11 @@ namespace bb
     {
         if (color == Color::White)
         {
-            return pawns + Offset{ -1, 1 };
+            return pawns.shifted<-1, 1>();
         }
         else
         {
-            return pawns + Offset{ -1, -1 };
+            return pawns.shifted<-1, -1>();
         }
     }
 
@@ -383,11 +383,11 @@ namespace bb
     {
         if (color == Color::White)
         {
-            return pawns + Offset{ 1, 1 };
+            return pawns.shifted<1, 1>();
         }
         else
         {
-            return pawns + Offset{ 1, -1 };
+            return pawns.shifted<1, -1>();
         }
     }
 

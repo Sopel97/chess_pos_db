@@ -243,42 +243,80 @@ public:
         }
     }
 
-    constexpr Bitboard& operator+=(Offset offset)
+    template <int files, int ranks>
+    constexpr void shift()
+    {
+        static_assert(files >= -7);
+        static_assert(ranks >= -7);
+        static_assert(files <= 7);
+        static_assert(ranks <= 7);
+
+        if constexpr (files != 0)
+        {
+            constexpr Bitboard mask =
+                files > 0
+                ? Bitboard::betweenFiles(fileA, fileH - files)
+                : Bitboard::betweenFiles(fileA - files, fileH);
+
+            m_squares &= mask.m_squares;
+        }
+
+        constexpr int shift = files + ranks * 8;
+        if constexpr (shift == 0)
+        {
+            return;
+        }
+
+        if constexpr (shift < 0)
+        {
+            m_squares >>= -shift;
+        }
+        else
+        {
+            m_squares <<= shift;
+        }
+    }
+
+    template <int files, int ranks>
+    constexpr Bitboard shifted() const
+    {
+        Bitboard bbCpy(*this);
+        bbCpy.shift<files, ranks>();
+        return bbCpy;
+    }
+
+    constexpr void shift(Offset offset)
     {
         ASSERT(offset.files >= -7);
         ASSERT(offset.ranks >= -7);
         ASSERT(offset.files <= 7);
         ASSERT(offset.ranks <= 7);
 
-        if (offset.ranks > 0)
+        if (offset.files != 0)
         {
-            m_squares <<= 8 * static_cast<std::uint64_t>(offset.ranks);
-        }
-        else if (offset.ranks < 0)
-        {
-            m_squares >>= -8 * static_cast<std::uint64_t>(offset.ranks);
+            const Bitboard mask =
+                offset.files > 0
+                ? Bitboard::betweenFiles(fileA, fileH - offset.files)
+                : Bitboard::betweenFiles(fileA - offset.files, fileH);
+
+            m_squares &= mask.m_squares;
         }
 
-        if (offset.files > 0)
+        const int shift = offset.files + offset.ranks * 8;
+        if (shift < 0)
         {
-            const File endFile = fileH - offset.files;
-            const Bitboard mask = Bitboard::betweenFiles(fileA, endFile);
-            m_squares = (m_squares & mask.m_squares) << offset.files;
+            m_squares >>= -shift;
         }
-        else if (offset.files < 0)
+        else
         {
-            const File startFile = fileA - offset.files;
-            const Bitboard mask = Bitboard::betweenFiles(startFile, fileH);
-            m_squares = (m_squares & mask.m_squares) >> -offset.files;
+            m_squares <<= shift;
         }
-
-        return *this;
     }
 
-    [[nodiscard]] constexpr Bitboard operator+(Offset offset) const
+    [[nodiscard]] constexpr Bitboard shifted(Offset offset) const
     {
         Bitboard bbCpy(*this);
-        bbCpy += offset;
+        bbCpy.shift(offset);
         return bbCpy;
     }
 
