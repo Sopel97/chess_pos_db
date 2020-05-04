@@ -252,8 +252,8 @@ namespace movegen
     template <typename FuncT>
     inline void forEachLegalMove(const Position& pos, FuncT&& func)
     {
-        auto funcIfLegal = [&](Move move) {
-            if (pos.isPseudoLegalMoveLegal(move))
+        auto funcIfLegal = [&func, checker = pos.moveLegalityChecker()](Move move) {
+            if (checker.isPseudoLegalMoveLegal(move))
             {
                 func(move);
             }

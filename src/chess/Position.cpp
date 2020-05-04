@@ -354,6 +354,17 @@ namespace detail::lookup
     return fen;
 }
 
+MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
+    m_position(&position)
+{
+
+}
+
+[[nodiscard]] bool MoveLegalityChecker::isPseudoLegalMoveLegal(const Move& move) const
+{
+    return m_position->isPseudoLegalMoveLegal(move);
+}
+
 void Position::set(const char* fen)
 {
     const char* s = BaseType::set(fen);

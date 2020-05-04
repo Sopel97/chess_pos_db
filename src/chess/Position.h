@@ -791,6 +791,18 @@ private:
     }
 };
 
+struct Position;
+
+struct MoveLegalityChecker
+{
+    MoveLegalityChecker(const Position& position);
+
+    [[nodiscard]] bool isPseudoLegalMoveLegal(const Move& move) const;
+
+private:
+    const Position* m_position;
+};
+
 struct CompressedPosition;
 
 struct Position : public Board
@@ -876,6 +888,11 @@ struct Position : public Board
     [[nodiscard]] bool isPseudoLegalMoveLegal(Move move) const;
 
     [[nodiscard]] bool isMovePseudoLegal(Move move) const;
+
+    [[nodiscard]] MoveLegalityChecker moveLegalityChecker() const
+    {
+        return { *this };
+    }
 
     [[nodiscard]] constexpr Square epSquare() const
     {
