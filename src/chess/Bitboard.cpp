@@ -266,6 +266,55 @@ namespace bb
         template Bitboard slidingAttacks<Direction::SouthWest>(Square, Bitboard);
         template Bitboard slidingAttacks<Direction::West>(Square, Bitboard);
         template Bitboard slidingAttacks<Direction::NorthWest>(Square, Bitboard);
+
+        static Bitboard generateBetween(Square s1, Square s2)
+        {
+            Bitboard bb = Bitboard::none();
+
+            if (s1 == s2)
+            {
+                return bb;
+            }
+
+            const int fd = s2.file() - s1.file();
+            const int rd = s2.rank() - s1.rank();
+
+            if (fd == 0 || rd == 0 || fd == rd || fd == -rd)
+            {
+                // s1 and s2 lie on a line.
+                const int fileStep = (fd > 0) - (fd < 0);
+                const int rankStep = (rd > 0) - (rd < 0);
+                const auto step = FlatSquareOffset(fileStep, rankStep);
+                s1 += step; // omit s1
+                while(s1 != s2) // omit s2
+                {
+                    bb |= s1;
+                    s1 += step;
+                }
+            }
+
+            return bb;
+        }
+
+        static const EnumArray2<Square, Square, Bitboard> between = []()
+        {
+            EnumArray2<Square, Square, Bitboard> between;
+
+            for (Square s1 : values<Square>())
+            {
+                for (Square s2 : values<Square>())
+                {
+                    between[s1][s2] = generateBetween(s1, s2);
+                }
+            }
+
+            return between;
+        }();
+    }
+
+    [[nodiscard]] Bitboard between(Square s1, Square s2)
+    {
+        return detail::between[s1][s2];
     }
 
     template <PieceType PieceTypeV>

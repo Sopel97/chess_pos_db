@@ -806,6 +806,7 @@ struct MoveLegalityChecker
 private:
     const Position* m_position;
     bool m_isInCheck;
+    Bitboard m_ourBlockersForKing;
 };
 
 struct CompressedPosition;
@@ -893,6 +894,12 @@ struct Position : public Board
     [[nodiscard]] bool isPseudoLegalMoveLegal(Move move) const;
 
     [[nodiscard]] bool isMovePseudoLegal(Move move) const;
+
+    // Returns all pieces that block a slider
+    // from attacking our king. When two or more
+    // pieces block a single slider then none
+    // of these pieces are included.
+    [[nodiscard]] Bitboard blockersForKing(Color color) const;
 
     [[nodiscard]] MoveLegalityChecker moveLegalityChecker() const
     {

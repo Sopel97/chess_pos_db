@@ -402,19 +402,35 @@ MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
     m_position(&position),
     m_isInCheck(position.isCheck())
 {
-
+    if (!m_isInCheck)
+    {
+        const Color us = position.sideToMove();
+        m_ourBlockersForKing = position.blockersForKing(us) & position.piecesBB(us);
+    }
 }
 
 [[nodiscard]] bool MoveLegalityChecker::isPseudoLegalMoveLegal(const Move& move) const
 {
     const Piece movedPiece = m_position->pieceAt(move.from);
-    if (movedPiece.type() == PieceType::King || m_isInCheck)
+
+    if (m_isInCheck)
     {
         return m_position->isPseudoLegalMoveLegal(move);
     }
     else
     {
-        return !m_position->createsDiscoveredAttackOnOwnKing(move);
+        if (movedPiece.type() == PieceType::King)
+        {
+            return m_position->isPseudoLegalMoveLegal(move);
+        }
+        else if (move.type == MoveType::EnPassant || m_ourBlockersForKing.isSet(move.from))
+        {
+            return !m_position->createsDiscoveredAttackOnOwnKing(move);
+        }
+        else
+        {
+            return true;
+        }
     }
 }
 
@@ -690,6 +706,42 @@ ReverseMove Position::doMove(const Move& move)
     default:
         return false;
     }
+}
+
+[[nodiscard]] Bitboard Position::blockersForKing(Color color) const
+{
+    const Color attackerColor = !color;
+
+    const Bitboard occupied = piecesBB();
+
+    const Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor));
+    const Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor));
+    const Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor));
+
+    const Square ksq = kingSquare(color);
+
+    const Bitboard opponentBishopLikePieces = (bishops | queens);
+    const Bitboard bishopPseudoAttacks = bb::pseudoAttacks<PieceType::Bishop>(ksq);
+
+    const Bitboard opponentRookLikePieces = (rooks | queens);
+    const Bitboard rookPseudoAttacks = bb::pseudoAttacks<PieceType::Rook>(ksq);
+
+    const Bitboard xrayers =
+        (bishopPseudoAttacks & opponentBishopLikePieces)
+        | (rookPseudoAttacks & opponentRookLikePieces);
+
+    Bitboard allBlockers = Bitboard::none();
+
+    for (Square xrayer : xrayers)
+    {
+        const Bitboard blockers = bb::between(xrayer, ksq) & occupied;
+        if (blockers.exactlyOne())
+        {
+            allBlockers |= blockers;
+        }
+    }
+
+    return allBlockers;
 }
 
 [[nodiscard]] Position Position::afterMove(Move move) const

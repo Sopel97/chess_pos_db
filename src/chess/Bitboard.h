@@ -651,6 +651,8 @@ namespace bb
     constexpr Bitboard h7 = bb::square(::h7);
     constexpr Bitboard h8 = bb::square(::h8);
 
+    [[nodiscard]] Bitboard between(Square s1, Square s2);
+
     template <PieceType PieceTypeV>
     [[nodiscard]] Bitboard pseudoAttacks(Square sq);
 
