@@ -29,78 +29,91 @@ namespace movegen
         const Bitboard occupied = ourPieces | theirPieces;
         const Bitboard pawns = pos.piecesBB(Piece(PieceType::Pawn, sideToMove));
 
-        auto generate = [&](Square fromSq)
+        const Bitboard secondToLastRank = sideToMove == Color::White ? bb::rank7 : bb::rank2;
+        const Bitboard secondRank = sideToMove == Color::White ? bb::rank2 : bb::rank7;
+
+        const auto singlePawnMoveDestinationOffset = sideToMove == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
+        const auto doublePawnMoveDestinationOffset = sideToMove == Color::White ? FlatSquareOffset(0, 2) : FlatSquareOffset(0, -2);
+
         {
-            Bitboard attackTargets = theirPieces;
-            if (epSquare != Square::none())
+            const int backward = sideToMove == Color::White ? -1 : 1;
+            const int backward2 = backward * 2;
+
+            const Bitboard doublePawnMoveStarts =
+                pawns
+                & secondRank
+                & ~(occupied.shiftedVertically(backward) | occupied.shiftedVertically(backward2));
+
+            const Bitboard singlePawnMoveStarts =
+                pawns
+                & ~secondToLastRank
+                & ~occupied.shiftedVertically(backward);
+
+            for (Square from : doublePawnMoveStarts)
             {
-                attackTargets |= epSquare;
+                const Square to = from + doublePawnMoveDestinationOffset;
+                f(Move::normal(from, to));
             }
 
-            const Bitboard attacks = bb::pawnAttacks(Bitboard::square(fromSq), sideToMove) & attackTargets;
-
-            const Rank startRank = sideToMove == Color::White ? rank2 : rank7;
-            const Rank secondToLastRank = sideToMove == Color::White ? rank7 : rank2;
-            const Offset forward = Offset{ 0, static_cast<std::int8_t>(sideToMove == Color::White ? 1 : -1) };
-
-            // promotions
-            if (fromSq.rank() == secondToLastRank)
+            for (Square from : singlePawnMoveStarts)
             {
-                // capture promotions
-                for (Square toSq : attacks)
-                {
-                    for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
-                    {
-                        Move move{ fromSq, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
-                        f(move);
-                    }
-                }
-
-                // push promotions
-                const Square toSq = fromSq + forward;
-                if (!occupied.isSet(toSq))
-                {
-                    for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
-                    {
-                        Move move{ fromSq, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
-                        f(move);
-                    }
-                }
+                const Square to = from + singlePawnMoveDestinationOffset;
+                f(Move::normal(from, to));
             }
-            else
+        }
+        
+        {
+            const Bitboard lastRank = sideToMove == Color::White ? bb::rank8 : bb::rank1;
+            const FlatSquareOffset westCaptureOffset = sideToMove == Color::White ? FlatSquareOffset(-1, 1) : FlatSquareOffset(-1, -1);
+            const FlatSquareOffset eastCaptureOffset = sideToMove == Color::White ? FlatSquareOffset(1, 1) : FlatSquareOffset(1, -1);
+
+            const Bitboard pawnsWithWestCapture = bb::eastPawnAttacks(theirPieces & ~lastRank, !sideToMove) & pawns;
+            const Bitboard pawnsWithEastCapture = bb::westPawnAttacks(theirPieces & ~lastRank, !sideToMove) & pawns;
+
+            for (Square from : pawnsWithWestCapture)
             {
-                // captures
-                for (Square toSq : attacks)
+                f(Move::normal(from, from + westCaptureOffset));
+            }
+
+            for (Square from : pawnsWithEastCapture)
+            {
+                f(Move::normal(from, from + eastCaptureOffset));
+            }
+        }
+
+        if (epSquare != Square::none())
+        {
+            const Bitboard pawnsThatCanCapture = bb::pawnAttacks(Bitboard::square(epSquare), !sideToMove) & pawns;
+            for (Square from : pawnsThatCanCapture)
+            {
+                f(Move::enPassant(from, epSquare));
+            }
+        }
+
+        for (Square from : pawns & secondToLastRank)
+        {
+            const Bitboard attacks = bb::pawnAttacks(Bitboard::square(from), sideToMove) & theirPieces;
+
+            // capture promotions
+            for (Square to : attacks)
+            {
+                for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
                 {
-                    Move move{ fromSq, toSq, (toSq == epSquare) ? MoveType::EnPassant : MoveType::Normal };
+                    Move move{ from, to, MoveType::Promotion, Piece(pt, sideToMove) };
                     f(move);
                 }
+            }
 
-                const Square toSq = fromSq + forward;
-
-                // single push
-                if (!occupied.isSet(toSq))
+            // push promotions
+            const Square to = from + singlePawnMoveDestinationOffset;
+            if (!occupied.isSet(to))
+            {
+                for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
                 {
-                    if (fromSq.rank() == startRank)
-                    {
-                        // double push
-                        const Square toSq2 = toSq + forward;
-                        if (!occupied.isSet(toSq2))
-                        {
-                            Move move{ fromSq, toSq2 };
-                            f(move);
-                        }
-                    }
-
-                    Move move{ fromSq, toSq };
+                    Move move{ from, to, MoveType::Promotion, Piece(pt, sideToMove) };
                     f(move);
                 }
             }
-        };
-
-        for (Square fromSq : pawns)
-        {
-            generate(fromSq);
         }
     }
 
@@ -136,11 +149,11 @@ namespace movegen
     inline void forEachCastlingMove(const Position& pos, FuncT&& f)
     {
         // all square on a castling path must be empty
-        constexpr EnumArray2<Color, CastleType, Bitboard> castlingPaths = { 
-            { 
+        constexpr EnumArray2<Color, CastleType, Bitboard> castlingPaths = {
+            {
                 {{ Bitboard::square(f1) | g1, Bitboard::square(b1) | c1 | d1 }},
                 {{ Bitboard::square(f8) | g8, Bitboard::square(b8) | c8 | d8 }}
-            } 
+            }
         };
 
         // this square must not be attacked by the enemy
