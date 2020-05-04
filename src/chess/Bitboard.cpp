@@ -359,14 +359,36 @@ namespace bb
     {
         if (color == Color::White)
         {
-            pawns |= (pawns + Offset{ 1, 1 }) | (pawns + Offset{ -1, 1 });
+            return (pawns + Offset{ 1, 1 }) | (pawns + Offset{ -1, 1 });
         }
         else
         {
-            pawns |= (pawns + Offset{ 1, -1 }) | (pawns + Offset{ -1, -1 });
+            return (pawns + Offset{ 1, -1 }) | (pawns + Offset{ -1, -1 });
         }
+    }
 
-        return pawns;
+    [[nodiscard]] Bitboard westPawnAttacks(Bitboard pawns, Color color)
+    {
+        if (color == Color::White)
+        {
+            return pawns + Offset{ -1, 1 };
+        }
+        else
+        {
+            return pawns + Offset{ -1, -1 };
+        }
+    }
+
+    [[nodiscard]] Bitboard eastPawnAttacks(Bitboard pawns, Color color)
+    {
+        if (color == Color::White)
+        {
+            return pawns + Offset{ 1, 1 };
+        }
+        else
+        {
+            return pawns + Offset{ 1, -1 };
+        }
     }
 
     [[nodiscard]] bool isAttackedBySlider(

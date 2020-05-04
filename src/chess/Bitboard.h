@@ -231,6 +231,18 @@ public:
         return lhs.m_squares != rhs.m_squares;
     }
 
+    constexpr Bitboard shiftedVertically(int ranks) const
+    {
+        if (ranks >= 0)
+        {
+            return fromBits(m_squares << 8 * ranks);
+        }
+        else
+        {
+            return fromBits(m_squares >> -8 * ranks);
+        }
+    }
+
     constexpr Bitboard& operator+=(Offset offset)
     {
         ASSERT(offset.files >= -7);
@@ -612,6 +624,10 @@ namespace bb
     [[nodiscard]] Bitboard attacks(PieceType pt, Square sq, Bitboard occupied);
 
     [[nodiscard]] Bitboard pawnAttacks(Bitboard pawns, Color color);
+
+    [[nodiscard]] Bitboard westPawnAttacks(Bitboard pawns, Color color);
+
+    [[nodiscard]] Bitboard eastPawnAttacks(Bitboard pawns, Color color);
 
     [[nodiscard]] bool isAttackedBySlider(
         Square sq,
