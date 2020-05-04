@@ -805,8 +805,9 @@ struct MoveLegalityChecker
 
 private:
     const Position* m_position;
-    bool m_isInCheck;
+    Bitboard m_checkers;
     Bitboard m_ourBlockersForKing;
+    Bitboard m_potentialCheckRemovals;
 };
 
 struct CompressedPosition;
@@ -885,6 +886,8 @@ struct Position : public Board
     }
 
     [[nodiscard]] bool isCheck() const;
+
+    [[nodiscard]] Bitboard checkers() const;
 
     [[nodiscard]] bool isCheckAfterMove(Move move) const;
     

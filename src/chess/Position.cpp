@@ -400,12 +400,30 @@ namespace detail::lookup
 
 MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
     m_position(&position),
-    m_isInCheck(position.isCheck())
+    m_checkers(position.checkers())
 {
-    if (!m_isInCheck)
+    const Color us = position.sideToMove();
+    const Square ksq = position.kingSquare(us);
+
+    m_ourBlockersForKing = position.blockersForKing(us) & position.piecesBB(us);
+    if (m_checkers.exactlyOne())
     {
-        const Color us = position.sideToMove();
-        m_ourBlockersForKing = position.blockersForKing(us) & position.piecesBB(us);
+        const Bitboard knightCheckers = m_checkers & bb::pseudoAttacks<PieceType::Knight>(ksq);
+        if (knightCheckers.any())
+        {
+            // We're checked by a knight, we have to remove it or move the king.
+            m_potentialCheckRemovals = knightCheckers;
+        }
+        else
+        {
+            // If we're not checked by a knight we can block it.
+            m_potentialCheckRemovals = bb::between(ksq, m_checkers.first()) | m_checkers;
+        }
+    }
+    else
+    {
+        // Double check, king has to move.
+        m_potentialCheckRemovals = Bitboard::none();
     }
 }
 
@@ -413,9 +431,23 @@ MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
 {
     const Piece movedPiece = m_position->pieceAt(move.from);
 
-    if (m_isInCheck)
+    if (m_checkers.any())
     {
-        return m_position->isPseudoLegalMoveLegal(move);
+        if (movedPiece.type() == PieceType::King)
+        {
+            return m_position->isPseudoLegalMoveLegal(move);
+        }
+        else if (move.type == MoveType::EnPassant)
+        {
+            return m_position->isPseudoLegalMoveLegal(move);
+        }
+        else
+        {
+            // This means there's only one check and we either
+            // blocked it or removed the piece that attacked
+            // our king. So the only threat is if it's a discovered check.
+            return m_potentialCheckRemovals.isSet(move.to) && !m_ourBlockersForKing.isSet(move.from);
+        }
     }
     else
     {
@@ -603,6 +635,11 @@ ReverseMove Position::doMove(const Move& move)
 [[nodiscard]] bool Position::isCheck() const
 {
     return BaseType::isSquareAttacked(kingSquare(m_sideToMove), !m_sideToMove);
+}
+
+[[nodiscard]] Bitboard Position::checkers() const
+{
+    return BaseType::attackers(kingSquare(m_sideToMove), !m_sideToMove);
 }
 
 [[nodiscard]] bool Position::isCheckAfterMove(Move move) const
