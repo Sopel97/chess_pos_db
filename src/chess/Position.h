@@ -699,6 +699,10 @@ struct Board
     // Move must be pseudo legal.
     [[nodiscard]] bool isSquareAttackedAfterMove(Move move, Square sq, Color attackerColor) const;
 
+    // Move must be pseudo legal.
+    // Must not be a king move.
+    [[nodiscard]] bool createsDiscoveredAttackOnOwnKing(Move move) const;
+
     // Returns whether a piece on a given square is attacked
     // by any enemy piece. False if square is empty.
     [[nodiscard]] bool isPieceAttacked(Square sq) const;
@@ -801,6 +805,7 @@ struct MoveLegalityChecker
 
 private:
     const Position* m_position;
+    bool m_isInCheck;
 };
 
 struct CompressedPosition;

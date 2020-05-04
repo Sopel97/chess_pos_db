@@ -171,6 +171,50 @@
     return pawnAttacks.isSet(sq);
 }
 
+[[nodiscard]] bool Board::createsDiscoveredAttackOnOwnKing(Move move) const
+{
+    Bitboard occupied = (piecesBB() ^ move.from) | move.to;
+
+    const Piece movedPiece = pieceAt(move.from);
+    const Color kingColor = movedPiece.color();
+    const Color attackerColor = !kingColor;
+    const Square ksq = kingSquare(kingColor);
+
+    Bitboard bishops = piecesBB(Piece(PieceType::Bishop, attackerColor));
+    Bitboard rooks = piecesBB(Piece(PieceType::Rook, attackerColor));
+    Bitboard queens = piecesBB(Piece(PieceType::Queen, attackerColor));
+
+    if (move.type == MoveType::EnPassant)
+    {
+        const Square capturedPawnSq(move.to.file(), move.from.rank());
+        occupied ^= capturedPawnSq;
+    }
+    else if (pieceAt(move.to) != Piece::none())
+    {
+        const Bitboard notCaptured = ~Bitboard::square(move.to);
+        bishops &= notCaptured;
+        rooks &= notCaptured;
+        queens &= notCaptured;
+    }
+
+    const Bitboard allSliders = (bishops | rooks | queens);
+    if ((bb::pseudoAttacks<PieceType::Queen>(ksq) & allSliders).any())
+    {
+        if (bb::isAttackedBySlider(
+            ksq,
+            bishops,
+            rooks,
+            queens,
+            occupied
+        ))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 [[nodiscard]] bool Board::isPieceAttacked(Square sq) const
 {
     const Piece piece = pieceAt(sq);
@@ -355,14 +399,23 @@ namespace detail::lookup
 }
 
 MoveLegalityChecker::MoveLegalityChecker(const Position& position) :
-    m_position(&position)
+    m_position(&position),
+    m_isInCheck(position.isCheck())
 {
 
 }
 
 [[nodiscard]] bool MoveLegalityChecker::isPseudoLegalMoveLegal(const Move& move) const
 {
-    return m_position->isPseudoLegalMoveLegal(move);
+    const Piece movedPiece = m_position->pieceAt(move.from);
+    if (movedPiece.type() == PieceType::King || m_isInCheck)
+    {
+        return m_position->isPseudoLegalMoveLegal(move);
+    }
+    else
+    {
+        return !m_position->createsDiscoveredAttackOnOwnKing(move);
+    }
 }
 
 void Position::set(const char* fen)
@@ -533,7 +586,7 @@ ReverseMove Position::doMove(const Move& move)
 
 [[nodiscard]] bool Position::isCheck() const
 {
-    return BaseType::isSquareAttacked(kingSquare(!m_sideToMove), m_sideToMove);
+    return BaseType::isSquareAttacked(kingSquare(m_sideToMove), !m_sideToMove);
 }
 
 [[nodiscard]] bool Position::isCheckAfterMove(Move move) const
