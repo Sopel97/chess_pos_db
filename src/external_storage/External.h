@@ -1918,7 +1918,7 @@ namespace ext
         }
 
         template <typename T, typename CompT, typename FuncT>
-        int merge_for_each_impl2(
+        int merge_for_each_impl(
             const MergePlan& plan,
             MergePassFinishedCallback& passFinishedCallback,
             ContainerIterRange<std::vector<ImmutableSpan<T>>> in,
@@ -2055,7 +2055,7 @@ namespace ext
                 out.emplace(value);
             };
 
-            const int nextPassId = merge_for_each_impl2<T>(
+            const int nextPassId = merge_for_each_impl<T>(
                 plan,
                 passFinishedCallback,
                 in,
@@ -2175,7 +2175,7 @@ namespace ext
         auto totalWork = merge_assess_work(in);
         progress.setTotalWork(totalWork);
 
-        detail::merge::merge_for_each_impl2<T>(
+        detail::merge::merge_for_each_impl<T>(
             plan,
             callbacks.passFinishedCallback,
             ContainerIterRange< std::vector<ImmutableSpan<T>>>(in),
