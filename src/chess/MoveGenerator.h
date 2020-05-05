@@ -20,6 +20,82 @@ namespace movegen
     //  - a king may walk into a check
 
     template <typename FuncT>
+    inline void forEachPseudoLegalPawnMove(const Position& pos, Square from, FuncT&& f)
+    {
+        const Color sideToMove = pos.sideToMove();
+        const Square epSquare = pos.epSquare();
+        const Bitboard ourPieces = pos.piecesBB(sideToMove);
+        const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+        const Bitboard occupied = ourPieces | theirPieces;
+
+        Bitboard attackTargets = theirPieces;
+        if (epSquare != Square::none())
+        {
+            attackTargets |= epSquare;
+        }
+
+        const Bitboard attacks = bb::pawnAttacks(Bitboard::square(from), sideToMove) & attackTargets;
+
+        const Rank secondToLastRank = sideToMove == Color::White ? rank7 : rank2;
+        const auto forward = sideToMove == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
+
+        // promotions
+        if (from.rank() == secondToLastRank)
+        {
+            // capture promotions
+            for (Square toSq : attacks)
+            {
+                for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
+                {
+                    Move move{ from, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
+                    f(move);
+                }
+            }
+
+            // push promotions
+            const Square toSq = from + forward;
+            if (!occupied.isSet(toSq))
+            {
+                for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
+                {
+                    Move move{ from, toSq, MoveType::Promotion, Piece(pt, sideToMove) };
+                    f(move);
+                }
+            }
+        }
+        else
+        {
+            // captures
+            for (Square toSq : attacks)
+            {
+                Move move{ from, toSq, (toSq == epSquare) ? MoveType::EnPassant : MoveType::Normal };
+                f(move);
+            }
+
+            const Square toSq = from + forward;
+
+            // single push
+            if (!occupied.isSet(toSq))
+            {
+                const Rank startRank = sideToMove == Color::White ? rank2 : rank7;
+                if (from.rank() == startRank)
+                {
+                    // double push
+                    const Square toSq2 = toSq + forward;
+                    if (!occupied.isSet(toSq2))
+                    {
+                        Move move{ from, toSq2 };
+                        f(move);
+                    }
+                }
+
+                Move move{ from, toSq };
+                f(move);
+            }
+        }
+    }
+
+    template <typename FuncT>
     inline void forEachPseudoLegalPawnMove(const Position& pos, FuncT&& f)
     {
         const Color sideToMove = pos.sideToMove();
@@ -113,6 +189,31 @@ namespace movegen
                     Move move{ from, to, MoveType::Promotion, Piece(pt, sideToMove) };
                     f(move);
                 }
+            }
+        }
+    }
+
+    template <PieceType PieceTypeV, typename FuncT>
+    inline void forEachPseudoLegalPieceMove(const Position& pos, Square from, FuncT&& f)
+    {
+        static_assert(PieceTypeV != PieceType::None);
+
+        if constexpr (PieceTypeV == PieceType::Pawn)
+        {
+            forEachPseudoLegalPawnMove(pos, from, f);
+        }
+        else
+        {
+            const Color sideToMove = pos.sideToMove();
+            const Bitboard ourPieces = pos.piecesBB(sideToMove);
+            const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+            const Bitboard occupied = ourPieces | theirPieces;
+            const Bitboard attacks = bb::attacks<PieceTypeV>(from, occupied) & ~ourPieces;
+
+            for (Square toSq : attacks)
+            {
+                Move move{ from, toSq };
+                f(move);
             }
         }
     }

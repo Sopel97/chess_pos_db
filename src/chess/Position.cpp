@@ -705,7 +705,7 @@ ReverseMove Position::doMove(const Move& move)
         bool isValid = false;
         // TODO: use iterators so we don't loop over all moves
         //       when we can avoid it.
-        movegen::forEachPseudoLegalPawnMove(*this, [&isValid, &move](const Move& genMove) {
+        movegen::forEachPseudoLegalPawnMove(*this, move.from, [&isValid, &move](const Move& genMove) {
             if (move == genMove)
             {
                 isValid = true;
