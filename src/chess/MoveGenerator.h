@@ -95,24 +95,23 @@ namespace movegen
         }
     }
 
-    template <typename FuncT>
+    template <Color SideToMoveV, typename FuncT>
     inline void forEachPseudoLegalPawnMove(const Position& pos, FuncT&& f)
     {
-        const Color sideToMove = pos.sideToMove();
         const Square epSquare = pos.epSquare();
-        const Bitboard ourPieces = pos.piecesBB(sideToMove);
-        const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+        const Bitboard ourPieces = pos.piecesBB(SideToMoveV);
+        const Bitboard theirPieces = pos.piecesBB(!SideToMoveV);
         const Bitboard occupied = ourPieces | theirPieces;
-        const Bitboard pawns = pos.piecesBB(Piece(PieceType::Pawn, sideToMove));
+        const Bitboard pawns = pos.piecesBB(Piece(PieceType::Pawn, SideToMoveV));
 
-        const Bitboard secondToLastRank = sideToMove == Color::White ? bb::rank7 : bb::rank2;
-        const Bitboard secondRank = sideToMove == Color::White ? bb::rank2 : bb::rank7;
+        const Bitboard secondToLastRank = SideToMoveV == Color::White ? bb::rank7 : bb::rank2;
+        const Bitboard secondRank = SideToMoveV == Color::White ? bb::rank2 : bb::rank7;
 
-        const auto singlePawnMoveDestinationOffset = sideToMove == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
-        const auto doublePawnMoveDestinationOffset = sideToMove == Color::White ? FlatSquareOffset(0, 2) : FlatSquareOffset(0, -2);
+        const auto singlePawnMoveDestinationOffset = SideToMoveV == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
+        const auto doublePawnMoveDestinationOffset = SideToMoveV == Color::White ? FlatSquareOffset(0, 2) : FlatSquareOffset(0, -2);
 
         {
-            const int backward = sideToMove == Color::White ? -1 : 1;
+            const int backward = SideToMoveV == Color::White ? -1 : 1;
             const int backward2 = backward * 2;
 
             const Bitboard doublePawnMoveStarts =
@@ -139,12 +138,12 @@ namespace movegen
         }
         
         {
-            const Bitboard lastRank = sideToMove == Color::White ? bb::rank8 : bb::rank1;
-            const FlatSquareOffset westCaptureOffset = sideToMove == Color::White ? FlatSquareOffset(-1, 1) : FlatSquareOffset(-1, -1);
-            const FlatSquareOffset eastCaptureOffset = sideToMove == Color::White ? FlatSquareOffset(1, 1) : FlatSquareOffset(1, -1);
+            const Bitboard lastRank = SideToMoveV == Color::White ? bb::rank8 : bb::rank1;
+            const FlatSquareOffset westCaptureOffset = SideToMoveV == Color::White ? FlatSquareOffset(-1, 1) : FlatSquareOffset(-1, -1);
+            const FlatSquareOffset eastCaptureOffset = SideToMoveV == Color::White ? FlatSquareOffset(1, 1) : FlatSquareOffset(1, -1);
 
-            const Bitboard pawnsWithWestCapture = bb::eastPawnAttacks(theirPieces & ~lastRank, !sideToMove) & pawns;
-            const Bitboard pawnsWithEastCapture = bb::westPawnAttacks(theirPieces & ~lastRank, !sideToMove) & pawns;
+            const Bitboard pawnsWithWestCapture = bb::eastPawnAttacks(theirPieces & ~lastRank, !SideToMoveV) & pawns;
+            const Bitboard pawnsWithEastCapture = bb::westPawnAttacks(theirPieces & ~lastRank, !SideToMoveV) & pawns;
 
             for (Square from : pawnsWithWestCapture)
             {
@@ -159,7 +158,7 @@ namespace movegen
 
         if (epSquare != Square::none())
         {
-            const Bitboard pawnsThatCanCapture = bb::pawnAttacks(Bitboard::square(epSquare), !sideToMove) & pawns;
+            const Bitboard pawnsThatCanCapture = bb::pawnAttacks(Bitboard::square(epSquare), !SideToMoveV) & pawns;
             for (Square from : pawnsThatCanCapture)
             {
                 f(Move::enPassant(from, epSquare));
@@ -168,14 +167,14 @@ namespace movegen
 
         for (Square from : pawns & secondToLastRank)
         {
-            const Bitboard attacks = bb::pawnAttacks(Bitboard::square(from), sideToMove) & theirPieces;
+            const Bitboard attacks = bb::pawnAttacks(Bitboard::square(from), SideToMoveV) & theirPieces;
 
             // capture promotions
             for (Square to : attacks)
             {
                 for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
                 {
-                    Move move{ from, to, MoveType::Promotion, Piece(pt, sideToMove) };
+                    Move move{ from, to, MoveType::Promotion, Piece(pt, SideToMoveV) };
                     f(move);
                 }
             }
@@ -186,10 +185,23 @@ namespace movegen
             {
                 for (PieceType pt : { PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen })
                 {
-                    Move move{ from, to, MoveType::Promotion, Piece(pt, sideToMove) };
+                    Move move{ from, to, MoveType::Promotion, Piece(pt, SideToMoveV) };
                     f(move);
                 }
             }
+        }
+    }
+
+    template <typename FuncT>
+    inline void forEachPseudoLegalPawnMove(const Position& pos, FuncT&& f)
+    {
+        if (pos.sideToMove() == Color::White)
+        {
+            forEachPseudoLegalPawnMove<Color::White>(pos, std::forward<FuncT>(f));
+        }
+        else
+        {
+            forEachPseudoLegalPawnMove<Color::Black>(pos, std::forward<FuncT>(f));
         }
     }
 
