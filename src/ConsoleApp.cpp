@@ -353,16 +353,9 @@ namespace console_app
         }
     }
 
-    static void merge(persistence::Database& db, const std::filesystem::path& destination)
-    {
-        assertDirectoryEmpty(destination);
-
-        db.mergeAll();
-    }
-
     static void merge(persistence::Database& db)
     {
-        db.mergeAll();
+        db.mergeAll({});
     }
 
     [[nodiscard]] static bool verifyPgnTags(const pgn::UnparsedGame& game, std::size_t idx)
@@ -434,7 +427,7 @@ namespace console_app
         {
             DbType db(destination);
             db.import(pgns, importMemory.bytes());
-            db.mergeAll();
+            db.mergeAll({ temp });
         }
         std::filesystem::remove_all(temp);
     }
@@ -663,11 +656,7 @@ namespace console_app
             invalidArguments();
         }
 
-        if (args.size() == 1)
-        {
-            console_app::merge(*m_database, args[0]);
-        }
-        else if (args.size() == 0)
+        if (args.size() == 0)
         {
             console_app::merge(*m_database);
         }

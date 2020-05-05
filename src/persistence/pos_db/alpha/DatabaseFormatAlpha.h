@@ -386,7 +386,10 @@ namespace persistence
 
                 void clear();
 
-                void mergeAll(std::function<void(const ext::Progress&)> progressCallback);
+                void mergeAll(
+                    const std::vector<std::filesystem::path>& temporaryDirs,
+                    std::function<void(const ext::Progress&)> progressCallback
+                );
 
                 [[nodiscard]] bool empty() const;
 
@@ -402,7 +405,11 @@ namespace persistence
 
                 std::mutex m_mutex;
 
-                [[nodiscard]] Indexes mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const;
+                [[nodiscard]] Indexes mergeAllIntoFile(
+                    const std::filesystem::path& outFilePath, 
+                    const std::vector<std::filesystem::path>& temporaryDirs,
+                    std::function<void(const ext::Progress&)> progressCallback
+                ) const;
 
                 [[nodiscard]] std::filesystem::path pathForId(std::uint32_t id) const;
 
@@ -464,7 +471,10 @@ namespace persistence
 
             [[nodiscard]] query::Response executeQuery(query::Request query) override;
 
-            void mergeAll(MergeProgressCallback progressCallback = {}) override;
+            void mergeAll(
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                MergeProgressCallback progressCallback = {}
+            ) override;
 
             ImportStats import(
                 std::execution::parallel_unsequenced_policy,

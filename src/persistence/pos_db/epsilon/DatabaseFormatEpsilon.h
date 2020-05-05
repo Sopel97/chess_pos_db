@@ -463,7 +463,10 @@ namespace persistence
                     const query::PositionQueries& queries,
                     std::vector<PositionStats>& stats);
 
-                void mergeAll(std::function<void(const ext::Progress&)> progressCallback);
+                void mergeAll(
+                    const std::vector<std::filesystem::path>& temporaryDirs,
+                    std::function<void(const ext::Progress&)> progressCallback
+                );
 
                 // data has to be sorted in ascending order
                 void storeOrdered(const Entry* data, std::size_t count);
@@ -503,7 +506,12 @@ namespace persistence
 
                 [[nodiscard]] std::filesystem::path nextPath() const;
 
-                [[nodiscard]] Index mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const;
+                [[nodiscard]] Index mergeAllIntoFile(
+                    const std::filesystem::path& outFilePath, 
+                    const std::vector<std::filesystem::path>& temporaryDirs,
+                    std::function<void(const ext::Progress&)> progressCallback,
+                    bool deleteOld
+                );
 
                 void discoverFiles();
             };
@@ -540,7 +548,10 @@ namespace persistence
 
             [[nodiscard]] query::Response executeQuery(query::Request query) override;
 
-            void mergeAll(MergeProgressCallback progressCallback = {}) override;
+            void mergeAll(
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                MergeProgressCallback progressCallback = {}
+            ) override;
 
             ImportStats import(
                 std::execution::parallel_unsequenced_policy,

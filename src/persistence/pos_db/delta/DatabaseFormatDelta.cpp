@@ -610,19 +610,20 @@ namespace persistence
                 return retractionsStats;
             }
 
-            void Partition::mergeAll(std::function<void(const ext::Progress&)> progressCallback)
+            void Partition::mergeAll(
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::function<void(const ext::Progress&)> progressCallback
+            )
             {
                 if (m_files.size() < 2)
                 {
+                    progressCallback(ext::Progress{ 1, 1 });
                     return;
                 }
 
                 const auto outFilePath = m_path / "merge_tmp";
                 const std::uint32_t id = m_files.front().id();
-                auto index = mergeAllIntoFile(outFilePath, progressCallback);
-
-                // We haven't added the new files yet so they won't be removed.
-                clear();
+                auto index = mergeAllIntoFile(outFilePath, temporaryDirs, progressCallback, true);
 
                 // We had to use a temporary name because we're working in the same directory.
                 // Now we can safely rename after old ones are removed.
@@ -730,7 +731,12 @@ namespace persistence
                 return pathForId(nextId());
             }
 
-            [[nodiscard]] Index Partition::mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const
+            [[nodiscard]] Index Partition::mergeAllIntoFile(
+                const std::filesystem::path& outFilePath, 
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::function<void(const ext::Progress&)> progressCallback,
+                bool deleteOld
+            )
             {
                 ASSERT(!m_files.empty());
 
@@ -775,9 +781,24 @@ namespace persistence
                         ext::MergePlan plan = ext::make_merge_plan(files, ".", ".");
                         ext::MergeCallbacks callbacks{
                             progressCallback,
-                            [](int passId) {}
+                            [deleteOld, &files, this](int passId) {
+                                if (passId == 0)
+                                {
+                                    files.clear();
+                                    if (deleteOld)
+                                    {
+                                        clear();
+                                    }
+                                }
+                            }
                         };
                         ext::merge_for_each(plan, callbacks, files, append, Entry::CompareLessFull{});
+
+                        if (deleteOld && !m_files.empty())
+                        {
+                            files.clear();
+                            clear();
+                        }
 
                         if (!first) // if we did anything, ie. accumulator holds something from merge
                         {
@@ -932,7 +953,10 @@ namespace persistence
             return { std::move(query), std::move(unflattened) };
         }
 
-        void Database::mergeAll(Database::MergeProgressCallback progressCallback)
+        void Database::mergeAll(
+            const std::vector<std::filesystem::path>& temporaryDirs,
+            Database::MergeProgressCallback progressCallback
+        )
         {
             Logger::instance().logInfo(": Merging files...");
 
@@ -949,7 +973,7 @@ namespace persistence
                 }
             };
 
-            m_partition.mergeAll(progressReport);
+            m_partition.mergeAll(temporaryDirs, progressReport);
 
             Logger::instance().logInfo(": Finalizing...");
             Logger::instance().logInfo(": Completed.");

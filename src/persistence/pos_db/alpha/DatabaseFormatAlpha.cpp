@@ -682,7 +682,10 @@ namespace persistence
                 }
             }
 
-            void Partition::mergeAll(std::function<void(const ext::Progress&)> progressCallback)
+            void Partition::mergeAll(
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::function<void(const ext::Progress&)> progressCallback
+            )
             {
                 if (m_files.size() < 2)
                 {
@@ -691,7 +694,7 @@ namespace persistence
 
                 const auto outFilePath = m_path / "merge_tmp";
                 const std::uint32_t id = m_files.front().id();
-                auto index = mergeAllIntoFile(outFilePath, progressCallback);
+                auto index = mergeAllIntoFile(outFilePath, temporaryDirs, progressCallback);
 
                 // We haven't added the new files yet so they won't be removed.
                 clear();
@@ -712,7 +715,11 @@ namespace persistence
                 return m_files.empty() && m_futureFiles.empty();
             }
 
-            [[nodiscard]] Indexes Partition::mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const
+            [[nodiscard]] Indexes Partition::mergeAllIntoFile(
+                const std::filesystem::path& outFilePath, 
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::function<void(const ext::Progress&)> progressCallback
+            ) const
             {
                 ASSERT(!m_files.empty());
 
@@ -969,12 +976,15 @@ namespace persistence
             return { std::move(query), std::move(unflattened) };
         }
 
-        void Database::mergeAll(Database::MergeProgressCallback progressCallback)
+        void Database::mergeAll(
+            const std::vector<std::filesystem::path>& temporaryDirs,
+            Database::MergeProgressCallback progressCallback
+        )
         {
             constexpr std::size_t numPartitions = cardinality<GameLevel>() * cardinality<GameResult>();
             std::size_t i = 0;
             Logger::instance().logInfo(": Merging files...");
-            forEach(m_partitions, [numPartitions, &i, &progressCallback](auto&& partition, GameLevel level, GameResult result) {
+            forEach(m_partitions, [numPartitions, &i, &progressCallback, &temporaryDirs](auto&& partition, GameLevel level, GameResult result) {
 
                 ++i;
                 Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
@@ -996,7 +1006,7 @@ namespace persistence
                     }
                 };
 
-                partition.mergeAll(progressReport);
+                partition.mergeAll(temporaryDirs, progressReport);
                 });
             Logger::instance().logInfo(": Finalizing...");
             Logger::instance().logInfo(": Completed.");

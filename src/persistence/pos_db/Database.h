@@ -149,7 +149,10 @@ namespace persistence
 
         [[nodiscard]] virtual query::Response executeQuery(query::Request query) = 0;
 
-        virtual void mergeAll(MergeProgressCallback progressCallback = {}) = 0;
+        virtual void mergeAll(
+            const std::vector<std::filesystem::path>& temporaryDirs, 
+            MergeProgressCallback progressCallback = {}
+        ) = 0;
 
         virtual ImportStats import(
             std::execution::parallel_unsequenced_policy,

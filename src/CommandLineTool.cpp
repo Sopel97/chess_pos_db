@@ -210,7 +210,7 @@ namespace command_line_app
         {
             auto db = instantiateDatabase(key, destination);
             db->import(pgns, importMemory.bytes());
-            db->mergeAll();
+            db->mergeAll({ temp });
         }
 
         std::filesystem::remove_all(temp);
@@ -235,15 +235,7 @@ namespace command_line_app
     static void mergeImpl(const std::filesystem::path& path)
     {
         auto db = loadDatabase(path);
-        db->mergeAll();
-    }
-
-    static void mergeImpl(const std::filesystem::path& fromPath, const std::filesystem::path& toPath)
-    {
-        assertDirectoryEmpty(toPath);
-
-        auto db = loadDatabase(toPath);
-        db->mergeAll();
+        db->mergeAll({});
     }
 
     static void merge(const Args& args)
@@ -251,10 +243,6 @@ namespace command_line_app
         if (args.size() == 2)
         {
             mergeImpl(args[1]);
-        }
-        else if (args.size() == 3)
-        {
-            mergeImpl(args[1], args[2]);
         }
     }
 
@@ -570,7 +558,7 @@ namespace command_line_app
 
                 {
                     auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                    db->mergeAll(callback);
+                    db->mergeAll({ temp }, callback);
                 }
             }
 
@@ -612,7 +600,7 @@ namespace command_line_app
             if (doMerge)
             {
                 auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                db->mergeAll(callback);
+                db->mergeAll({}, callback);
             }
         }
 
@@ -651,30 +639,13 @@ namespace command_line_app
     static void handleTcpCommandMergeImpl(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
-        const std::filesystem::path& destination,
-        bool doReportProgress
-    )
-    {
-        assertDirectoryEmpty(destination);
-        assertDatabaseOpen(db);
-
-        auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-        db->mergeAll(callback);
-
-        // We have to always sent some info that we finished
-        sendProgressFinished(session, "merge");
-    }
-
-    static void handleTcpCommandMergeImpl(
-        std::unique_ptr<persistence::Database>& db,
-        const TcpConnection::Ptr& session,
         bool doReportProgress
     )
     {
         assertDatabaseOpen(db);
 
         auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-        db->mergeAll(callback);
+        db->mergeAll({}, callback);
 
         // We have to always sent some info that we finished
         sendProgressFinished(session, "merge");
@@ -687,15 +658,7 @@ namespace command_line_app
     )
     {
         const bool doReportProgress = json["report_progress"].get<bool>();
-        if (json.contains("destination_path"))
-        {
-            const std::string destination = json["destination_path"].get<std::string>();
-            handleTcpCommandMergeImpl(db, session, destination, doReportProgress);
-        }
-        else
-        {
-            handleTcpCommandMergeImpl(db, session, doReportProgress);
-        }
+        handleTcpCommandMergeImpl(db, session, doReportProgress);
     }
 
     static void handleTcpCommandOpen(
