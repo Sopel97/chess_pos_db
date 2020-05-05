@@ -689,15 +689,13 @@ namespace persistence
             {
                 if (m_files.size() < 2)
                 {
+                    progressCallback(ext::Progress{ 1, 1 });
                     return;
                 }
 
                 const auto outFilePath = m_path / "merge_tmp";
                 const std::uint32_t id = m_files.front().id();
-                auto index = mergeAllIntoFile(outFilePath, temporaryDirs, progressCallback);
-
-                // We haven't added the new files yet so they won't be removed.
-                clear();
+                auto index = mergeAllIntoFile(outFilePath, temporaryDirs, progressCallback, true);
 
                 // We had to use a temporary name because we're working in the same directory.
                 // Now we can safely rename after old ones are removed.
@@ -718,8 +716,9 @@ namespace persistence
             [[nodiscard]] Indexes Partition::mergeAllIntoFile(
                 const std::filesystem::path& outFilePath, 
                 const std::vector<std::filesystem::path>& temporaryDirs,
-                std::function<void(const ext::Progress&)> progressCallback
-            ) const
+                std::function<void(const ext::Progress&)> progressCallback,
+                bool deleteOld
+            )
             {
                 ASSERT(!m_files.empty());
 
@@ -748,12 +747,27 @@ namespace persistence
                         out.emplace(entry);
                     };
 
-                    ext::MergePlan plan = ext::make_merge_plan(files, ".", ".");
+                    const ext::MergePlan plan = makeMergePlan(files, outFilePath, temporaryDirs);
                     ext::MergeCallbacks callbacks{
                         progressCallback,
-                        [](int passId) {}
+                        [deleteOld, &files, this](int passId) {
+                            if (passId == 0)
+                            {
+                                files.clear();
+                                if (deleteOld)
+                                {
+                                    clear();
+                                }
+                            }
+                        }
                     };
                     ext::merge_for_each(plan, callbacks, files, append, Entry::CompareLessWithReverseMove{});
+
+                    if (deleteOld && !m_files.empty())
+                    {
+                        files.clear();
+                        clear();
+                    }
                 }
 
                 IndexWithoutReverseMove index0 = ib0.end();
@@ -765,6 +779,39 @@ namespace persistence
                 }
 
                 return std::make_pair(std::move(index0), std::move(index1));
+            }
+
+            [[nodiscard]] ext::MergePlan Partition::makeMergePlan(
+                const std::vector<ext::ImmutableSpan<Entry>>& files,
+                const std::filesystem::path& outFilePath,
+                const std::vector<std::filesystem::path>& temporaryDirs
+            ) const
+            {
+                const auto outDir = outFilePath.parent_path();
+
+                if (temporaryDirs.size() == 0)
+                {
+                    return ext::make_merge_plan(files, outDir, outDir);
+                }
+                else if (temporaryDirs.size() == 1)
+                {
+                    ext::MergePlan plan = ext::make_merge_plan(files, outDir, temporaryDirs[0]);
+                    if (plan.numPasses() == 0)
+                    {
+                        return plan;
+                    }
+
+                    if (plan.passes.back().writeDir != outDir)
+                    {
+                        plan.invert();
+                    }
+
+                    return plan;
+                }
+                else
+                {
+                    return ext::make_merge_plan(files, temporaryDirs[0], temporaryDirs[1]);
+                }
             }
 
             [[nodiscard]] std::filesystem::path Partition::pathForId(std::uint32_t id) const

@@ -705,7 +705,7 @@ namespace persistence
                             }
                         };
 
-                        ext::MergePlan plan = ext::make_merge_plan(files, ".", ".");
+                        const ext::MergePlan plan = makeMergePlan(files, outFilePath, temporaryDirs);
                         ext::MergeCallbacks callbacks{
                             progressCallback,
                             [deleteOld, &files, this](int passId) {
@@ -738,6 +738,39 @@ namespace persistence
                 writeIndexFor(outFilePath, index);
 
                 return index;
+            }
+
+            [[nodiscard]] ext::MergePlan Partition::makeMergePlan(
+                const std::vector<ext::ImmutableSpan<Entry>>& files,
+                const std::filesystem::path& outFilePath,
+                const std::vector<std::filesystem::path>& temporaryDirs
+            ) const
+            {
+                const auto outDir = outFilePath.parent_path();
+
+                if (temporaryDirs.size() == 0)
+                {
+                    return ext::make_merge_plan(files, outDir, outDir);
+                }
+                else if (temporaryDirs.size() == 1)
+                {
+                    ext::MergePlan plan = ext::make_merge_plan(files, outDir, temporaryDirs[0]);
+                    if (plan.numPasses() == 0)
+                    {
+                        return plan;
+                    }
+
+                    if (plan.passes.back().writeDir != outDir)
+                    {
+                        plan.invert();
+                    }
+
+                    return plan;
+                }
+                else
+                {
+                    return ext::make_merge_plan(files, temporaryDirs[0], temporaryDirs[1]);
+                }
             }
 
             void Partition::discoverFiles()

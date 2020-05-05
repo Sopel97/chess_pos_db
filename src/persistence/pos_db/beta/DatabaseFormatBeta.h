@@ -611,6 +611,12 @@ namespace persistence
                     bool deleteOld
                 );
 
+                [[nodiscard]] ext::MergePlan makeMergePlan(
+                    const std::vector<ext::ImmutableSpan<Entry>>& files,
+                    const std::filesystem::path& outFilePath,
+                    const std::vector<std::filesystem::path>& temporaryDirs
+                ) const;
+
                 void discoverFiles();
             };
         }

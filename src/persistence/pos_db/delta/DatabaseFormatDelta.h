@@ -403,11 +403,17 @@ namespace persistence
                 [[nodiscard]] std::filesystem::path nextPath() const;
 
                 [[nodiscard]] Index mergeAllIntoFile(
-                    const std::filesystem::path& outFilePath, 
+                    const std::filesystem::path& outFilePath,
                     const std::vector<std::filesystem::path>& temporaryDirs,
                     std::function<void(const ext::Progress&)> progressCallback,
                     bool deleteOld
                 );
+
+                [[nodiscard]] ext::MergePlan makeMergePlan(
+                    const std::vector<ext::ImmutableSpan<Entry>>& files,
+                    const std::filesystem::path& outFilePath,
+                    const std::vector<std::filesystem::path>& temporaryDirs
+                ) const;
 
                 void discoverFiles();
             };
