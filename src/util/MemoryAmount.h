@@ -61,9 +61,21 @@ struct MemoryAmount
         return MemoryAmount(amount * 1024 * 1024 * 1024 * 1024);
     }
 
-    [[nodiscard]] constexpr operator std::size_t() const
+    [[nodiscard]] constexpr std::size_t bytes() const
     {
         return m_bytes;
+    }
+
+    template <typename T>
+    [[nodiscard]] constexpr std::size_t elementsCeil() const
+    {
+        return (m_bytes + (sizeof(T) - 1)) / sizeof(T);
+    }
+
+    template <typename T>
+    [[nodiscard]] constexpr std::size_t elements() const
+    {
+        return m_bytes / sizeof(T);
     }
 
     friend void to_json(nlohmann::json& j, const MemoryAmount& v);

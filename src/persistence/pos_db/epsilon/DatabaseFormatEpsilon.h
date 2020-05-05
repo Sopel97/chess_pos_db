@@ -449,7 +449,7 @@ namespace persistence
 
             struct Partition
             {
-                static const std::size_t mergeMemory;
+                static const MemoryAmount mergeMemory;
 
                 Partition() = default;
 
@@ -463,10 +463,10 @@ namespace persistence
                     const query::PositionQueries& queries,
                     std::vector<PositionStats>& stats);
 
-                void mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback);
+                void mergeAll(std::function<void(const ext::Progress&)> progressCallback);
 
                 // outPath is a path of the file to output to
-                void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback);
+                void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback);
 
                 // data has to be sorted in ascending order
                 void storeOrdered(const Entry* data, std::size_t count);
@@ -506,7 +506,7 @@ namespace persistence
 
                 [[nodiscard]] std::filesystem::path nextPath() const;
 
-                [[nodiscard]] Index mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::ProgressReport&)> progressCallback) const;
+                [[nodiscard]] Index mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const;
 
                 void discoverFiles();
             };
@@ -523,8 +523,8 @@ namespace persistence
 
             static constexpr std::size_t m_totalNumDirectories = 1;
 
-            static const std::size_t m_pgnParserMemory;
-            static const std::size_t m_bcgnParserMemory;
+            static const MemoryAmount m_pgnParserMemory;
+            static const MemoryAmount m_bcgnParserMemory;
 
         public:
             Database(std::filesystem::path path);

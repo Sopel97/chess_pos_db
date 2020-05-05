@@ -46,7 +46,7 @@ namespace console_app
 {
     using DbType = persistence::db_delta::Database;
 
-    const std::size_t importMemory = cfg::g_config["console_app"]["import_memory"].get<MemoryAmount>();
+    const MemoryAmount importMemory = cfg::g_config["console_app"]["import_memory"].get<MemoryAmount>();
 
     [[nodiscard]] static persistence::ImportableFiles parsePgnListFile(const std::filesystem::path& path)
     {
@@ -433,7 +433,7 @@ namespace console_app
 
         {
             DbType db(temp);
-            db.import(pgns, importMemory);
+            db.import(pgns, importMemory.bytes());
             db.replicateMergeAll(destination);
         }
         std::filesystem::remove_all(temp);
@@ -444,7 +444,7 @@ namespace console_app
         assertDirectoryEmpty(destination);
 
         DbType db(destination);
-        db.import(pgns, importMemory);
+        db.import(pgns, importMemory.bytes());
     }
 
     static void destroy(std::unique_ptr<persistence::Database> db)

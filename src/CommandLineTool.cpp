@@ -63,9 +63,9 @@ namespace command_line_app
         const TcpConnection::Ptr&,
         const nlohmann::json&);
 
-    const std::size_t importMemory = cfg::g_config["command_line_app"]["import_memory"].get<MemoryAmount>();
-    const std::size_t pgnParserMemory = cfg::g_config["command_line_app"]["pgn_parser_memory"].get<MemoryAmount>();
-    const std::size_t bcgnParserMemory = cfg::g_config["command_line_app"]["bcgn_parser_memory"].get<MemoryAmount>();
+    const MemoryAmount importMemory = cfg::g_config["command_line_app"]["import_memory"].get<MemoryAmount>();
+    const MemoryAmount pgnParserMemory = cfg::g_config["command_line_app"]["pgn_parser_memory"].get<MemoryAmount>();
+    const MemoryAmount bcgnParserMemory = cfg::g_config["command_line_app"]["bcgn_parser_memory"].get<MemoryAmount>();
 
     static void assertDirectoryNotEmpty(const std::filesystem::path& path)
     {
@@ -194,7 +194,7 @@ namespace command_line_app
         assertDirectoryEmpty(destination);
 
         auto db = instantiateDatabase(key, destination);
-        db->import(pgns, importMemory);
+        db->import(pgns, importMemory.bytes());
     }
 
     static void createImpl(
@@ -209,7 +209,7 @@ namespace command_line_app
 
         {
             auto db = instantiateDatabase(key, temp);
-            db->import(pgns, importMemory);
+            db->import(pgns, importMemory.bytes());
             db->replicateMergeAll(destination);
         }
 
@@ -564,7 +564,7 @@ namespace command_line_app
 
                 {
                     auto callback = makeImportProgressReportHandler(session, doReportProgress);
-                    auto stats = db->import(pgns, importMemory, callback);
+                    auto stats = db->import(pgns, importMemory.bytes(), callback);
                     sendProgressFinished(session, "import", statsToJson(stats));
                 }
 
@@ -582,7 +582,7 @@ namespace command_line_app
             auto db = instantiateDatabase(key, destination);
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            auto stats = db->import(pgns, importMemory, callback);
+            auto stats = db->import(pgns, importMemory.bytes(), callback);
             sendProgressFinished(session, "import", statsToJson(stats));
         }
 
@@ -606,7 +606,7 @@ namespace command_line_app
             auto db = instantiateDatabase(key, destination);
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            auto stats = db->import(pgns, importMemory, callback);
+            auto stats = db->import(pgns, importMemory.bytes(), callback);
             sendProgressFinished(session, "import", statsToJson(stats));
 
             if (doMerge)
@@ -1050,9 +1050,9 @@ namespace command_line_app
         bool doReportProgress
     )
     {
-        static const std::size_t pgnParserMemory = cfg::g_config["command_line_app"]["dump"]["pgn_parser_memory"].get<MemoryAmount>();
-        static const std::size_t importMemory = cfg::g_config["command_line_app"]["dump"]["import_memory"].get<MemoryAmount>();
-        static const std::size_t mergeMemory = cfg::g_config["command_line_app"]["dump"]["max_merge_buffer_size"].get<MemoryAmount>();
+        static const MemoryAmount pgnParserMemory = cfg::g_config["command_line_app"]["dump"]["pgn_parser_memory"].get<MemoryAmount>();
+        static const MemoryAmount importMemory = cfg::g_config["command_line_app"]["dump"]["import_memory"].get<MemoryAmount>();
+        static const MemoryAmount mergeMemory = cfg::g_config["command_line_app"]["dump"]["max_merge_buffer_size"].get<MemoryAmount>();
 
         assertDirectoryEmpty(temp);
 
@@ -1067,7 +1067,7 @@ namespace command_line_app
         {
             ASSERT(numBuffers > 0);
 
-            const std::size_t size = ext::numObjectsPerBufferUnit<CompressedPosition>(importMemory, numBuffers);
+            const std::size_t size = ext::numObjectsPerBufferUnit<CompressedPosition>(importMemory.bytes(), numBuffers);
 
             std::vector<std::vector<CompressedPosition>> buffers;
             buffers.resize(numBuffers);
@@ -1091,7 +1091,7 @@ namespace command_line_app
 
                 for (auto&& pgn : pgns)
                 {
-                    pgn::LazyPgnFileReader reader(pgn, pgnParserMemory);
+                    pgn::LazyPgnFileReader reader(pgn, pgnParserMemory.bytes());
                     for (auto&& game : reader)
                     {
                         ++numGamesIn;
@@ -1141,7 +1141,7 @@ namespace command_line_app
                     Logger::instance().logInfo("Commited file ", path);
                 }
 
-                auto progressCallback = [session, doReportProgress](const ext::ProgressReport& report) {
+                auto progressCallback = [session, doReportProgress](const ext::Progress& report) {
                     if (!doReportProgress) return;
 
                     auto reportJson = nlohmann::json{
@@ -1184,8 +1184,13 @@ namespace command_line_app
                         count = 1;
                     }
                 };
-                
-                ext::merge_for_each(progressCallback, { mergeMemory }, files, append, std::less<>{});
+
+                ext::MergePlan plan = ext::make_merge_plan(files, ".", ".");
+                ext::MergeCallbacks callbacks{
+                    progressCallback,
+                    [](int passId) {}
+                };
+                ext::merge_for_each(plan, callbacks, files, append, std::less<>{});
             }
 
             auto stats = nlohmann::json{
@@ -1420,8 +1425,8 @@ namespace command_line_app
         const bcgn::BcgnFileHeader& header,
         bcgn::BcgnFileWriter::FileOpenMode mode)
     {
-        pgn::LazyPgnFileReader pgnReader(pgn, pgnParserMemory);
-        bcgn::BcgnFileWriter bcgnWriter(bcgn, header, mode, bcgnParserMemory);
+        pgn::LazyPgnFileReader pgnReader(pgn, pgnParserMemory.bytes());
+        bcgn::BcgnFileWriter bcgnWriter(bcgn, header, mode, bcgnParserMemory.bytes());
 
         constexpr std::size_t reportEvery = 100'000;
 
@@ -1546,7 +1551,7 @@ namespace command_line_app
 
     static void countPgnGames(const std::filesystem::path& path)
     {
-        pgn::LazyPgnFileReader reader(path, pgnParserMemory);
+        pgn::LazyPgnFileReader reader(path, pgnParserMemory.bytes());
 
         constexpr std::size_t reportEvery = 100'000;
 
@@ -1566,7 +1571,7 @@ namespace command_line_app
 
     static void countBcgnGames(const std::filesystem::path& path)
     {
-        bcgn::BcgnFileReader reader(path, bcgnParserMemory);
+        bcgn::BcgnFileReader reader(path, bcgnParserMemory.bytes());
 
         constexpr std::size_t reportEvery = 100'000;
 
@@ -1646,12 +1651,12 @@ namespace command_line_app
 
     static void benchPgn(const std::filesystem::path& path)
     {
-        benchReader<pgn::LazyPgnFileReader>(path, pgnParserMemory);
+        benchReader<pgn::LazyPgnFileReader>(path, pgnParserMemory.bytes());
     }
 
     static void benchBcgn(const std::filesystem::path& path)
     {
-        benchReader<bcgn::BcgnFileReader>(path, bcgnParserMemory);
+        benchReader<bcgn::BcgnFileReader>(path, bcgnParserMemory.bytes());
     }
 
     static void bench(const Args& args)
@@ -1722,12 +1727,12 @@ namespace command_line_app
 
     static void statsPgn(const std::filesystem::path& path)
     {
-        statsImpl<pgn::LazyPgnFileReader>(path, pgnParserMemory);
+        statsImpl<pgn::LazyPgnFileReader>(path, pgnParserMemory.bytes());
     }
 
     static void statsBcgn(const std::filesystem::path& path)
     {
-        statsImpl<bcgn::BcgnFileReader>(path, bcgnParserMemory);
+        statsImpl<bcgn::BcgnFileReader>(path, bcgnParserMemory.bytes());
     }
 
     static void stats(const Args& args)

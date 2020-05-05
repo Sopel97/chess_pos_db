@@ -128,9 +128,9 @@ namespace cfg
     "max_concurrent_open_unpooled_files" : 128,
 
     "merge" : {
-        "max_batch_size" : 192,
-
-        "max_output_buffer_size_multiplier" : 8
+        "max_batch_size" : 128,
+        "output_buffer_size" : "8MiB",
+        "input_buffer_size" : "4MiB"
     },
 
     "equal_range" : {

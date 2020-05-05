@@ -346,7 +346,7 @@ namespace persistence
 
             struct Partition
             {
-                static const std::size_t mergeMemory;
+                static const MemoryAmount mergeMemory;
 
                 Partition() = default;
 
@@ -386,12 +386,12 @@ namespace persistence
 
                 void clear();
 
-                void mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback);
+                void mergeAll(std::function<void(const ext::Progress&)> progressCallback);
 
                 [[nodiscard]] bool empty() const;
 
                 // outPath is a path of the file to output to
-                void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback);
+                void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback);
 
             private:
                 std::filesystem::path m_path;
@@ -405,7 +405,7 @@ namespace persistence
 
                 std::mutex m_mutex;
 
-                [[nodiscard]] Indexes mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::ProgressReport&)> progressCallback) const;
+                [[nodiscard]] Indexes mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const;
 
                 [[nodiscard]] std::filesystem::path pathForId(std::uint32_t id) const;
 
@@ -448,7 +448,7 @@ namespace persistence
                 cardinality<GameLevel>()
                 * cardinality<GameResult>();
 
-            static const std::size_t m_pgnParserMemory;
+            static const MemoryAmount m_pgnParserMemory;
 
         public:
             Database(std::filesystem::path path);

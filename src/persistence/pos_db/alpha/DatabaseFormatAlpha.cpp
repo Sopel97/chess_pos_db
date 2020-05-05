@@ -553,7 +553,7 @@ namespace persistence
                 }
             }
 
-            const std::size_t Partition::mergeMemory = cfg::g_config["persistence"]["db_alpha"]["max_merge_buffer_size"].get<MemoryAmount>();
+            const MemoryAmount Partition::mergeMemory = cfg::g_config["persistence"]["db_alpha"]["max_merge_buffer_size"].get<MemoryAmount>();
 
             Partition::Partition(std::filesystem::path path)
             {
@@ -682,7 +682,7 @@ namespace persistence
                 }
             }
 
-            void Partition::mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback)
+            void Partition::mergeAll(std::function<void(const ext::Progress&)> progressCallback)
             {
                 if (m_files.size() < 2)
                 {
@@ -713,7 +713,7 @@ namespace persistence
             }
 
             // outPath is a path of the file to output to
-            void Partition::replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback)
+            void Partition::replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback)
             {
                 if (m_files.empty())
                 {
@@ -747,7 +747,7 @@ namespace persistence
                 }
             }
 
-            [[nodiscard]] Indexes Partition::mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::ProgressReport&)> progressCallback) const
+            [[nodiscard]] Indexes Partition::mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const
             {
                 ASSERT(!m_files.empty());
 
@@ -763,14 +763,25 @@ namespace persistence
                     };
 
                     ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
+                    const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<Entry>(mergeMemory.bytes() / 32, 2);
+                    ext::BackInserter<Entry> out(outFile, util::DoubleBuffer<Entry>(outBufferSize));
+
                     std::vector<ext::ImmutableSpan<Entry>> files;
                     files.reserve(m_files.size());
                     for (auto&& file : m_files)
                     {
                         files.emplace_back(file.entries());
                     }
+                    auto append = [&](const Entry& entry) {
+                        out.emplace(entry);
+                    };
 
-                    ext::merge(progressCallback, { mergeMemory }, files, outFile, Entry::CompareLessWithReverseMove{});
+                    ext::MergePlan plan = ext::make_merge_plan(files, ".", ".");
+                    ext::MergeCallbacks callbacks{
+                        progressCallback,
+                        [](int passId) {}
+                    };
+                    ext::merge_for_each(plan, callbacks, files, append, Entry::CompareLessWithReverseMove{});
                 }
 
                 IndexWithoutReverseMove index0 = ib0.end();
@@ -883,7 +894,7 @@ namespace persistence
             }
         }
 
-        const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_alpha"]["pgn_parser_memory"].get<MemoryAmount>();
+        const MemoryAmount Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_alpha"]["pgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
             BaseType(path, Database::manifest()),
@@ -1003,7 +1014,7 @@ namespace persistence
                 ++i;
                 Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
 
-                auto progressReport = [numPartitions, i, &progressCallback](const ext::ProgressReport& report) {
+                auto progressReport = [numPartitions, i, &progressCallback](const ext::Progress& report) {
                     Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
 
                     if (progressCallback)
@@ -1047,7 +1058,7 @@ namespace persistence
                 ++i;
                 Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
 
-                auto progressReport = [numPartitions, i, &progressCallback](const ext::ProgressReport& report) {
+                auto progressReport = [numPartitions, i, &progressCallback](const ext::Progress& report) {
                     Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
 
                     if (progressCallback)
@@ -1369,7 +1380,7 @@ namespace persistence
                     throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
                 }
 
-                pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
+                pgn::LazyPgnFileReader fr(path, m_pgnParserMemory.bytes());
                 if (!fr.isOpen())
                 {
                     Logger::instance().logError("Failed to open file ", path);
@@ -1555,7 +1566,7 @@ namespace persistence
                         throw std::runtime_error("Importing files other than PGN is not supported by db_alpha.");
                     }
 
-                    pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
+                    pgn::LazyPgnFileReader fr(path, m_pgnParserMemory.bytes());
                     if (!fr.isOpen())
                     {
                         Logger::instance().logError("Failed to open file ", path);

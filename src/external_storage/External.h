@@ -4,6 +4,7 @@
 #include "util/Buffer.h"
 #include "util/MemoryAmount.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <filesystem>
@@ -13,6 +14,7 @@
 #include <queue>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace ext
@@ -1478,7 +1480,15 @@ namespace ext
     {
         TemporaryPaths(std::filesystem::path dir = "");
 
+        TemporaryPaths(const TemporaryPaths&) = delete;
+        TemporaryPaths(TemporaryPaths&&) = default;
+
+        TemporaryPaths& operator=(const TemporaryPaths&) = delete;
+        TemporaryPaths& operator=(TemporaryPaths&&) = default;
+
         [[nodiscard]] std::filesystem::path& next();
+
+        void clear();
 
         ~TemporaryPaths();
 
@@ -1487,7 +1497,7 @@ namespace ext
         std::vector<std::filesystem::path> m_paths;
     };
 
-    struct ProgressReport
+    struct Progress
     {
         std::size_t workDone;
         std::size_t workTotal;
@@ -1498,6 +1508,8 @@ namespace ext
         }
     };
 
+    using ProgressCallback = std::function<void(const Progress&)>;
+
     struct AuxilaryStorage
     {
         std::size_t memory;
@@ -1506,67 +1518,42 @@ namespace ext
 
     namespace detail
     {
-        struct NoProgressCallback
+        struct ProgressTracker
         {
-            constexpr NoProgressCallback() = default;
-
-            inline void operator()(ProgressReport) const noexcept {};
-        };
-
-        template <typename T>
-        constexpr bool isCallbackEmpty = std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, NoProgressCallback>;
-
-        template <typename CallbackT>
-        struct Progress
-        {
-            static constexpr bool hasCallback = !isCallbackEmpty<CallbackT>;
-
-            Progress(CallbackT& callback) :
-                m_report{ 0, 0 },
-                m_callback(callback)
+            ProgressTracker(ProgressCallback progressCallback) :
+                m_progress{ 0, 0 },
+                m_callback(std::move(progressCallback))
             {
             }
 
             void doCallback() const
             {
-                if constexpr (hasCallback)
+                if (m_callback)
                 {
-                    m_callback(m_report);
+                    m_callback(m_progress);
                 }
             }
 
-            void reportWork(std::size_t work)
+            void onWorkDone(std::size_t work)
             {
-                if constexpr (hasCallback)
-                {
-                    m_report.workDone += work;
-                    doCallback();
-                }
+                m_progress.workDone += work;
+                doCallback();
             }
 
             void setTotalWork(std::size_t work)
             {
-                if constexpr (hasCallback)
-                {
-                    m_report.workTotal = work;
-                }
+                m_progress.workTotal = work;
             }
 
-            [[nodiscard]] std::size_t totalWork() const
+            [[nodiscard]] const Progress& progress() const
             {
-                return m_report.workTotal;
+                return m_progress;
             }
 
         private:
-            ProgressReport m_report;
-            CallbackT& m_callback;
+            Progress m_progress;
+            ProgressCallback m_callback;
         };
-
-        [[nodiscard]] inline auto noProgressCallback()
-        {
-            static NoProgressCallback callback;
-            return Progress(callback);
-        }
     }
 
     template <typename T>
@@ -1611,12 +1598,91 @@ namespace ext
         return file.read(Async{}, reinterpret_cast<std::byte*>(data.data()), 0, sizeof(T), file.size() / sizeof(T));
     }
 
+    struct MergePass
+    {
+        // This directory is only a hint. It's not used actively.
+        // It usually makes sense to have 2 interchanging directories
+        // for multipass merge, so it makes sense to include both.
+        // The data can actually be read from somewhere else.
+        std::filesystem::path readDir;
+
+        // This directory is used for the resulting files.
+        std::filesystem::path writeDir;
+
+        MergePass(const std::filesystem::path& read, const std::filesystem::path& write) :
+            readDir(read),
+            writeDir(write)
+        {
+        }
+
+        void invert()
+        {
+            std::swap(readDir, writeDir);
+        }
+    };
+
+    struct MergePlan
+    {
+        std::vector<MergePass> passes;
+
+        void invert()
+        {
+            for (auto& pass : passes)
+            {
+                pass.invert();
+            }
+        }
+
+        int numPasses() const
+        {
+            return static_cast<int>(passes.size());
+        }
+
+        [[nodiscard]] std::filesystem::path writeDirForPass(int passId) const
+        {
+            const int numPlannedPasses = numPasses();
+
+            if (numPlannedPasses == 0)
+            {
+                return std::filesystem::path(".");
+            }
+
+            if (passId < numPlannedPasses)
+            {
+                return passes[passId].writeDir;
+            }
+            else
+            {
+                // If this pass wasn't planned then swap read/write
+                // dirs with every pass. This means that for the first pass 
+                // after the plan ended we want to use the readDir.
+                if ((passId - numPlannedPasses) % 2 == 0)
+                {
+                    return passes.back().readDir;
+                }
+                else
+                {
+                    return passes.back().writeDir;
+                }
+            }
+        }
+    };
+
+    using MergePassFinishedCallback = std::function<void(int)>;
+
+    struct MergeCallbacks
+    {
+        ProgressCallback progressCallback;
+        MergePassFinishedCallback passFinishedCallback;
+    };
+
     namespace detail::merge
     {
-        extern const std::size_t maxOutputBufferSizeMultiplier;
-        extern const std::size_t maxNumMergedInputs;
+        extern const std::size_t maxBatchSize;
+        extern const MemoryAmount outputBufferSize;
+        extern const MemoryAmount inputBufferSize;
         
-        static constexpr std::size_t priorityQueueMergeThreshold = 32;
+        static constexpr std::size_t priorityQueueMergeThreshold = 24;
 
         [[nodiscard]] std::size_t merge_assess_work(
             std::vector<std::size_t>::const_iterator inSizesBegin,
@@ -1637,198 +1703,26 @@ namespace ext
             return merge_assess_work(std::begin(sizes), std::end(sizes));
         }
 
+        // new merge implementation
         // the merge is stable - ie. it takes as many values from the first input as possible, then next, and so on
-        template <typename T, typename ContainerT, typename CompT, typename ProgressCallbackT>
-        void merge_no_recurse(
-            std::size_t maxMemoryBytes,
-            ContainerIterRange<ContainerT> in,
-            BinaryOutputFile& outFile,
-            CompT cmp,
-            detail::Progress<ProgressCallbackT>& progress
-        )
-        {
-            // TODO: sfinae if other types can be merged
-            static_assert(std::is_same_v<typename ContainerT::value_type, ImmutableSpan<T>>);
-
-            using InputRange = ContainerIterRange<ImmutableSpan<T>>;
-
-            const std::size_t numInputs = in.distance();
-
-            ASSERT(numInputs <= maxNumMergedInputs);
-
-            const std::size_t outputBufferSizeMultiplier = std::min(numInputs, maxOutputBufferSizeMultiplier);
-
-            const std::size_t bufferUnitSize = numObjectsPerBufferUnit<T>(
-                maxMemoryBytes, numInputs + outputBufferSizeMultiplier
-                );
-
-            // gather non empty ranges
-            std::vector<InputRange> iters;
-            iters.reserve(numInputs);
-            std::size_t maxInputBufferSize = 0;
-            for (auto& i : in)
-            {
-                const std::size_t size = i.size();
-                if (size == 0)
-                {
-                    continue;
-                }
-
-                const std::size_t bufferSize = std::min(bufferUnitSize, size);
-                maxInputBufferSize = std::max(maxInputBufferSize, bufferSize);
-
-                iters.emplace_back(i.begin(util::DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
-            }
-
-            ASSERT(iters.size() > 1);
-
-            std::size_t numProcessed = 0;
-            const std::size_t outputBufferSize = maxInputBufferSize * outputBufferSizeMultiplier;
-
-            {
-                BackInserter<T> out(outFile, util::DoubleBuffer<T>((outputBufferSize + 1) / 2));
-                {
-                    // Priority queue requires a comparator with a reversed comparison.
-                    // Also we ensure that the merge is stable by forcing order of iter indices.
-                    struct Comp : CompT
-                    {
-                        Comp(CompT t) : CompT(t) {}
-
-                        bool operator()(const std::pair<T, std::size_t>& lhs, const std::pair<T, std::size_t>& rhs) const noexcept
-                        {
-                            if (CompT::operator()(rhs.first, lhs.first)) return true;
-                            else if (CompT::operator()(lhs.first, rhs.first)) return false;
-                            return lhs.second > rhs.second;
-                        }
-                    };
-
-                    // We use a priority queue unless the number of files is small
-                    if (iters.size() > priorityQueueMergeThreshold)
-                    {
-                        std::priority_queue<std::pair<T, std::size_t>, std::vector<std::pair<T, std::size_t>>, Comp> queue{ Comp(cmp) };
-                        for (std::size_t i = 0; i < iters.size(); ++i)
-                        {
-                            ASSERT(iters[i].begin() != iters[i].end());
-                            queue.emplace(*(iters[i].begin()), i);
-                        }
-
-                        while (queue.size() > priorityQueueMergeThreshold)
-                        {
-                            auto [value, minIdx] = queue.top();
-                            queue.pop();
-
-                            // write the minimum value
-                            out.push(value);
-
-                            // update iterator
-                            auto& it = ++iters[minIdx].begin();
-
-                            // if it's at the end remove it
-                            if (it != iters[minIdx].end())
-                            {
-                                queue.emplace(*it, minIdx);
-                            }
-
-                            ++numProcessed;
-                            if (numProcessed >= outputBufferSize)
-                            {
-                                progress.reportWork(numProcessed);
-                                numProcessed = 0;
-                            }
-                        }
-
-                        // When merging with a priority_queue we don't erase immediately.
-                        iters.erase(std::remove_if(iters.begin(), iters.end(), [](const auto& iter) { return iter.begin() == iter.end(); }), iters.end());
-                    }
-                }
-
-                ASSERT(iters.size() <= priorityQueueMergeThreshold);
-                // Finish with the linear scan procedure for low number of files.
-                {
-                    // this will hold the current values for each iterator
-                    std::vector<T> nextValues(iters.size());
-
-                    // we ensure that removal leaves the elements in the same order
-                    auto removeIter = [&iters, &nextValues](std::size_t i) {
-                        iters.erase(std::begin(iters) + i);
-                        nextValues.erase(std::begin(nextValues) + i);
-                    };
-
-                    // assign current values
-                    for (std::size_t i = 0; i < iters.size(); ++i)
-                    {
-                        ASSERT(iters[i].begin() != iters[i].end());
-                        nextValues[i] = *(iters[i].begin());
-                    }
-
-                    while (!iters.empty())
-                    {
-                        std::size_t minIdx = 0;
-
-                        // do a search for minimum on contiguous memory
-                        const std::size_t numIters = iters.size();
-                        for (std::size_t i = 1; i < numIters; ++i)
-                        {
-                            if (cmp(nextValues[i], nextValues[minIdx]))
-                            {
-                                minIdx = i;
-                            }
-                        }
-
-                        // write the minimum value
-                        out.push(nextValues[minIdx]);
-
-                        // update iterator
-                        auto& it = ++iters[minIdx].begin();
-
-                        // if it's at the end remove it
-                        if (it == iters[minIdx].end())
-                        {
-                            removeIter(minIdx);
-                        }
-                        else
-                        {
-                            // else we update the next value for this iterator
-                            nextValues[minIdx] = *it;
-                        }
-
-                        ++numProcessed;
-                        if (numProcessed >= outputBufferSize)
-                        {
-                            progress.reportWork(numProcessed);
-                            numProcessed = 0;
-                        }
-                    }
-                }
-            }
-
-            progress.reportWork(numProcessed);
-        }
-
-        // the merge is stable - ie. it takes as many values from the first input as possible, then next, and so on
-        template <typename T, typename ContainerT, typename CompT, typename ProgressCallbackT, typename FuncT>
+        template <typename T, typename CompT, typename FuncT>
         void merge_for_each_no_recurse(
-            std::size_t maxMemoryBytes,
-            ContainerIterRange<ContainerT> in,
+            ContainerIterRange<std::vector<ImmutableSpan<T>>> in,
             FuncT&& func,
             CompT cmp,
-            detail::Progress<ProgressCallbackT>& progress
+            detail::ProgressTracker& progress
         )
         {
             // TODO: sfinae if other types can be merged
-            static_assert(std::is_same_v<typename ContainerT::value_type, ImmutableSpan<T>>);
-
             using InputRange = ContainerIterRange<ImmutableSpan<T>>;
 
             const std::size_t numInputs = in.distance();
 
-            ASSERT(numInputs <= maxNumMergedInputs);
+            ASSERT(numInputs <= maxBatchSize);
 
-            const std::size_t bufferUnitSize = numObjectsPerBufferUnit<T>(
-                maxMemoryBytes, numInputs
-                );
+            const std::size_t inputBufferElements = inputBufferSize.elements<T>() / 2 + 1;
 
-            const std::size_t progressCallbackThreshold = bufferUnitSize * maxOutputBufferSizeMultiplier;
+            const std::size_t progressCallbackThreshold = outputBufferSize.elements<T>() / 2 + 1;
 
             // gather non empty ranges
             std::vector<InputRange> iters;
@@ -1841,14 +1735,14 @@ namespace ext
                     continue;
                 }
 
-                const std::size_t bufferSize = std::min(bufferUnitSize, size);
+                const std::size_t bufferSize = std::min(inputBufferElements, size);
 
-                iters.emplace_back(i.begin(util::DoubleBuffer<T>((bufferSize + 1) / 2)), i.end());
+                iters.emplace_back(i.begin(util::DoubleBuffer<T>(bufferSize)), i.end());
             }
 
             ASSERT(iters.size() > 1);
 
-            std::size_t numProcessed = 0;
+            std::size_t numNewProcessed = 0;
 
             {
                 {
@@ -1858,7 +1752,10 @@ namespace ext
                     {
                         Comp(CompT t) : CompT(t) {}
 
-                        bool operator()(const std::pair<T, std::size_t>& lhs, const std::pair<T, std::size_t>& rhs) const noexcept
+                        bool operator()(
+                            const std::pair<T, std::size_t>& lhs, 
+                            const std::pair<T, std::size_t>& rhs
+                            ) const noexcept
                         {
                             if (CompT::operator()(rhs.first, lhs.first)) return true;
                             else if (CompT::operator()(lhs.first, rhs.first)) return false;
@@ -1869,7 +1766,12 @@ namespace ext
                     // We use a priority queue unless the number of files is small
                     if (iters.size() > priorityQueueMergeThreshold)
                     {
-                        std::priority_queue<std::pair<T, std::size_t>, std::vector<std::pair<T, std::size_t>>, Comp> queue{ Comp(cmp) };
+                        std::priority_queue<
+                            std::pair<T, std::size_t>, 
+                            std::vector<std::pair<T, std::size_t>>, 
+                            Comp
+                        > queue{ Comp(cmp) };
+
                         for (std::size_t i = 0; i < iters.size(); ++i)
                         {
                             ASSERT(iters[i].begin() != iters[i].end());
@@ -1893,16 +1795,25 @@ namespace ext
                                 queue.emplace(*it, minIdx);
                             }
 
-                            ++numProcessed;
-                            if (numProcessed >= progressCallbackThreshold)
+                            ++numNewProcessed;
+                            if (numNewProcessed >= progressCallbackThreshold)
                             {
-                                progress.reportWork(numProcessed);
-                                numProcessed = 0;
+                                progress.onWorkDone(numNewProcessed);
+                                numNewProcessed = 0;
                             }
                         }
 
                         // When merging with a priority_queue we don't erase immediately.
-                        iters.erase(std::remove_if(iters.begin(), iters.end(), [](const auto& iter) { return iter.begin() == iter.end(); }), iters.end());
+                        iters.erase(
+                            std::remove_if(
+                                iters.begin(), 
+                                iters.end(), 
+                                [](const auto& iter) { 
+                                    return iter.begin() == iter.end(); 
+                                }
+                            ), 
+                            iters.end()
+                        );
                     }
                 }
 
@@ -1956,460 +1867,322 @@ namespace ext
                             nextValues[minIdx] = *it;
                         }
 
-                        ++numProcessed;
-                        if (numProcessed >= progressCallbackThreshold)
+                        ++numNewProcessed;
+                        if (numNewProcessed >= progressCallbackThreshold)
                         {
-                            progress.reportWork(numProcessed);
-                            numProcessed = 0;
+                            progress.onWorkDone(numNewProcessed);
+                            numNewProcessed = 0;
                         }
                     }
                 }
             }
 
-            progress.reportWork(numProcessed);
+            progress.onWorkDone(numNewProcessed);
         }
 
-        template <typename T, typename ContainerT, typename CompT, typename ProgressCallbackT>
-        void merge_impl(
-            std::size_t maxMemoryBytes,
-            const std::filesystem::path& tempdir,
-            ContainerIterRange<ContainerT> in,
+
+        // TODO: I think it would be better if the size of merge input and output
+        //       were always constant and specified in the settings.
+        //       In particular current implementation introduces big latency when
+        //       merging a small amount of files.
+
+        template <typename T, typename CompT>
+        void merge_no_recurse(
             BinaryOutputFile& outFile,
+            ContainerIterRange<std::vector<ImmutableSpan<T>>> in,
             CompT cmp,
-            detail::Progress<ProgressCallbackT>& progress
+            detail::ProgressTracker& progress
         )
         {
-            // TODO: sfinae if other types can be merged
-            static_assert(std::is_same_v<typename ContainerT::value_type, ImmutableSpan<T>>);
+            using InputRange = ContainerIterRange<ImmutableSpan<T>>;
 
             const std::size_t numInputs = in.distance();
 
-            if (numInputs <= maxNumMergedInputs)
-            {
-                merge_no_recurse<T, ContainerT>(maxMemoryBytes, in, outFile, cmp, progress);
-                return;
-            }
+            ASSERT(numInputs <= maxBatchSize);
 
-            // IMPORTANT: temporary files need to be deleted after parts!
-            TemporaryPaths temporaryFiles(tempdir);
+            const std::size_t inputBufferElements = inputBufferSize.elements<T>() / 2 + 1;
 
-            std::vector<ImmutableSpan<T>> parts;
-            parts.reserve(maxNumMergedInputs);
+            const std::size_t outputBufferElements = outputBufferSize.elements<T>() / 2 + 1;;
 
-            // prepare at most maxNumMergedInputs parts
-            // each part is made from 128 files at most
-            const std::size_t numInputsPerPart = maxNumMergedInputs;
-            std::size_t offset = 0;
-            for (; offset + numInputsPerPart < numInputs; offset += numInputsPerPart)
-            {
-                BinaryOutputFile partOut(temporaryFiles.next());
-                merge_impl<T, ContainerT>(
-                    maxMemoryBytes,
-                    tempdir,
-                    {
-                        std::next(std::begin(in), offset),
-                        std::next(std::begin(in), offset + numInputsPerPart)
-                    },
-                    partOut,
-                    cmp,
-                    progress
-                    );
-                parts.emplace_back(partOut.seal());
-            }
+            BackInserter<T> out(outFile, util::DoubleBuffer<T>(outputBufferElements));
+            auto outFunc = [&out](const T& value) {
+                out.emplace(value);
+            };
 
-            // we may have some inputs left
-            if (offset < numInputs)
-            {
-                if (parts.size() + (numInputs - offset) <= maxNumMergedInputs)
-                {
-                    // use the rest of the files as is if in total it would fit for one batch
-                    while (offset != numInputs)
-                    {
-                        parts.emplace_back(*std::next(std::begin(in), offset));
-                        ++offset;
-                    }
-                }
-                else
-                {
-                    BinaryOutputFile partOut(temporaryFiles.next());
-                    merge_impl<T, ContainerT>(
-                        maxMemoryBytes,
-                        tempdir,
-                        {
-                            std::next(std::begin(in), offset),
-                            std::end(in)
-                        },
-                        partOut,
-                        cmp,
-                        progress
-                        );
-
-                    parts.emplace_back(partOut.seal());
-                }
-            }
-
-            merge_no_recurse<T, ContainerT>(maxMemoryBytes, parts, outFile, cmp, progress);
+            merge_for_each_no_recurse<T>(
+                in,
+                outFunc,
+                cmp,
+                progress
+            );
         }
 
-        template <typename T, typename ContainerT, typename CompT, typename ProgressCallbackT, typename FuncT>
-        void merge_for_each_impl(
-            std::size_t maxMemoryBytes,
-            const std::filesystem::path& tempdir,
-            ContainerIterRange<ContainerT> in,
+        template <typename T, typename CompT, typename FuncT>
+        int merge_for_each_impl2(
+            const MergePlan& plan,
+            MergePassFinishedCallback& passFinishedCallback,
+            ContainerIterRange<std::vector<ImmutableSpan<T>>> in,
             FuncT&& func,
             CompT cmp,
-            detail::Progress<ProgressCallbackT>& progress
+            detail::ProgressTracker& progress
         )
         {
-            // TODO: sfinae if other types can be merged
-            static_assert(std::is_same_v<typename ContainerT::value_type, ImmutableSpan<T>>);
+            ASSERT(plan.numPasses() > 0);
 
-            const std::size_t numInputs = in.distance();
+            std::size_t numInputs = in.distance();
 
-            if (numInputs <= maxNumMergedInputs)
+            // This is only used to ensure the temporary files live long enough.
+            // We have to ensure they are deleted after parts
+            TemporaryPaths temporaryFilesRead{};
+
+            // In the first iteration this is empty because parts
+            // from `in` are used.
+            // In the following iterations `in` is reassigned to point to this.
+            // This is only used as storage, should not be accessed directly.
+            std::vector<ImmutableSpan<T>> partsRead;
+
+            int passId = 0;
+
+            if (numInputs > maxBatchSize)
             {
-                merge_for_each_no_recurse<T, ContainerT>(maxMemoryBytes, in, std::forward<FuncT>(func), cmp, progress);
-                return;
-            }
-
-            // IMPORTANT: temporary files need to be deleted after parts!
-            TemporaryPaths temporaryFiles(tempdir);
-
-            std::vector<ImmutableSpan<T>> parts;
-            parts.reserve(maxNumMergedInputs);
-
-            // prepare at most maxNumMergedInputs parts
-            // each part is made from 128 files at most
-            const std::size_t numInputsPerPart = maxNumMergedInputs;
-            std::size_t offset = 0;
-            for (; offset + numInputsPerPart < numInputs; offset += numInputsPerPart)
-            {
-                BinaryOutputFile partOut(temporaryFiles.next());
-                merge_impl<T, ContainerT>(
-                    maxMemoryBytes,
-                    tempdir,
-                    {
-                        std::next(std::begin(in), offset),
-                        std::next(std::begin(in), offset + numInputsPerPart)
-                    },
-                    partOut,
-                    cmp,
-                    progress
-                    );
-                parts.emplace_back(partOut.seal());
-            }
-
-            // we may have some inputs left
-            if (offset < numInputs)
-            {
-                if (parts.size() + (numInputs - offset) <= maxNumMergedInputs)
+                while (numInputs > maxBatchSize)
                 {
-                    // use the rest of the files as is if in total it would fit for one batch
-                    while (offset != numInputs)
+                    std::vector<ImmutableSpan<T>> partsWrite;
+                    partsWrite.reserve(numInputs / maxBatchSize + 1);
+
+                    // Do one pass.
+                    // In one pass we merge each group of at most maxNumMergedInputs files.
+                    // The resulting files (paths) are managed by temporaryFilesWrite.
+                    // Their content is represented in spans in partsWrite.
+                    // After each pass we delete temporaryFilesRead.
+
+                    // We create a new temporary file bank for writes
+                    TemporaryPaths temporaryFilesWrite(plan.writeDirForPass(passId));
+
+
+                    // Merge each group of at most maxNumMergedInputs
+                    std::size_t offset = 0;
+                    for (; offset + maxBatchSize < numInputs; offset += maxBatchSize)
                     {
-                        parts.emplace_back(*std::next(std::begin(in), offset));
-                        ++offset;
+                        BinaryOutputFile partOut(temporaryFilesWrite.next());
+                        merge_no_recurse<T>(
+                            partOut,
+                            {
+                                std::next(std::begin(in), offset),
+                                std::next(std::begin(in), offset + maxBatchSize)
+                            },
+                            cmp,
+                            progress
+                            );
+
+                        partsWrite.emplace_back(partOut.seal());
                     }
-                }
-                else
-                {
-                    BinaryOutputFile partOut(temporaryFiles.next());
-                    merge_impl<T, ContainerT>(
-                        maxMemoryBytes,
-                        tempdir,
-                        {
-                            std::next(std::begin(in), offset),
-                            std::end(in)
-                        },
-                        partOut,
-                        cmp,
-                        progress
-                        );
 
-                    parts.emplace_back(partOut.seal());
+                    // We may have some input files left (less than a full group)
+                    if (offset < numInputs)
+                    {
+                        // Sometimes this will be just one files but we want to copy it anyway.
+                        // Maybe it's worth special-casing this.
+                        BinaryOutputFile partOut(temporaryFilesWrite.next());
+                        merge_no_recurse<T>(
+                            partOut,
+                            {
+                                std::next(std::begin(in), offset),
+                                std::end(in)
+                            },
+                            cmp,
+                            progress
+                            );
+
+                        partsWrite.emplace_back(partOut.seal());
+                    }
+
+                    // Pass finished.
+                    // We reassign temporary paths to a longer-lived objects.
+                    // Old temporary read files are deleted here.
+                    temporaryFilesRead = std::move(temporaryFilesWrite);
+
+                    // We move the written parts to be next read from.
+                    partsRead = std::move(partsWrite);
+                    in = ContainerIterRange<std::vector<ImmutableSpan<T>>>(partsRead);
+                    numInputs = in.distance();
+
+                    // At this point all unneeded temporary files are deleted.
+                    // We can make a callback to the user so he can delete
+                    // the original files if he wants.
+                    if (passFinishedCallback)
+                    {
+                        passFinishedCallback(passId);
+                    }
+
+                    ++passId;
                 }
             }
 
-            merge_for_each_no_recurse<T, ContainerT>(maxMemoryBytes, parts, std::forward<FuncT>(func), cmp, progress);
+            // We're left with numInputs <= maxNumMergedInputs.
+            // temporaryFilesRead makes sure that if there are any
+            // temp files they are still not deleted.
+            // Now that the amount of files is small we can 
+            merge_for_each_no_recurse<T>(
+                in, 
+                std::forward<FuncT>(func), 
+                cmp, 
+                progress
+            );
+
+            return passId;
+        }
+
+        template <typename T, typename CompT>
+        int merge_impl2(
+            const MergePlan& plan,
+            MergePassFinishedCallback& passFinishedCallback,
+            ContainerIterRange<std::vector<ImmutableSpan<T>>> in,
+            const std::filesystem::path& outPath,
+            CompT cmp,
+            detail::ProgressTracker& progress
+        )
+        {
+            using InputRange = ContainerIterRange<ImmutableSpan<T>>;
+
+            ASSERT(outputBufferSize * sizeof(T) < maxMemoryBytes);
+
+            const std::size_t outputBufferElements = outputBufferSize.elements<T>() / 2 + 1;
+
+            BinaryOutputFile outFile(outPath);
+            BackInserter<T> out(outFile, util::DoubleBuffer<T>(outputBufferElements));
+            auto outFunc = [&out](const T& value) {
+                out.emplace(value);
+            };
+
+            const int nextPassId = merge_for_each_impl2<T>(
+                plan,
+                passFinishedCallback,
+                in,
+                outFunc,
+                cmp,
+                progress
+            );
+
+            passFinishedCallback(nextPassId);
+
+            return nextPassId + 1;
         }
     }
 
-    template <typename T, typename CompT = std::less<>>
-    void merge(
-        const AuxilaryStorage & aux,
-        const std::vector<ImmutableSpan<T>> & in,
-        BinaryOutputFile & outFile,
-        CompT cmp = CompT{}
+    template <typename T>
+    MergePlan make_merge_plan(
+        const std::vector<ImmutableSpan<T>>& in,
+        std::filesystem::path temp1,
+        std::filesystem::path temp2
     )
     {
-        auto progress = detail::noProgressCallback();
-        return detail::merge::merge_impl<T, const std::vector<ImmutableSpan<T>>>(
-            aux.memory, aux.tempdir, in, outFile, cmp, progress
-            );
+        MergePlan plan{};
+
+        std::size_t numFiles = in.size();
+        if (numFiles > 1)
+        {
+            std::size_t numPasses = 1;
+            std::size_t numFilesCurrent = numFiles;
+            while (numFilesCurrent > detail::merge::maxBatchSize)
+            {
+                numPasses += 1;
+                numFilesCurrent /= detail::merge::maxBatchSize;
+            }
+
+            for (int i = 0; i < numPasses; ++i)
+            {
+                plan.passes.emplace_back(temp1, temp2);
+                std::swap(temp1, temp2);
+            }
+        }
+
+        return plan;
     }
 
-    template <typename T, typename ProgressCallbackT, typename CompT = std::less<>>
-    void merge(
-        ProgressCallbackT && callback,
-        const AuxilaryStorage & aux,
-        const std::vector<ImmutableSpan<T>> & in,
-        BinaryOutputFile & outFile,
-        CompT cmp = CompT{}
+    // Each group contains consecutive spans.
+    // If there's only one span in the group then its size may
+    // be larger than the limit. That's the only case when this happens.
+    template <typename T>
+    std::vector<std::vector<ImmutableSpan<T>>> groupConsecutiveSpans(
+        std::vector<ImmutableSpan<T>>&& spans,
+        MemoryAmount maxGroupSize
     )
     {
-        auto progress = detail::Progress(callback);
-        progress.setTotalWork(detail::merge::merge_assess_work<T, std::vector<ImmutableSpan<T>>>(in));
-        return detail::merge::merge_impl<T, const std::vector<ImmutableSpan<T>>>(
-            aux.memory, aux.tempdir, in, outFile, cmp, progress
-            );
-    }
+        const std::size_t maxGroupSizeBytes = maxGroupSize;
 
-    template <typename T, typename FuncT, typename CompT = std::less<>>
-    void merge_for_each(
-        const AuxilaryStorage & aux,
-        const std::vector<ImmutableSpan<T>> & in,
-        FuncT && func,
-        CompT cmp = CompT{}
-    )
-    {
-        auto progress = detail::noProgressCallback();
-        return detail::merge::merge_for_each_impl<T, const std::vector<ImmutableSpan<T>>>(
-            aux.memory, aux.tempdir, in, std::forward<FuncT>(func), cmp, progress
-            );
-    }
+        std::vector<std::vector<ImmutableSpan<T>>> groups{};
 
-    template <typename T, typename ProgressCallbackT, typename FuncT, typename CompT = std::less<>>
-    void merge_for_each(
-        ProgressCallbackT && callback,
-        const AuxilaryStorage & aux,
-        const std::vector<ImmutableSpan<T>> & in,
-        FuncT&& func,
-        CompT cmp = CompT{}
-    )
-    {
-        auto progress = detail::Progress(callback);
-        progress.setTotalWork(detail::merge::merge_assess_work<T, std::vector<ImmutableSpan<T>>>(in));
-        return detail::merge::merge_for_each_impl<T, const std::vector<ImmutableSpan<T>>>(
-            aux.memory, aux.tempdir, in, std::forward<FuncT>(func), cmp, progress
-            );
+        // set it as if the last group is full so we create a new one.
+        std::size_t lastGroupSizeBytes = maxGroupSize.bytes() + 1;
+        for (auto&& span : spans)
+        {
+            const std::size_t spanSizeBytes = span.size_bytes();
+            if (lastGroupSizeBytes + spanSizeBytes > maxGroupSizeBytes)
+            {
+                groups.emplace_back();
+                lastGroupSizeBytes = 0;
+            }
+
+            lastGroupSizeBytes += spanSizeBytes;
+            groups.back().emplace_back(std::move(span));
+        }
+
+        return groups;
     }
 
     template <typename T>
     [[nodiscard]] std::size_t merge_assess_work(const std::vector<ImmutableSpan<T>>& in)
     {
-        return detail::merge::merge_assess_work(in);
-    }
-
-    namespace detail::sort
-    {
-        template <typename T>
-        [[nodiscard]] std::size_t sort_assess_work(std::size_t maxMemoryBytes, const ImmutableSpan<T>& in)
-        {
-            const std::size_t inputSize = in.size();
-            const std::size_t bufferSize = numObjectsPerBufferUnit<T>(maxMemoryBytes, 1);
-
-            const std::size_t numParts = ceilDiv(inputSize, bufferSize);
-
-            if (numParts <= 1)
-            {
-                return inputSize;
-            }
-
-            std::vector<std::size_t> parts;
-            parts.reserve(numParts);
-
-            std::size_t offset = 0;
-            for (; offset + bufferSize < inputSize; offset += bufferSize)
-            {
-                parts.emplace_back(bufferSize);
-            }
-
-            if (offset != inputSize)
-            {
-                parts.emplace_back(inputSize - offset);
-            }
-
-            return inputSize + detail::merge::merge_assess_work(std::begin(parts), std::end(parts));
-        }
-
-        template <typename T, typename SortT, typename CompT, typename ProgressCallbackT>
-        void sort_impl(
-            std::size_t maxMemoryBytes,
-            const std::filesystem::path& tempdir,
-            const ImmutableSpan<T>& in,
-            BinaryOutputFile& outFile,
-            SortT sort,
-            CompT cmp,
-            detail::Progress<ProgressCallbackT>& progress
-        )
-        {
-            // TODO: Sort asyncronously along with reading/writing.
-            //       Requires 3 buffers with proper synchronization
-            //       and swapping of the buffers.
-            //       Should be doable without additional threads.
-
-            const std::size_t inputSize = in.size();
-
-            const std::size_t bufferSize = numObjectsPerBufferUnit<T>(maxMemoryBytes, 1);
-            const std::size_t numParts = ceilDiv(inputSize, bufferSize);
-
-            if (numParts == 1)
-            {
-                util::Buffer<T> buffer(inputSize);
-                (void)in.read(buffer.data(), 0, inputSize);
-                sort(buffer.data(), buffer.data() + inputSize, cmp);
-
-                {
-                    BackInserter<T> out(outFile);
-                    out.append(buffer.data(), inputSize);
-                }
-
-                progress.reportWork(inputSize);
-                return;
-            }
-
-            // IMPORTANT: temporary files need to be deleted after parts!
-            TemporaryPaths temporaryFiles(tempdir);
-
-            std::vector<ImmutableSpan<T>> parts;
-            util::Buffer<T> buffer(bufferSize);
-
-            std::size_t offset = 0;
-            for (; offset + bufferSize < inputSize; offset += bufferSize)
-            {
-                (void)in.read(buffer.data(), offset, bufferSize);
-                sort(buffer.data(), buffer.data() + bufferSize, cmp);
-
-                BinaryOutputFile partOut(temporaryFiles.next());
-
-                {
-                    BackInserter<T> out(partOut);
-                    out.append(buffer.data(), bufferSize);
-                }
-
-                parts.emplace_back(partOut.seal());
-
-                progress.reportWork(bufferSize);
-            }
-
-            if (offset != inputSize)
-            {
-                const std::size_t left = inputSize - offset;
-                (void)in.read(buffer.data(), offset, left);
-                sort(buffer.data(), buffer.data() + left, cmp);
-
-                BinaryOutputFile partOut(temporaryFiles.next());
-
-                {
-                    BackInserter<T> out(partOut);
-                    out.append(buffer.data(), left);
-                }
-
-                parts.emplace_back(partOut.seal());
-
-                progress.reportWork(left);
-            }
-
-            return detail::merge::merge_impl<T, const std::vector<ImmutableSpan<T>>>(
-                maxMemoryBytes, tempdir, parts, outFile, cmp, progress
-                );
-        }
-    }
-
-    template <typename T, typename CompT = std::less<>>
-    void sort(
-        const AuxilaryStorage & aux,
-        const ImmutableSpan<T> & in,
-        BinaryOutputFile & outFile,
-        CompT cmp = CompT{}
-    )
-    {
-        auto progress = detail::noProgressCallback();
-        return detail::sort::sort_impl<T>(
-            aux.memory,
-            aux.tempdir,
-            in,
-            outFile,
-            [](auto... args) { std::sort(std::forward<decltype(args)>(args)...); },
-            cmp,
-            progress
-            );
-    }
-
-    template <typename T, typename ProgressCallbackT, typename CompT = std::less<>>
-    void sort(
-        ProgressCallbackT && callback,
-        const AuxilaryStorage & aux,
-        const ImmutableSpan<T> & in,
-        BinaryOutputFile & outFile,
-        CompT cmp = CompT{}
-    )
-    {
-        auto progress = detail::Progress(callback);
-        progress.setTotalWork(detail::sort::sort_assess_work(aux.memory, in));
-        return detail::sort::sort_impl<T>(
-            aux.memory,
-            aux.tempdir,
-            in,
-            outFile,
-            [](auto... args) { std::sort(std::forward<decltype(args)>(args)...); },
-            cmp,
-            progress
+        return detail::merge::merge_assess_work<T, std::vector<ImmutableSpan<T>>>(
+            ContainerIterRange<std::vector<ImmutableSpan<T>>>(in)
             );
     }
 
     template <typename T, typename CompT = std::less<>>
-    void stable_sort(
-        const AuxilaryStorage & aux,
-        const ImmutableSpan<T> & in,
-        BinaryOutputFile & outFile,
+    void merge(
+        const MergePlan& plan,
+        MergeCallbacks& callbacks,
+        const std::vector<ImmutableSpan<T>>& in,
+        const std::filesystem::path& outPath,
         CompT cmp = CompT{}
     )
     {
-        auto progress = detail::noProgressCallback();
-        return detail::sort::sort_impl<T>(
-            aux.memory,
-            aux.tempdir,
-            in,
-            outFile,
-            [](auto... args) { std::stable_sort(std::forward<decltype(args)>(args)...); },
+        auto progress = detail::ProgressTracker(callbacks.progressCallback);
+        auto totalWork = merge_assess_work(in);
+        progress.setTotalWork(totalWork);
+
+        detail::merge::merge_impl2<T>(
+            plan,
+            callbacks.passFinishedCallback,
+            ContainerIterRange<std::vector<ImmutableSpan<T>>>(in),
+            outPath,
             cmp,
             progress
             );
     }
 
-    template <typename T, typename ProgressCallbackT, typename CompT = std::less<>>
-    void stable_sort(
-        ProgressCallbackT && callback,
-        const AuxilaryStorage & aux,
-        const ImmutableSpan<T> & in,
-        BinaryOutputFile & outFile,
+    template <typename T, typename FuncT, typename CompT = std::less<>>
+    void merge_for_each(
+        const MergePlan& plan,
+        MergeCallbacks& callbacks,
+        const std::vector<ImmutableSpan<T>>& in,
+        FuncT&& func,
         CompT cmp = CompT{}
     )
     {
-        auto progress = detail::Progress(callback);
-        progress.setTotalWork(detail::sort::sort_assess_work(aux.memory, in));
-        return detail::sort::sort_impl<T>(
-            aux.memory,
-            aux.tempdir,
-            in,
-            outFile,
-            [](auto... args) { std::stable_sort(std::forward<decltype(args)>(args)...); },
+        auto progress = detail::ProgressTracker(callbacks.progressCallback);
+        auto totalWork = merge_assess_work(in);
+        progress.setTotalWork(totalWork);
+
+        detail::merge::merge_for_each_impl2<T>(
+            plan,
+            callbacks.passFinishedCallback,
+            ContainerIterRange< std::vector<ImmutableSpan<T>>>(in),
+            std::forward<FuncT>(func),
             cmp,
             progress
             );
-    }
-
-    template <typename T>
-    [[nodiscard]] std::size_t sort_assess_work(const AuxilaryStorage& aux, const ImmutableSpan<T>& in)
-    {
-        return detail::sort::sort_assess_work(aux.memory, in);
-    }
-
-    template <typename T>
-    [[nodiscard]] std::size_t stable_sort_assess_work(const AuxilaryStorage& aux, const ImmutableSpan<T>& in)
-    {
-        return detail::sort::sort_assess_work(aux.memory, in);
     }
 
     template <typename RandomIterT, typename T = typename RandomIterT::value_type>
@@ -2648,7 +2421,7 @@ namespace ext
         template <typename KeyType>
         using Range = std::vector<std::pair<IterValuePair<std::size_t, KeyType>, IterValuePair<std::size_t, KeyType>>>;
 
-        extern const std::size_t maxSeqReadSize;
+        extern const MemoryAmount maxSeqReadSize;
 
         // EntryType must be convertible to KeyType - values of type KeyType are stored for further reference
         template <
@@ -2670,7 +2443,7 @@ namespace ext
             )
         {
             // 32KiB should be about how much we can read using 'constant' time.
-            const std::size_t maxNumSeqReadElements = std::max(static_cast<std::size_t>(3), maxSeqReadSize / sizeof(EntryType));
+            const std::size_t maxNumSeqReadElements = std::max(static_cast<std::size_t>(3), maxSeqReadSize.bytes() / sizeof(EntryType));
             ASSERT(maxNumSeqReadElements >= 3);
 
             const std::size_t end = data.size();
@@ -3467,7 +3240,7 @@ namespace ext
         return detail::makeIndexImpl(values.begin(), values.end(), maxNumEntriesInRange, cmp, key);
     }
 
-    extern const std::size_t defaultIndexBuilderMemoryAmount;
+    extern const MemoryAmount defaultIndexBuilderMemoryAmount;
 
     template <
         typename EntryType,

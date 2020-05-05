@@ -835,58 +835,55 @@ namespace ext
         return m_paths.emplace_back(uniquePath(m_dir));
     }
 
-    TemporaryPaths::~TemporaryPaths()
+    void TemporaryPaths::clear()
     {
         for (auto& path : m_paths)
         {
             std::filesystem::remove(path);
         }
+        m_paths.clear();
+    }
+
+    TemporaryPaths::~TemporaryPaths()
+    {
+        clear();
     }
 
     namespace detail::merge
     {
-        const std::size_t maxOutputBufferSizeMultiplier = cfg::g_config["ext"]["merge"]["max_output_buffer_size_multiplier"].get<std::size_t>();
-        const std::size_t maxNumMergedInputs = cfg::g_config["ext"]["merge"]["max_batch_size"].get<std::size_t>();
+        const MemoryAmount outputBufferSize = cfg::g_config["ext"]["merge"]["output_buffer_size"].get<MemoryAmount>();
+        const MemoryAmount inputBufferSize = cfg::g_config["ext"]["merge"]["input_buffer_size"].get<MemoryAmount>();
+        const std::size_t maxBatchSize = cfg::g_config["ext"]["merge"]["max_batch_size"].get<std::size_t>();
 
         [[nodiscard]] std::size_t merge_assess_work(
             std::vector<std::size_t>::const_iterator inSizesBegin,
             std::vector<std::size_t>::const_iterator inSizesEnd
         )
         {
-            const std::size_t numInputs = std::distance(inSizesBegin, inSizesEnd);
+            // All bytes have to be processed at each pass.
+            // There is at least one pass even if the file is singular.
 
-            if (numInputs <= maxNumMergedInputs)
+            std::size_t totalWork = 0;
+
+            std::size_t numInputs = std::distance(inSizesBegin, inSizesEnd);
+            const std::size_t totalInputSize = std::accumulate(inSizesBegin, inSizesEnd, static_cast<std::size_t>(0));
+
+            while (numInputs > maxBatchSize)
             {
-                return std::accumulate(inSizesBegin, inSizesEnd, static_cast<std::size_t>(0));
+                totalWork += totalInputSize;
+
+                numInputs = ceilDiv(numInputs, maxBatchSize);
             }
 
-            // prepare at most maxNumMergedInputs parts
-            const std::size_t numInputsPerPart = maxNumMergedInputs;
-            std::size_t writes = 0;
-            std::size_t offset = 0;
-            std::size_t parts = 0;
-            for (; offset + numInputsPerPart < numInputs; offset += numInputsPerPart)
-            {
-                writes += merge_assess_work(std::next(inSizesBegin, offset), std::next(inSizesBegin, offset + numInputsPerPart));
-                parts += 1;
-            }
+            totalWork += totalInputSize;
 
-            // we may have some inputs left if numInputs % numInputsPerPart != 0
-            if (offset < numInputs)
-            {
-                if (parts + (numInputs - offset) > maxNumMergedInputs)
-                {
-                    writes += merge_assess_work(std::next(inSizesBegin, offset), inSizesEnd);
-                }
-            }
-
-            return writes + std::accumulate(inSizesBegin, inSizesEnd, static_cast<std::size_t>(0));
+            return totalWork;
         }
     }
 
     namespace detail::equal_range
     {
-        const std::size_t maxSeqReadSize = cfg::g_config["ext"]["equal_range"]["max_random_read_size"].get<MemoryAmount>();
+        const MemoryAmount maxSeqReadSize = cfg::g_config["ext"]["equal_range"]["max_random_read_size"].get<MemoryAmount>();
 
         [[nodiscard]] std::pair<std::size_t, std::size_t> neighbourhood(
             std::size_t begin,
@@ -928,5 +925,5 @@ namespace ext
         }
     }
 
-    const std::size_t defaultIndexBuilderMemoryAmount = cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>();
+    const MemoryAmount defaultIndexBuilderMemoryAmount = cfg::g_config["ext"]["index"]["builder_buffer_size"].get<MemoryAmount>();
 }

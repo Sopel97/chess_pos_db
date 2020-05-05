@@ -506,7 +506,7 @@ namespace persistence
                 combine(buffer);
             }
 
-            const std::size_t Partition::mergeMemory = cfg::g_config["persistence"]["db_beta"]["max_merge_buffer_size"].get<MemoryAmount>();
+            const MemoryAmount Partition::mergeMemory = cfg::g_config["persistence"]["db_beta"]["max_merge_buffer_size"].get<MemoryAmount>();
 
             Partition::Partition(std::filesystem::path path)
             {
@@ -537,7 +537,7 @@ namespace persistence
                 }
             }
 
-            void Partition::mergeAll(std::function<void(const ext::ProgressReport&)> progressCallback)
+            void Partition::mergeAll(std::function<void(const ext::Progress&)> progressCallback)
             {
                 if (m_files.size() < 2)
                 {
@@ -562,7 +562,7 @@ namespace persistence
             }
 
             // outPath is a path of the file to output to
-            void Partition::replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::ProgressReport&)> progressCallback)
+            void Partition::replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback)
             {
                 if (m_files.empty())
                 {
@@ -681,7 +681,7 @@ namespace persistence
                 return pathForId(nextId());
             }
 
-            [[nodiscard]] Index Partition::mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::ProgressReport&)> progressCallback) const
+            [[nodiscard]] Index Partition::mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const
             {
                 ASSERT(!m_files.empty());
 
@@ -700,7 +700,7 @@ namespace persistence
                     }
 
                     {
-                        const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<Entry>(mergeMemory / 32, 2);
+                        const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<Entry>(mergeMemory.bytes() / 32, 2);
                         ext::BackInserter<Entry> out(outFile, util::DoubleBuffer<Entry>(outBufferSize));
 
                         auto cmp = Entry::CompareEqualFull{};
@@ -723,7 +723,12 @@ namespace persistence
                             }
                         };
 
-                        ext::merge_for_each(progressCallback, { mergeMemory }, files, append, Entry::CompareLessFull{});
+                        ext::MergePlan plan = ext::make_merge_plan(files, ".", ".");
+                        ext::MergeCallbacks callbacks{
+                            progressCallback,
+                            [](int passId) {}
+                        };
+                        ext::merge_for_each(plan, callbacks, files, append, Entry::CompareLessFull{});
 
                         if (!first) // if we did anything, ie. accumulator holds something from merge
                         {
@@ -784,8 +789,8 @@ namespace persistence
             }
         }
 
-        const std::size_t Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_epsilon"]["pgn_parser_memory"].get<MemoryAmount>();
-        const std::size_t Database::m_bcgnParserMemory = cfg::g_config["persistence"]["db_epsilon"]["bcgn_parser_memory"].get<MemoryAmount>();
+        const MemoryAmount Database::m_pgnParserMemory = cfg::g_config["persistence"]["db_epsilon"]["pgn_parser_memory"].get<MemoryAmount>();
+        const MemoryAmount Database::m_bcgnParserMemory = cfg::g_config["persistence"]["db_epsilon"]["bcgn_parser_memory"].get<MemoryAmount>();
 
         Database::Database(std::filesystem::path path) :
             BaseType(path, Database::manifest()),
@@ -857,7 +862,7 @@ namespace persistence
         {
             Logger::instance().logInfo(": Merging files...");
 
-            auto progressReport = [&progressCallback](const ext::ProgressReport& report) {
+            auto progressReport = [&progressCallback](const ext::Progress& report) {
                 Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
 
                 if (progressCallback)
@@ -888,7 +893,7 @@ namespace persistence
 
             Logger::instance().logInfo(": Merging files...");
 
-            auto progressReport = [&progressCallback](const ext::ProgressReport& report) {
+            auto progressReport = [&progressCallback](const ext::Progress& report) {
                 Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
 
                 if (progressCallback)
@@ -1138,7 +1143,7 @@ namespace persistence
 
                 if (type == ImportableFileType::Pgn)
                 {
-                    pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
+                    pgn::LazyPgnFileReader fr(path, m_pgnParserMemory.bytes());
                     if (!fr.isOpen())
                     {
                         Logger::instance().logError("Failed to open file ", path);
@@ -1181,7 +1186,7 @@ namespace persistence
                 }
                 else if (type == ImportableFileType::Bcgn)
                 {
-                    bcgn::BcgnFileReader fr(path, m_bcgnParserMemory);
+                    bcgn::BcgnFileReader fr(path, m_bcgnParserMemory.bytes());
                     if (!fr.isOpen())
                     {
                         Logger::instance().logError("Failed to open file ", path);
@@ -1357,7 +1362,7 @@ namespace persistence
 
                     if (type == ImportableFileType::Pgn)
                     {
-                        pgn::LazyPgnFileReader fr(path, m_pgnParserMemory);
+                        pgn::LazyPgnFileReader fr(path, m_pgnParserMemory.bytes());
                         if (!fr.isOpen())
                         {
                             Logger::instance().logError("Failed to open file ", path);
@@ -1398,7 +1403,7 @@ namespace persistence
                     }
                     else if (type == ImportableFileType::Bcgn)
                     {
-                        bcgn::BcgnFileReader fr(path, m_bcgnParserMemory);
+                        bcgn::BcgnFileReader fr(path, m_bcgnParserMemory.bytes());
                         if (!fr.isOpen())
                         {
                             Logger::instance().logError("Failed to open file ", path);
