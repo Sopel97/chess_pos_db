@@ -3,6 +3,7 @@
 #include "detail/ParserBits.h"
 
 #include "Bitboard.h"
+#include "CastlingTraits.h"
 #include "Chess.h"
 #include "Zobrist.h"
 
@@ -404,10 +405,10 @@ struct Board
             const Piece rook = m_pieces[rookFromSq];
             const Piece king = m_pieces[kingFromSq];
             const Color color = king.color();
-            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = Move::rookCastleDestinations[color][castleType];
-            const Square kingToSq = Move::kingCastleDestinations[color][castleType];
+            const CastleType castleType = CastlingTraits::moveCastlingType(move);
+            const Square rookToSq = CastlingTraits::rookCastleDestinations[color][castleType];
+            const Square kingToSq = CastlingTraits::kingCastleDestinations[color][castleType];
 
             // 4 squares are involved
             m_pieces[rookFromSq] = Piece::none();
@@ -558,10 +559,10 @@ struct Board
             const Piece rook = m_pieces[rookFromSq];
             const Piece king = m_pieces[kingFromSq];
             const Color color = king.color();
-            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = Move::rookCastleDestinations[color][castleType];
-            const Square kingToSq = Move::kingCastleDestinations[color][castleType];
+            const CastleType castleType = CastlingTraits::moveCastlingType(move);
+            const Square rookToSq = CastlingTraits::rookCastleDestinations[color][castleType];
+            const Square kingToSq = CastlingTraits::kingCastleDestinations[color][castleType];
 
             // 4 squares are involved
             m_pieces[rookFromSq] = Piece::none();
@@ -657,10 +658,10 @@ struct Board
             const Square kingFromSq = move.from;
 
             const Color color = move.to.rank() == rank1 ? Color::White : Color::Black;
-            const CastleType castleType = (rookFromSq.file() == fileH) ? CastleType::Short : CastleType::Long;
 
-            const Square rookToSq = Move::rookCastleDestinations[color][castleType];
-            const Square kingToSq = Move::kingCastleDestinations[color][castleType];
+            const CastleType castleType = CastlingTraits::moveCastlingType(move);
+            const Square rookToSq = CastlingTraits::rookCastleDestinations[color][castleType];
+            const Square kingToSq = CastlingTraits::kingCastleDestinations[color][castleType];
 
             const Piece rook = m_pieces[rookToSq];
             const Piece king = m_pieces[kingToSq];

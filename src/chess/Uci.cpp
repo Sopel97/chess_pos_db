@@ -19,12 +19,9 @@ namespace uci
 
         if (move.type == MoveType::Castle)
         {
-            const CastleType castleType =
-                (move.to.file() == fileH)
-                ? CastleType::Short
-                : CastleType::Long;
+            const CastleType castleType = CastlingTraits::moveCastlingType(move);
 
-            const Square kingDestination = Move::rookCastleDestinations[pos.sideToMove()][castleType];
+            const Square kingDestination = CastlingTraits::rookCastleDestinations[pos.sideToMove()][castleType];
             parser_bits::appendSquareToString(kingDestination, s);
         }
         else

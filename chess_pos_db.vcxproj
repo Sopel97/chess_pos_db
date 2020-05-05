@@ -46,6 +46,7 @@
     <ClInclude Include="src\algorithm\Unsort.h" />
     <ClInclude Include="src\chess\Bcgn.h" />
     <ClInclude Include="src\chess\Bitboard.h" />
+    <ClInclude Include="src\chess\CastlingTraits.h" />
     <ClInclude Include="src\chess\Chess.h" />
     <ClInclude Include="src\chess\Date.h" />
     <ClInclude Include="src\chess\detail\ParserBits.h" />

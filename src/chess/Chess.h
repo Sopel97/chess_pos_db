@@ -948,9 +948,6 @@ struct CompressedMove;
 // ep is encoded as a normal pawn capture (move.to is empty on the board)
 struct Move
 {
-    static constexpr EnumArray2<Color, CastleType, Square> rookCastleDestinations = { { {{ f1, d1 }}, {{ f8, d8 }} } };
-    static constexpr EnumArray2<Color, CastleType, Square> kingCastleDestinations = { { {{ g1, c1 }}, {{ g8, c8 }} } };
-
     Square from;
     Square to;
     MoveType type = MoveType::Normal;
@@ -1198,16 +1195,6 @@ constexpr CastlingRights& operator&=(CastlingRights& lhs, CastlingRights rhs)
     lhs = static_cast<CastlingRights>(static_cast<std::uint8_t>(lhs) & static_cast<std::uint8_t>(rhs));
     return lhs;
 }
-
-constexpr CastlingRights moveToCastlingType(Move move)
-{
-    if (move.to == h1) return CastlingRights::WhiteKingSide;
-    if (move.to == a1) return CastlingRights::WhiteQueenSide;
-    if (move.to == h8) return CastlingRights::WhiteKingSide;
-    if (move.to == a8) return CastlingRights::WhiteQueenSide;
-    return CastlingRights::None;
-}
-
 // checks whether lhs contains rhs
 [[nodiscard]] constexpr bool contains(CastlingRights lhs, CastlingRights rhs)
 {

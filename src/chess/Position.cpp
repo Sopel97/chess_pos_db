@@ -114,15 +114,12 @@
         {
             if (move.type == MoveType::Castle)
             {
-                const CastleType castleType = 
-                    (move.to.file() == fileH)
-                    ? CastleType::Short 
-                    : CastleType::Long;
+                const CastleType castleType = CastlingTraits::moveCastlingType(move);
 
                 king ^= move.from;
-                king ^= Move::kingCastleDestinations[attackerColor][castleType];
+                king ^= CastlingTraits::kingCastleDestinations[attackerColor][castleType];
                 rooks ^= move.to;
-                rooks ^= Move::rookCastleDestinations[attackerColor][castleType];
+                rooks ^= CastlingTraits::rookCastleDestinations[attackerColor][castleType];
 
                 break;
             }

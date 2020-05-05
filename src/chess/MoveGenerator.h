@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Bitboard.h"
+#include "CastlingTraits.h"
 #include "Chess.h"
 #include "Position.h"
 
@@ -261,30 +262,6 @@ namespace movegen
     template <typename FuncT>
     inline void forEachCastlingMove(const Position& pos, FuncT&& f)
     {
-        // all square on a castling path must be empty
-        constexpr EnumArray2<Color, CastleType, Bitboard> castlingPaths = {
-            {
-                {{ Bitboard::square(f1) | g1, Bitboard::square(b1) | c1 | d1 }},
-                {{ Bitboard::square(f8) | g8, Bitboard::square(b8) | c8 | d8 }}
-            }
-        };
-
-        // this square must not be attacked by the enemy
-        constexpr EnumArray2<Color, CastleType, Square> squarePassedByKing = {
-            {
-                {{ f1, d1 }},
-                {{ f8, d8 }}
-            }
-        };
-
-        // we can't use CastlingRights directly as it is a flag set
-        constexpr EnumArray2<Color, CastleType, CastlingRights> castlingRightsMap = {
-            {
-                {{ CastlingRights::WhiteKingSide, CastlingRights::WhiteQueenSide }},
-                {{ CastlingRights::BlackKingSide, CastlingRights::BlackQueenSide }}
-            }
-        };
-
         CastlingRights rights = pos.castlingRights();
         if (rights == CastlingRights::None)
         {
@@ -297,10 +274,18 @@ namespace movegen
         const Bitboard occupied = ourPieces | theirPieces;
 
         // we first reduce the set of legal castlings by checking the paths for pieces
-        if ((castlingPaths[Color::White][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::WhiteKingSide;
-        if ((castlingPaths[Color::White][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::WhiteQueenSide;
-        if ((castlingPaths[Color::Black][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::BlackKingSide;
-        if ((castlingPaths[Color::Black][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::BlackQueenSide;
+        if (sideToMove == Color::White)
+        {
+            if ((CastlingTraits::castlingPaths[Color::White][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::WhiteKingSide;
+            if ((CastlingTraits::castlingPaths[Color::White][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::WhiteQueenSide;
+            rights &= ~CastlingRights::Black;
+        }
+        else
+        {
+            if ((CastlingTraits::castlingPaths[Color::Black][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::BlackKingSide;
+            if ((CastlingTraits::castlingPaths[Color::Black][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::BlackQueenSide;
+            rights &= ~CastlingRights::White;
+        }
 
         if (rights == CastlingRights::None)
         {
@@ -317,7 +302,7 @@ namespace movegen
         // Loop through all possible castlings.
         for (CastleType castlingType : values<CastleType>())
         {
-            const CastlingRights right = castlingRightsMap[sideToMove][castlingType];
+            const CastlingRights right = CastlingTraits::castlingRights[sideToMove][castlingType];
 
             if (!contains(rights, right))
             {
@@ -326,7 +311,7 @@ namespace movegen
 
             // If we have this castling right
             // we check whether the king passes an attacked square.
-            const Square passedSquare = squarePassedByKing[sideToMove][castlingType];
+            const Square passedSquare = CastlingTraits::squarePassedByKing[sideToMove][castlingType];
             if (pos.isSquareAttacked(passedSquare, !sideToMove))
             {
                 continue;
@@ -335,7 +320,7 @@ namespace movegen
             // If it's a castling move then the change in square occupation
             // cannot have an effect because otherwise there would be
             // a slider attacker attacking the castling king.
-            if (pos.isSquareAttacked(Move::kingCastleDestinations[sideToMove][castlingType], !sideToMove))
+            if (pos.isSquareAttacked(CastlingTraits::kingCastleDestinations[sideToMove][castlingType], !sideToMove))
             {
                 continue;
             }

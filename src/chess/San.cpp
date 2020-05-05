@@ -2,6 +2,7 @@
 
 #include "detail/ParserBits.h"
 
+#include "CastlingTraits.h"
 #include "Chess.h"
 #include "Bitboard.h"
 #include "MoveGenerator.h"
@@ -844,7 +845,7 @@ namespace san
 
         if (move.type == MoveType::Castle)
         {
-            const CastlingRights type = moveToCastlingType(move);
+            const CastlingRights type = CastlingTraits::moveCastlingRight(move);
             switch (type)
             {
             case CastlingRights::WhiteKingSide:
