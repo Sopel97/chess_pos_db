@@ -208,9 +208,9 @@ namespace command_line_app
         assertDirectoryEmpty(temp);
 
         {
-            auto db = instantiateDatabase(key, temp);
+            auto db = instantiateDatabase(key, destination);
             db->import(pgns, importMemory.bytes());
-            db->replicateMergeAll(destination);
+            db->mergeAll();
         }
 
         std::filesystem::remove_all(temp);
@@ -242,8 +242,8 @@ namespace command_line_app
     {
         assertDirectoryEmpty(toPath);
 
-        auto db = loadDatabase(fromPath);
-        db->replicateMergeAll(toPath);
+        auto db = loadDatabase(toPath);
+        db->mergeAll();
     }
 
     static void merge(const Args& args)
@@ -560,7 +560,7 @@ namespace command_line_app
         if (doMerge)
         {
             {
-                auto db = instantiateDatabase(key, temp);
+                auto db = instantiateDatabase(key, destination);
 
                 {
                     auto callback = makeImportProgressReportHandler(session, doReportProgress);
@@ -570,7 +570,7 @@ namespace command_line_app
 
                 {
                     auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                    db->replicateMergeAll(destination, callback);
+                    db->mergeAll(callback);
                 }
             }
 
@@ -659,7 +659,7 @@ namespace command_line_app
         assertDatabaseOpen(db);
 
         auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-        db->replicateMergeAll(destination, callback);
+        db->mergeAll(callback);
 
         // We have to always sent some info that we finished
         sendProgressFinished(session, "merge");

@@ -390,9 +390,6 @@ namespace persistence
 
                 [[nodiscard]] bool empty() const;
 
-                // outPath is a path of the file to output to
-                void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback);
-
             private:
                 std::filesystem::path m_path;
                 std::vector<File> m_files;
@@ -468,8 +465,6 @@ namespace persistence
             [[nodiscard]] query::Response executeQuery(query::Request query) override;
 
             void mergeAll(MergeProgressCallback progressCallback = {}) override;
-
-            void replicateMergeAll(const std::filesystem::path& path, MergeProgressCallback progressCallback = {}) override;
 
             ImportStats import(
                 std::execution::parallel_unsequenced_policy,

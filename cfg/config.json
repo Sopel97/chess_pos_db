@@ -44,17 +44,21 @@
                 Should be kept below max_concurrent_open_pooled_files.
                 High values may be bad for low seek time drives.
             */
-            "max_batch_size" : 192,
+            "max_batch_size" : 128,
 
             /*
-                Specifies how much bigger can the output
-                buffer size be compared to the largest
-                input file buffer.
-                Usually we want sligtly bigger output
-                buffers than input buffers because we merge
-                many files into one.
+                Specifies the size of each output buffer during
+                merge process. There is at most 2 output buffers
+                at any given moments.
             */
-            "max_output_buffer_size_multiplier" : 8
+            "output_buffer_size" : "8MiB",
+
+            /*
+                Specifies the size of each input buffer during
+                merge process. There is at most max_batch_size
+                input buffers at any given moment.
+            */
+            "input_buffer_size" : "4MiB"
         },
 
         "equal_range" : {

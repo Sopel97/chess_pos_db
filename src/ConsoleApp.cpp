@@ -357,7 +357,7 @@ namespace console_app
     {
         assertDirectoryEmpty(destination);
 
-        db.replicateMergeAll(destination);
+        db.mergeAll();
     }
 
     static void merge(persistence::Database& db)
@@ -432,9 +432,9 @@ namespace console_app
         assertDirectoryEmpty(temp);
 
         {
-            DbType db(temp);
+            DbType db(destination);
             db.import(pgns, importMemory.bytes());
-            db.replicateMergeAll(destination);
+            db.mergeAll();
         }
         std::filesystem::remove_all(temp);
     }

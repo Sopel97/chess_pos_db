@@ -151,8 +151,6 @@ namespace persistence
 
         virtual void mergeAll(MergeProgressCallback progressCallback = {}) = 0;
 
-        virtual void replicateMergeAll(const std::filesystem::path& path, MergeProgressCallback progressCallback = {});
-
         virtual ImportStats import(
             std::execution::parallel_unsequenced_policy,
             const ImportableFiles& pgns,

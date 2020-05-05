@@ -465,9 +465,6 @@ namespace persistence
 
                 void mergeAll(std::function<void(const ext::Progress&)> progressCallback);
 
-                // outPath is a path of the file to output to
-                void replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback);
-
                 // data has to be sorted in ascending order
                 void storeOrdered(const Entry* data, std::size_t count);
 
@@ -544,8 +541,6 @@ namespace persistence
             [[nodiscard]] query::Response executeQuery(query::Request query) override;
 
             void mergeAll(MergeProgressCallback progressCallback = {}) override;
-
-            void replicateMergeAll(const std::filesystem::path& path, MergeProgressCallback progressCallback = {}) override;
 
             ImportStats import(
                 std::execution::parallel_unsequenced_policy,

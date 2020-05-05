@@ -700,30 +700,6 @@ namespace persistence
                 m_files.emplace_back(newFilePath, std::move(index));
             }
 
-            // outPath is a path of the file to output to
-            void Partition::replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback)
-            {
-                if (m_files.empty())
-                {
-                    return;
-                }
-
-                ASSERT(outPath != path());
-
-                const auto outFilePath = outPath / "0";
-
-                if (m_files.size() == 1)
-                {
-                    auto path = m_files.front().path();
-                    std::filesystem::copy_file(path, outFilePath, std::filesystem::copy_options::overwrite_existing);
-                    std::filesystem::copy_file(pathForIndex(path), pathForIndex(outFilePath), std::filesystem::copy_options::overwrite_existing);
-                }
-                else
-                {
-                    (void)mergeAllIntoFile(outFilePath, progressCallback);
-                }
-            }
-
             // data has to be sorted in ascending order
             void Partition::storeOrdered(const Entry* data, std::size_t count)
             {
@@ -1022,42 +998,6 @@ namespace persistence
             };
 
             m_partition.mergeAll(progressReport);
-
-            Logger::instance().logInfo(": Finalizing...");
-            Logger::instance().logInfo(": Completed.");
-        }
-
-        void Database::replicateMergeAll(const std::filesystem::path& path, Database::MergeProgressCallback progressCallback)
-        {
-            if (std::filesystem::exists(path) && !std::filesystem::is_empty(path))
-            {
-                throw std::runtime_error("Destination for replicating merge must be empty.");
-            }
-            std::filesystem::create_directories(path / partitionDirectory);
-
-            BaseType::replicateMergeAll(path);
-
-            for (auto& header : m_headers)
-            {
-                header.replicateTo(path);
-            }
-
-            Logger::instance().logInfo(": Merging files...");
-
-            auto progressReport = [&progressCallback](const ext::Progress& report) {
-                Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
-
-                if (progressCallback)
-                {
-                    MergeProgressReport r{
-                        report.workDone,
-                        report.workTotal
-                    };
-                    progressCallback(r);
-                }
-            };
-
-            m_partition.replicateMergeAll(path / partitionDirectory, progressReport);
 
             Logger::instance().logInfo(": Finalizing...");
             Logger::instance().logInfo(": Completed.");

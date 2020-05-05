@@ -712,41 +712,6 @@ namespace persistence
                 return m_files.empty() && m_futureFiles.empty();
             }
 
-            // outPath is a path of the file to output to
-            void Partition::replicateMergeAll(const std::filesystem::path& outPath, std::function<void(const ext::Progress&)> progressCallback)
-            {
-                if (m_files.empty())
-                {
-                    return;
-                }
-
-                ASSERT(outPath != path());
-
-                const auto outFilePath = outPath / "0";
-
-                if (m_files.size() == 1)
-                {
-                    auto path = m_files.front().path();
-                    std::filesystem::copy_file(path, outFilePath, std::filesystem::copy_options::overwrite_existing);
-
-                    {
-                        auto fromIndexPath0 = pathForIndex<IndexWithoutReverseMoveTag>(path);
-                        auto toIndexPath0 = pathForIndex<IndexWithoutReverseMoveTag>(outFilePath);
-                        std::filesystem::copy_file(fromIndexPath0, toIndexPath0, std::filesystem::copy_options::overwrite_existing);
-                    }
-
-                    {
-                        auto fromIndexPath1 = pathForIndex<IndexWithReverseMoveTag>(path);
-                        auto toIndexPath1 = pathForIndex<IndexWithReverseMoveTag>(outFilePath);
-                        std::filesystem::copy_file(fromIndexPath1, toIndexPath1, std::filesystem::copy_options::overwrite_existing);
-                    }
-                }
-                else
-                {
-                    (void)mergeAllIntoFile(outFilePath, progressCallback);
-                }
-            }
-
             [[nodiscard]] Indexes Partition::mergeAllIntoFile(const std::filesystem::path& outFilePath, std::function<void(const ext::Progress&)> progressCallback) const
             {
                 ASSERT(!m_files.empty());
@@ -1032,50 +997,6 @@ namespace persistence
                 };
 
                 partition.mergeAll(progressReport);
-                });
-            Logger::instance().logInfo(": Finalizing...");
-            Logger::instance().logInfo(": Completed.");
-        }
-
-        void Database::replicateMergeAll(const std::filesystem::path& path, Database::MergeProgressCallback progressCallback)
-        {
-            if (std::filesystem::exists(path) && !std::filesystem::is_empty(path))
-            {
-                throw std::runtime_error("Destination for replicating merge must be empty.");
-            }
-
-            PerPartition<std::filesystem::path> partitionPaths = initializePartitionDirectories(path);
-
-            BaseType::replicateMergeAll(path);
-
-            m_header.replicateTo(path);
-
-            constexpr std::size_t numPartitions = cardinality<GameLevel>() * cardinality<GameResult>();
-            std::size_t i = 0;
-            Logger::instance().logInfo(": Merging files...");
-            forEach(m_partitions, [numPartitions, &i, &partitionPaths, &progressCallback](auto&& partition, GameLevel level, GameResult result) {
-
-                ++i;
-                Logger::instance().logInfo(": Merging files in partition ", i, '/', numPartitions, " : ", partition.path(), ".");
-
-                auto progressReport = [numPartitions, i, &progressCallback](const ext::Progress& report) {
-                    Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
-
-                    if (progressCallback)
-                    {
-                        // We can just put whatever value we want here.
-                        // It has to be a constant though because otherwise the
-                        // progress could be not monotonic.
-                        constexpr double totalWork = 1000000.0;
-                        MergeProgressReport r{
-                            static_cast<std::size_t>((report.ratio() + i) * totalWork / numPartitions),
-                            static_cast<std::size_t>(totalWork),
-                        };
-                        progressCallback(r);
-                    }
-                };
-
-                partition.replicateMergeAll(partitionPaths[level][result], progressReport);
                 });
             Logger::instance().logInfo(": Finalizing...");
             Logger::instance().logInfo(": Completed.");
