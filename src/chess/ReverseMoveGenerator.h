@@ -290,7 +290,12 @@ namespace movegen
         }
 
         template <typename UncaptureMakerT>
-        [[nodiscard]] auto makeUnpromotionMaker(const Board& board, const PieceSet& startPieceSet, Color pawnColor, UncaptureMakerT&& uncaptureMaker)
+        [[nodiscard]] auto makeUnpromotionMaker(
+            const Board& board, 
+            const PieceSet& startPieceSet, 
+            Color pawnColor, 
+            UncaptureMakerT&& uncaptureMaker
+        )
         {
             const auto currentPieceSet = PieceSet(board, pawnColor);
             const auto mask = startPieceSet.uncapturesWithRemaining(currentPieceSet);
@@ -308,18 +313,110 @@ namespace movegen
                 uncaptureMaker(rm, sq, func);
             };
         }
+
+        template <typename FuncT>
+        [[nodiscard]] auto makeMultiplicatorForEpRights(const Board& board, Color sideToUnmove, FuncT&& func)
+        {
+            const Bitboard pieces = board.piecesBB();
+            Bitboard candidateEpSquares = Bitboard::none();
+            if (sideToUnmove == Color::White)
+            {
+                const Bitboard pawnsOn6 = board.piecesBB(Piece(PieceType::Pawn, !sideToUnmove)) & bb::rank6;
+                candidateEpSquares = (
+                    pawnsOn6
+                    & ~(pieces.shiftedVertically(-1) | pieces.shiftedVertically(-2))
+                    ).shiftedVertically(1);
+            }
+            else
+            {
+                const Bitboard pawnsOn3 = board.piecesBB(Piece(PieceType::Pawn, !sideToUnmove)) & bb::rank3;
+                candidateEpSquares = (
+                    pawnsOn3
+                    & ~(pieces.shiftedVertically(1) | pieces.shiftedVertically(2))
+                    ).shiftedVertically(-1);
+            }
+
+
+            return [candidateEpSquares, &board, &func](ReverseMove rm)
+            {
+                const Piece movedPiece = board.pieceAt(rm.move.to);
+                Bitboard currentCandidateEpSquares = candidateEpSquares;
+                Square oldEpSquare = Square::none();
+                Bitboard pawns = board.piecesBB(Piece(PieceType::Pawn, sideToUnmove));
+                if (movedPiece != Piece::none() && movedPiece.type() == PieceType::Pawn)
+                {
+                    // We have to update our pawns locations
+                    pawns ^= rm.move.to;
+                    pawns ^= rm.move.from;
+
+                    // If the reverse move is en-passnt then there was an
+                    // additional ep square that was not found in the current
+                    // position because the pawn was captured.
+                    if (rm.move.type == MoveType::EnPassant)
+                    {
+                        currentCandidateEpSquares |= rm.move.to;
+
+                        // We keep this in mind because we don't have to verify 
+                        // if it was possible to have these ep rights.
+                        oldEpSquare = rm.move.to;
+                    }
+                }
+
+                // We only consider candidate ep squares that are attacked by our pawns.
+                // Otherwise nothing could execute the en-passant so the flag
+                // cannot be set.
+                currentCandidateEpSquares &= bb::pawnAttacks(pawns, sideToUnmove);
+
+                for (Square epSquare : currentCandidateEpSquares)
+                {
+                    if (epSquare != oldEpSquare)
+                    {
+                        // TODO: if performing an en-passant with this square
+                        // would have put our king in a discovered check then
+                        // this epSquare is not valid.
+                        // This check has to be performed for each reverse move
+                        // and involves doing the reverse move and checking whether
+                        // our king would be attacked after en-passant.
+                        // So we have to account for piece movements of 
+                        // one reverse move and one move to check this.
+                        // if (!valid) continue;
+                    }
+
+                    rm.oldEpSquare = epSquare;
+                    func(rm);
+                }
+
+                rm.oldEpSquare = Square::none();
+                func(rm);
+            };
+        }
     }
 
     template <typename FuncT, typename UncaptureMakerT, typename UnpromotionMakerT>
-    void forEachPseudoLegalPawnReverseMove(const Position& pos, FuncT&& func, UncaptureMakerT&& uncaptureMaker, UnpromotionMakerT&& unpromotionMaker)
+    void forEachPseudoLegalPawnReverseMove(
+        const Position& pos, 
+        FuncT&& func, 
+        UncaptureMakerT&& uncaptureMaker, 
+        UnpromotionMakerT&& unpromotionMaker
+    )
     {
 
     }
 
     template <typename FuncT, typename UncaptureMakerT, typename UnpromotionMakerT>
-    void forEachPseudoLegalReverseMove(const Position& pos, FuncT&& func, UncaptureMakerT&& uncaptureMaker, UnpromotionMakerT&& unpromotionMaker)
+    void forEachPseudoLegalReverseMove(
+        const Position& pos, 
+        FuncT&& func, 
+        UncaptureMakerT&& uncaptureMaker, 
+        UnpromotionMakerT&& unpromotionMaker
+    )
     {
-        forEachPseudoLegalPawnReverseMove(pos, std::forward<FuncT>(func), std::forward<UncaptureMakerT>(uncaptureMaker), std::forward<UnpromotionMakerT>(unpromotionMaker));
+        forEachPseudoLegalPawnReverseMove(
+            pos, 
+            std::forward<FuncT>(func), 
+            std::forward<UncaptureMakerT>(uncaptureMaker), 
+            std::forward<UnpromotionMakerT>(unpromotionMaker)
+        );
     }
 
     template <typename FuncT>
@@ -328,7 +425,7 @@ namespace movegen
         auto uncaptureMaker = detail::makeUncaptureMaker(pos, startPieceSet, !pos.sideToMove());
         auto unpromotionMaker = detail::makeUnpromotionMaker(pos, startPieceSet, pos.sideToMove(), uncaptureMaker);
 
-        forEachPseudoLegalReverseMove(pos, std::forward<FuncT>(func), uncaptureMaker);
+        forEachPseudoLegalReverseMove(pos, std::forward<FuncT>(func), uncaptureMaker, unpromotionMaker);
     }
 
     template <typename FuncT>
@@ -337,6 +434,6 @@ namespace movegen
         auto uncaptureMaker = detail::makeUncaptureMaker(!pos.sideToMove());
         auto unpromotionMaker = detail::makeUnpromotionMaker(pos.sideToMove(), uncaptureMaker);
 
-        forEachPseudoLegalReverseMove(pos, std::forward<FuncT>(func), detail::makeForwarder());
+        forEachPseudoLegalReverseMove(pos, std::forward<FuncT>(func), uncaptureMaker, unpromotionMaker);
     }
 }
