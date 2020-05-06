@@ -255,9 +255,13 @@ namespace movegen
 
                 if (rm.type == MoveType::EnPassant)
                 {
-                    const Square epSquare(rm.to.file(), rm.from.rank());
-                    theirPawns ^= epSquare;
-                    pieces ^= epSquare;
+                    // If it's an en-passant then this must be the only possible
+                    // epSquare if we want to reverse the move.
+                    // That's because there can be only one epSquare for a given
+                    // position.
+
+                    const Bitboard epSquare = Bitboard::square(Square(rm.to.file(), rm.from.rank()));
+                    return { epSquare, epSquare, epSquare };
                 }
             }
 
@@ -541,32 +545,40 @@ namespace movegen
                 }
                 else
                 {
-                    // If we're reversing an en-passant move then it's not possible
-                    // that there was no epSquare set before the move.
-                    // In all other cases it may or may not be null.
-                    // This is only relevant when there was no direct capture
-                    // because otherwise it's not an en-passant.
-                    const bool mustHaveOldEpSquare = move.type == MoveType::EnPassant;
-
                     rm.capturedPiece = Piece::none();
 
-                    for (Square candidateOldEpSquare : candidateOldEpSquares.ifNoUncapture)
+                    // In case of an en-passant there is only one 
+                    // possible oldEpSquare, because it was used.
+                    // No need to check anything.
+                    if (move.type == MoveType::EnPassant)
                     {
-                        if (!isTimeTravelEpSquareValid(rm.move, candidateOldEpSquare, Piece::none()))
-                        {
-                            continue;
-                        }
+                        rm.oldEpSquare = candidateOldEpSquares.ifNoUncapture.first();
 
                         for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
                         {
                             rm.oldCastlingRights = oldCastlingRights;
-                            rm.oldEpSquare = candidateOldEpSquare;
                             func(rm);
                         }
                     }
-
-                    if (!mustHaveOldEpSquare)
+                    else
                     {
+                        for (Square candidateOldEpSquare : candidateOldEpSquares.ifNoUncapture)
+                        {
+                            if (!isTimeTravelEpSquareValid(rm.move, candidateOldEpSquare, Piece::none()))
+                            {
+                                continue;
+                            }
+
+                            for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
+                            {
+                                rm.oldCastlingRights = oldCastlingRights;
+                                rm.oldEpSquare = candidateOldEpSquare;
+                                func(rm);
+                            }
+                        }
+
+                        // If we're reversing a non en-passant move then it's possible
+                        // that there was no epSquare set before the move.
                         for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
                         {
                             rm.oldCastlingRights = oldCastlingRights;
