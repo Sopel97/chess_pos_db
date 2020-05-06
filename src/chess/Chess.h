@@ -228,6 +228,8 @@ constexpr Piece blackRook = Piece(PieceType::Rook, Color::Black);
 constexpr Piece blackQueen = Piece(PieceType::Queen, Color::Black);
 constexpr Piece blackKing = Piece(PieceType::King, Color::Black);
 
+static_assert(Piece::none().type() == PieceType::None);
+
 template <>
 struct EnumTraits<Piece>
 {

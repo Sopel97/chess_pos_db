@@ -5,6 +5,8 @@
 #include "Chess.h"
 #include "Position.h"
 
+#include "data_structure/FixedVector.h"
+
 #include "enum/EnumArray.h"
 
 namespace movegen
@@ -128,6 +130,29 @@ namespace movegen
             };
         }
 
+        [[nodiscard]] FixedVector<Piece, 6> uncaptures(const PieceSet& current, Color capturedPieceColor, Color squareColor) const
+        {
+            const auto mask = uncapturesWithRemaining(current);
+
+            FixedVector<Piece, 6> pieces;
+
+            pieces.emplace_back(Piece::none());
+
+            if (mask.pawn) pieces.emplace_back(Piece(PieceType::Pawn, capturedPieceColor));
+            if (mask.knight) pieces.emplace_back(Piece(PieceType::Knight, capturedPieceColor));
+
+            if (
+                (mask.lightSquareBishop && squareColor == Color::White)
+                || (mask.darkSquareBishop && squareColor == Color::Black)
+                ) 
+                pieces.emplace_back(Piece(PieceType::Bishop, capturedPieceColor));
+
+            if (mask.rook) pieces.emplace_back(Piece(PieceType::Rook, capturedPieceColor));
+            if (mask.queen) pieces.emplace_back(Piece(PieceType::Queen, capturedPieceColor));
+
+            return pieces;
+        }
+
         // this must be able to turn into current
         [[nodiscard]] constexpr PieceSetMask unpromotionsWithRemaining(const PieceSet& current) const
         {
@@ -161,6 +186,27 @@ namespace movegen
                 hasUnusedPawnPromotions || (current.darkSquareBishopCount > darkSquareBishopCount),
                 hasUnusedPawnPromotions || (current.knightCount > knightCount)
             };
+        }
+
+        [[nodiscard]] EnumArray<PieceType, bool> unpromotions(const PieceSet& current, Color squareColor) const
+        {
+            const auto mask = unpromotionsWithRemaining(current);
+
+            EnumArray<PieceType, bool> validUnpromotions;
+            for (auto& p : validUnpromotions) p = false;
+
+            if (mask.knight) validUnpromotions[PieceType::Knight] = true;
+
+            if (
+                (mask.lightSquareBishop && squareColor == Color::White)
+                || (mask.darkSquareBishop && squareColor == Color::Black)
+                )
+                validUnpromotions[PieceType::Bishop] = true;
+
+            if (mask.rook) validUnpromotions[PieceType::Rook] = true;
+            if (mask.queen) validUnpromotions[PieceType::Queen] = true;
+
+            return validUnpromotions;
         }
     };
 
@@ -314,14 +360,14 @@ namespace movegen
             };
         }
 
-        template <typename FuncT>
-        [[nodiscard]] auto makeMultiplicatorForEpRights(const Board& board, Color sideToUnmove, FuncT&& func)
+        [[nodiscard]] Bitboard getCandidateEpSquares(const Board& board, Color sideToDoEp)
         {
             const Bitboard pieces = board.piecesBB();
             Bitboard candidateEpSquares = Bitboard::none();
-            if (sideToUnmove == Color::White)
+
+            if (sideToDoEp == Color::White)
             {
-                const Bitboard pawnsOn6 = board.piecesBB(Piece(PieceType::Pawn, !sideToUnmove)) & bb::rank6;
+                const Bitboard pawnsOn6 = board.piecesBB(Piece(PieceType::Pawn, !sideToDoEp)) & bb::rank6;
                 candidateEpSquares = (
                     pawnsOn6
                     & ~(pieces.shiftedVertically(-1) | pieces.shiftedVertically(-2))
@@ -329,43 +375,98 @@ namespace movegen
             }
             else
             {
-                const Bitboard pawnsOn3 = board.piecesBB(Piece(PieceType::Pawn, !sideToUnmove)) & bb::rank3;
+                const Bitboard pawnsOn3 = board.piecesBB(Piece(PieceType::Pawn, !sideToDoEp)) & bb::rank3;
                 candidateEpSquares = (
                     pawnsOn3
                     & ~(pieces.shiftedVertically(1) | pieces.shiftedVertically(2))
                     ).shiftedVertically(-1);
             }
 
+            return candidateEpSquares;
+        }
 
-            return [candidateEpSquares, &board, &func](ReverseMove rm)
+        [[nodiscard]] Bitboard updateCandidateEpSquaresForReverseMove(
+            Bitboard candidateEpSquares, 
+            const Board& board, 
+            Color sideToDoEp, 
+            const Move& rm
+        )
+        {
+            const Piece movedPiece = board.pieceAt(rm.to);
+            Bitboard updatedCandidateEpSquares = candidateEpSquares;
+            Bitboard pawns = board.piecesBB(Piece(PieceType::Pawn, sideToDoEp));
+            if (movedPiece != Piece::none() && movedPiece.type() == PieceType::Pawn)
             {
-                const Piece movedPiece = board.pieceAt(rm.move.to);
-                Bitboard currentCandidateEpSquares = candidateEpSquares;
-                Square oldEpSquare = Square::none();
-                Bitboard pawns = board.piecesBB(Piece(PieceType::Pawn, sideToUnmove));
-                if (movedPiece != Piece::none() && movedPiece.type() == PieceType::Pawn)
+                // We have to update our pawns locations
+                pawns ^= rm.to;
+                pawns ^= rm.from;
+
+                // If the reverse move is en-passnt then there was an
+                // additional ep square that was not found in the current
+                // position because the pawn was captured.
+                if (rm.type == MoveType::EnPassant)
                 {
-                    // We have to update our pawns locations
-                    pawns ^= rm.move.to;
-                    pawns ^= rm.move.from;
-
-                    // If the reverse move is en-passnt then there was an
-                    // additional ep square that was not found in the current
-                    // position because the pawn was captured.
-                    if (rm.move.type == MoveType::EnPassant)
-                    {
-                        currentCandidateEpSquares |= rm.move.to;
-
-                        // We keep this in mind because we don't have to verify 
-                        // if it was possible to have these ep rights.
-                        oldEpSquare = rm.move.to;
-                    }
+                    updatedCandidateEpSquares |= rm.to;
                 }
+            }
 
-                // We only consider candidate ep squares that are attacked by our pawns.
-                // Otherwise nothing could execute the en-passant so the flag
-                // cannot be set.
-                currentCandidateEpSquares &= bb::pawnAttacks(pawns, sideToUnmove);
+            // We only consider candidate ep squares that are attacked by our pawns.
+            // Otherwise nothing could execute the en-passant so the flag
+            // cannot be set.
+            updatedCandidateEpSquares &= bb::pawnAttacks(pawns, sideToDoEp);
+
+            return updatedCandidateEpSquares;
+        }
+
+        // first is for when the captured piece is not a rook
+        // second is for when the captured piece is a rook
+        [[nodiscard]] std::pair<CastlingRights, CastlingRights> updateCastlingRightsForReverseMove(
+            CastlingRights fixedCastlingRights,
+            const Board& board,
+            Color sideToUnmove,
+            const Move& rm
+            )
+        {
+            // TODO: add castling rights
+            return { fixedCastlingRights, fixedCastlingRights };
+        }
+
+        [[nodiscard]] FixedVector<CastlingRights, 16> allCastlingRightsBetween(
+            CastlingRights min,
+            CastlingRights max
+        )
+        {
+            const unsigned minInt = static_cast<unsigned>(min);
+            const unsigned maxInt = static_cast<unsigned>(max);
+            const unsigned mask = minInt ^ maxInt;
+
+            FixedVector<CastlingRights, 16> set;
+
+            unsigned maskSubset = 0;
+            do
+            {
+                // We generate all subsets of the difference between min and max
+                // and xor them with min to get all castling rights between min and max.
+                // masked increment
+                // https://stackoverflow.com/questions/44767080/incrementing-masked-bitsets
+                maskSubset = ((maskSubset | ~mask) + 1) & mask;
+                set.emplace_back(static_cast<CastlingRights>(minInt ^ maskSubset));
+            } while (maskSubset);
+
+            return set;
+        }
+
+        template <typename FuncT>
+        [[nodiscard]] auto makeMultiplicatorForEpRights(const Board& board, Color sideToUnmove, FuncT&& func)
+        {
+            const Bitboard candidateEpSquares = getCandidateEpSquares(board, sideToUnmove);
+
+            return [candidateEpSquares, sideToUnmove, &board, &func](ReverseMove rm)
+            {
+                Square oldEpSquare = rm.oldEpSquare;
+                
+                const Bitboard currentCandidateEpSquares = 
+                    updateCandidateEpSquaresForReverseMove(candidateEpSquares, board, sideToUnmove, rm);
 
                 for (Square epSquare : currentCandidateEpSquares)
                 {
@@ -390,50 +491,297 @@ namespace movegen
                 func(rm);
             };
         }
+
+        // This creates a function object that finds all
+        // possible permutations of capturedPiece, oldEpSquare,
+        // oldCastlingRights and emits all those moves.
+        // oldCastlingRights options may depend on the uncaptured piece.
+        //   - some reverse moves may add castling rights.
+        // capturedPiece options are always the same regardless of the other.
+        // oldEpSquare options for a given reverse move may differ depending
+        // on the capturedPiece. That is because the capturedPiece
+        // may have been attacking our king in which case no en-passant 
+        // is possible (unless the pawn becomes a blocker).
+        // We at least know that at the beginning our king is not attacked.
+        // So it's enough to check which placements of
+        // which opponent piece as capturedPiece would
+        // result in an attack on our king and which
+        // pieces are important blockers 
+        // (the blockers don't change unless the reverse
+        //  move is not a capture)
+        // - and then when generating actual oldEpSquares we either:
+        // 1. if our king was not in check then generate all oldEpSquares.
+        // 2. if our king was in check then we know the offending piece
+        //    and we can verify whether the en-passant pawn
+        //    would become a blocker.
+        // 
+        // Additionally we cannot set oldEpSquare if after
+        // doing the en-passant our king would end up in check.
+        // This has to be checked always.
+        // We can specialize for two cases:
+        // 1. if our king is not on the same rank as the ep pawns
+        //    we can use blockersForKing to determine if the king
+        //    ends up in a discovered check. (But even if the pawn
+        //    was a blocker we may have added a new blocker so we have
+        //    to check further.)
+        // 2. if our king is on the same rank as ep pawns then it's
+        //    best to just undo the move, do the ep (not literraly,
+        //    just simulate piece placements), and check if our 
+        //    king ends up in check.
+
+        // This builds a function object for the given position that
+        // checks whether given a `undoMove`, `epSquare`, and `uncapturedPiece`
+        // if we undid the `undoMove` and uncaptured `uncapturedPiece` would the 
+        // `epSquare` be a valid en-passant target.
+        [[nodiscard]] auto makeTimeTravelEpSquareValidityChecker(const Position& pos)
+        {
+            return [] (const Move& undoMove, Square epSquare, Piece uncapturedPiece)
+            {
+                // TODO: this
+                return true;
+            };
+        }
+
+        template <typename FuncT>
+        struct Permutator
+        {
+            const Position& pos;
+
+            FixedVector<Piece, 6> lightSquareUncaptures;
+            FixedVector<Piece, 6> darkSquareUncaptures;
+            EnumArray<PieceType, bool> isValidLightSquareUnpromotion;
+            EnumArray<PieceType, bool> isValidDarkSquareUnpromotion;
+
+            Bitboard candidateOldEpSquares;
+
+            FuncT&& func;
+            decltype(makeTimeTravelEpSquareValidityChecker(pos)) isTimeTravelEpSquareValid;
+
+            void emitPermutations(const Move& move) const
+            {
+                const Color sideToUnmove = !pos.sideToMove();
+                const CastlingRights minCastlingRights = pos.castlingRights();
+
+                // Some reverse moves (pawn reverse moves) may add additional
+                // possible oldEpSquares.
+                const Bitboard updatedCandidateOldEpSquares =
+                    updateCandidateEpSquaresForReverseMove(candidateOldEpSquares, pos, sideToUnmove, move);
+
+                // When going back in time we may have an option to include more castling rights.
+                // Note that the castling rights cannot be removed when we go back.
+                // Also.
+                // We have to handle two cases. Either this reverse moves uncaptures a rook
+                // or not. If it uncaptures a rook and it happens that this rook was
+                // on it's starting position then it may add additional castling rights.
+                // Otherwise possibleOldCastlingRightsSetIfNotRookUncapture
+                //           == possibleOldCastlingRightsSetIfRookUncapture.
+                const auto [possibleOldCastlingRightsIfNotRookUncapture, possibleOldCastlingRightsIfRookUncapture]
+                    = updateCastlingRightsForReverseMove(minCastlingRights, pos, sideToUnmove, move);
+
+                // At this stage we generate all different castling rights that may be possible.
+                // Specific castling rights are not dependent on each other so it makes it
+                // always a power of two sized set of different castling rights.
+                const auto possibleOldCastlingRightsSetIfNotRookUncapture
+                    = allCastlingRightsBetween(minCastlingRights, possibleOldCastlingRightsIfNotRookUncapture);
+
+                const auto possibleOldCastlingRightsSetIfRookUncapture
+                    = allCastlingRightsBetween(minCastlingRights, possibleOldCastlingRightsIfRookUncapture);
+
+                const Piece movedPiece = pos.pieceAt(move.to);
+
+                // Castlings and pawn pushes are excluded.
+                // For castlings movedPiece == Piece::none().
+                // We also have to exclude en-passants.
+                const bool mayHaveBeenCapture =
+                    move.type != MoveType::EnPassant
+                    && !(movedPiece.type() == PieceType::Pawn && move.from.file() == move.to.file());
+
+                const auto& uncaptures = 
+                    move.to.color() == Color::White 
+                    ? lightSquareUncaptures 
+                    : darkSquareUncaptures;
+
+                ReverseMove rm{ move };
+                if (mayHaveBeenCapture)
+                {
+                    // Not all squares allow a pawn uncapture.
+                    const bool canBePawnUncapture = !((bb::rank1 | bb::rank8).isSet(move.to));
+
+                    for (Piece uncapture : uncaptures)
+                    {
+                        if (!canBePawnUncapture && uncapture.type() == PieceType::Pawn)
+                        {
+                            continue;
+                        }
+
+                        const auto& oldCastlingRightsSet =
+                            uncapture.type() == PieceType::Rook
+                            ? possibleOldCastlingRightsSetIfRookUncapture
+                            : possibleOldCastlingRightsSetIfNotRookUncapture;
+
+                        for (Square candidateOldEpSquare : updatedCandidateOldEpSquares)
+                        {
+                            if (!isTimeTravelEpSquareValid(rm.move, candidateOldEpSquare, uncapture))
+                            {
+                                continue;
+                            }
+
+                            for (CastlingRights oldCastlingRights : oldCastlingRightsSet)
+                            {
+                                rm.capturedPiece = uncapture;
+                                rm.oldCastlingRights = oldCastlingRights;
+                                rm.oldEpSquare = candidateOldEpSquare;
+                                func(rm);
+                            }
+                        }
+
+                        // There's always the possibility that there was no epSquare.
+                        for (CastlingRights oldCastlingRights : oldCastlingRightsSet)
+                        {
+                            rm.capturedPiece = uncapture;
+                            rm.oldCastlingRights = oldCastlingRights;
+                            rm.oldEpSquare = Square::none();
+                            func(rm);
+                        }
+                    }
+                }
+                else
+                {
+                    // If we're reversing an en-passant move then it's not possible
+                    // that there was no epSquare set before the move.
+                    // In all other cases it may or may not be null.
+                    // This is only relevant when there was no direct capture
+                    // because otherwise it's not an en-passant.
+                    const bool mustHaveOldEpSquare = move.type == MoveType::EnPassant;
+
+                    rm.capturedPiece = Piece::none();
+
+                    for (Square candidateOldEpSquare : updatedCandidateOldEpSquares)
+                    {
+                        if (!isTimeTravelEpSquareValid(rm.move, candidateOldEpSquare, Piece::none()))
+                        {
+                            continue;
+                        }
+
+                        for (CastlingRights oldCastlingRights : possibleOldCastlingRightsSetIfNotRookUncapture)
+                        {
+                            rm.oldCastlingRights = oldCastlingRights;
+                            rm.oldEpSquare = candidateOldEpSquare;
+                            func(rm);
+                        }
+                    }
+
+                    if (!mustHaveOldEpSquare)
+                    {
+                        for (CastlingRights oldCastlingRights : possibleOldCastlingRightsSetIfNotRookUncapture)
+                        {
+                            rm.oldCastlingRights = oldCastlingRights;
+                            rm.oldEpSquare = Square::none();
+                            func(rm);
+                        }
+                    }
+                }
+            }
+        };
+
+        template <typename FuncT>
+        [[nodiscard]] Permutator<FuncT> makeReverseMovePermutator(
+            const Position& pos, 
+            const FixedVector<Piece, 6>& lightSquareUncaptures,
+            const FixedVector<Piece, 6>& darkSquareUncaptures,
+            EnumArray<PieceType, bool> isValidLightSquareUnpromotion,
+            EnumArray<PieceType, bool> isValidDarkSquareUnpromotion,
+            FuncT&& func
+        )
+        {
+            const Color sideToUnmove = !pos.sideToMove();
+
+            const Bitboard candidateOldEpSquares = getCandidateEpSquares(pos, sideToUnmove);
+
+            auto isTimeTravelEpSquareValid = makeTimeTravelEpSquareValidityChecker(pos);
+
+            return Permutator<FuncT>{
+                pos,
+
+                lightSquareUncaptures,
+                darkSquareUncaptures,
+                isValidLightSquareUnpromotion,
+                isValidDarkSquareUnpromotion,
+
+                candidateOldEpSquares,
+
+                std::forward<FuncT>(func),
+                isTimeTravelEpSquareValid
+            };
+        }
+
+        template <typename FuncT>
+        [[nodiscard]] Permutator<FuncT> makeReverseMovePermutator(const Position& pos, const PieceSet& startPieceSet, FuncT&& func)
+        {
+            const PieceSet sideToMovePieceSet = PieceSet(pos, pos.sideToMove());
+            const PieceSet sideToUnmovePieceSet = PieceSet(pos, !pos.sideToMove());
+
+            const auto lightSquareUncaptures = startPieceSet.uncaptures(sideToMovePieceSet, pos.sideToMove(), Color::White);
+            const auto darkSquareUncaptures = startPieceSet.uncaptures(sideToMovePieceSet, pos.sideToMove(), Color::Black);
+
+            const auto isLightSquareUnpromotionValid = startPieceSet.unpromotions(sideToUnmovePieceSet, Color::White);
+            const auto isDarkSquareUnpromotionValid = startPieceSet.unpromotions(sideToUnmovePieceSet, Color::Black);
+
+            return makeReverseMovePermutator(
+                pos,
+                lightSquareUncaptures,
+                darkSquareUncaptures,
+                isLightSquareUnpromotionValid,
+                isDarkSquareUnpromotionValid,
+                std::forward<FuncT>(func)
+            );
+        }
+
+        template <typename FuncT>
+        [[nodiscard]] Permutator<FuncT> makeReverseMovePermutator(const Position& pos, FuncT&& func)
+        {
+            const auto lightSquareUncaptures = PieceSetMask::allUncaptures();
+            const auto darkSquareUncaptures = PieceSetMask::allUncaptures();
+
+            const auto isLightSquareUnpromotionValid = PieceSetMask::allUnpromotions();
+            const auto isDarkSquareUnpromotionValid = PieceSetMask::allUnpromotions();
+
+            return makeReverseMovePermutator(
+                pos,
+                lightSquareUncaptures,
+                darkSquareUncaptures,
+                isLightSquareUnpromotionValid,
+                isDarkSquareUnpromotionValid,
+                std::forward<FuncT>(func)
+            );
+        }
     }
 
-    template <typename FuncT, typename UncaptureMakerT, typename UnpromotionMakerT>
-    void forEachPseudoLegalPawnReverseMove(
-        const Position& pos, 
-        FuncT&& func, 
-        UncaptureMakerT&& uncaptureMaker, 
-        UnpromotionMakerT&& unpromotionMaker
-    )
+    template <typename FuncT>
+    void forEachPseudoLegalPawnReverseMove(detail::Permutator<FuncT>& permutator)
     {
 
     }
 
-    template <typename FuncT, typename UncaptureMakerT, typename UnpromotionMakerT>
-    void forEachPseudoLegalReverseMove(
-        const Position& pos, 
-        FuncT&& func, 
-        UncaptureMakerT&& uncaptureMaker, 
-        UnpromotionMakerT&& unpromotionMaker
-    )
+    template <typename FuncT>
+    void forEachPseudoLegalReverseMove(detail::Permutator<FuncT>& permutator)
     {
-        forEachPseudoLegalPawnReverseMove(
-            pos, 
-            std::forward<FuncT>(func), 
-            std::forward<UncaptureMakerT>(uncaptureMaker), 
-            std::forward<UnpromotionMakerT>(unpromotionMaker)
-        );
+        forEachPseudoLegalPawnReverseMove(permutator);
     }
 
     template <typename FuncT>
     void forEachPseudoLegalReverseMove(const Position& pos, const PieceSet& startPieceSet, FuncT&& func)
     {
-        auto uncaptureMaker = detail::makeUncaptureMaker(pos, startPieceSet, !pos.sideToMove());
-        auto unpromotionMaker = detail::makeUnpromotionMaker(pos, startPieceSet, pos.sideToMove(), uncaptureMaker);
+        auto permutator = detail::makeReverseMovePermutator(pos, startPieceSet, std::forward<FuncT>(func));
 
-        forEachPseudoLegalReverseMove(pos, std::forward<FuncT>(func), uncaptureMaker, unpromotionMaker);
+        forEachPseudoLegalReverseMove(permutator);
     }
 
     template <typename FuncT>
     void forEachPseudoLegalReverseMove(const Position& pos, FuncT&& func)
     {
-        auto uncaptureMaker = detail::makeUncaptureMaker(!pos.sideToMove());
-        auto unpromotionMaker = detail::makeUnpromotionMaker(pos.sideToMove(), uncaptureMaker);
+        auto permutator = detail::makeReverseMovePermutator(pos, std::forward<FuncT>(func));
 
-        forEachPseudoLegalReverseMove(pos, std::forward<FuncT>(func), uncaptureMaker, unpromotionMaker);
+        forEachPseudoLegalReverseMove(permutator);
     }
 }
