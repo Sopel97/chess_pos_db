@@ -516,6 +516,7 @@ namespace movegen
                             ? possibleOldCastlingRights.ifRookUncapture
                             : possibleOldCastlingRights.ifNotRookUncapture;
 
+                        rm.capturedPiece = uncapture;
                         for (Square candidateOldEpSquare : actualCandidateOldEpSquares)
                         {
                             if (!isTimeTravelEpSquareValid(rm.move, candidateOldEpSquare, uncapture))
@@ -523,22 +524,20 @@ namespace movegen
                                 continue;
                             }
 
+                            rm.oldEpSquare = candidateOldEpSquare;
                             for (CastlingRights oldCastlingRights : oldCastlingRightsSet)
                             {
-                                rm.capturedPiece = uncapture;
                                 rm.oldCastlingRights = oldCastlingRights;
-                                rm.oldEpSquare = candidateOldEpSquare;
                                 func(rm);
                             }
                         }
 
                         // There's always the possibility that there was no epSquare.
 
+                        rm.oldEpSquare = Square::none();
                         for (CastlingRights oldCastlingRights : oldCastlingRightsSet)
                         {
-                            rm.capturedPiece = uncapture;
                             rm.oldCastlingRights = oldCastlingRights;
-                            rm.oldEpSquare = Square::none();
                             func(rm);
                         }
                     }
@@ -569,20 +568,20 @@ namespace movegen
                                 continue;
                             }
 
+                            rm.oldEpSquare = candidateOldEpSquare;
                             for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
                             {
                                 rm.oldCastlingRights = oldCastlingRights;
-                                rm.oldEpSquare = candidateOldEpSquare;
                                 func(rm);
                             }
                         }
 
                         // If we're reversing a non en-passant move then it's possible
                         // that there was no epSquare set before the move.
+                        rm.oldEpSquare = Square::none();
                         for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
                         {
                             rm.oldCastlingRights = oldCastlingRights;
-                            rm.oldEpSquare = Square::none();
                             func(rm);
                         }
                     }
