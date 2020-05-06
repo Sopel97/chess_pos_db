@@ -329,17 +329,21 @@ namespace movegen
             return candidateEpSquares;
         }
 
-        // first is for when the captured piece is not a rook
-        // second is for when the captured piece is a rook
-        [[nodiscard]] std::pair<CastlingRights, CastlingRights> updateCastlingRightsForReverseMove(
-            CastlingRights fixedCastlingRights,
+        struct CastlingRightsByUncapture
+        {
+            CastlingRights ifNotRookUncapture;
+            CastlingRights ifRookUncapture;
+        };
+
+        [[nodiscard]] CastlingRightsByUncapture updateCastlingRightsForReverseMove(
+            CastlingRights minCastlingRights,
             const Board& board,
             Color sideToUnmove,
             const Move& rm
             )
         {
             // TODO: add castling rights
-            return { fixedCastlingRights, fixedCastlingRights };
+            return { minCastlingRights, minCastlingRights };
         }
 
         [[nodiscard]] FixedVector<CastlingRights, 16> allCastlingRightsBetween(
@@ -448,17 +452,17 @@ namespace movegen
                 // on it's starting position then it may add additional castling rights.
                 // Otherwise possibleOldCastlingRightsSetIfNotRookUncapture
                 //           == possibleOldCastlingRightsSetIfRookUncapture.
-                const auto [possibleOldCastlingRightsIfNotRookUncapture, possibleOldCastlingRightsIfRookUncapture]
+                const CastlingRightsByUncapture possibleOldCastlingRights
                     = updateCastlingRightsForReverseMove(minCastlingRights, pos, sideToUnmove, move);
 
                 // At this stage we generate all different castling rights that may be possible.
                 // Specific castling rights are not dependent on each other so it makes it
                 // always a power of two sized set of different castling rights.
                 const auto possibleOldCastlingRightsSetIfNotRookUncapture
-                    = allCastlingRightsBetween(minCastlingRights, possibleOldCastlingRightsIfNotRookUncapture);
+                    = allCastlingRightsBetween(minCastlingRights, possibleOldCastlingRights.ifNotRookUncapture);
 
                 const auto possibleOldCastlingRightsSetIfRookUncapture
-                    = allCastlingRightsBetween(minCastlingRights, possibleOldCastlingRightsIfRookUncapture);
+                    = allCastlingRightsBetween(minCastlingRights, possibleOldCastlingRights.ifRookUncapture);
 
                 const Piece movedPiece = pos.pieceAt(move.to);
 
@@ -505,8 +509,8 @@ namespace movegen
 
                         const auto& oldCastlingRightsSet =
                             uncapture.type() == PieceType::Rook
-                            ? possibleOldCastlingRightsSetIfRookUncapture
-                            : possibleOldCastlingRightsSetIfNotRookUncapture;
+                            ? possibleOldCastlingRights.ifRookUncapture
+                            : possibleOldCastlingRights.ifNotRookUncapture;
 
                         for (Square candidateOldEpSquare : actualCandidateOldEpSquares)
                         {
@@ -553,7 +557,7 @@ namespace movegen
                             continue;
                         }
 
-                        for (CastlingRights oldCastlingRights : possibleOldCastlingRightsSetIfNotRookUncapture)
+                        for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
                         {
                             rm.oldCastlingRights = oldCastlingRights;
                             rm.oldEpSquare = candidateOldEpSquare;
@@ -563,7 +567,7 @@ namespace movegen
 
                     if (!mustHaveOldEpSquare)
                     {
-                        for (CastlingRights oldCastlingRights : possibleOldCastlingRightsSetIfNotRookUncapture)
+                        for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
                         {
                             rm.oldCastlingRights = oldCastlingRights;
                             rm.oldEpSquare = Square::none();
