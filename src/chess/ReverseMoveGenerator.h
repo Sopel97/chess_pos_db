@@ -215,11 +215,12 @@ namespace movegen
         [[nodiscard]] Bitboard getCandidateEpSquares(const Board& board, Color sideToDoEp)
         {
             const Bitboard pieces = board.piecesBB();
+            const Bitboard pawns = board.piecesBB(Piece(PieceType::Pawn, !sideToDoEp));
             Bitboard candidateEpSquares = Bitboard::none();
 
             if (sideToDoEp == Color::White)
             {
-                const Bitboard pawnsOn6 = board.piecesBB(Piece(PieceType::Pawn, !sideToDoEp)) & bb::rank6;
+                const Bitboard pawnsOn6 = pawns & bb::rank6;
                 candidateEpSquares = (
                     pawnsOn6
                     & ~(pieces.shiftedVertically(-1) | pieces.shiftedVertically(-2))
@@ -227,7 +228,7 @@ namespace movegen
             }
             else
             {
-                const Bitboard pawnsOn3 = board.piecesBB(Piece(PieceType::Pawn, !sideToDoEp)) & bb::rank3;
+                const Bitboard pawnsOn3 = pawns & bb::rank3;
                 candidateEpSquares = (
                     pawnsOn3
                     & ~(pieces.shiftedVertically(1) | pieces.shiftedVertically(2))
@@ -406,10 +407,10 @@ namespace movegen
                 const Piece movedPiece = pos.pieceAt(move.to);
 
                 // Castlings and pawn pushes are excluded.
-                // For castlings movedPiece == Piece::none().
                 // We also have to exclude en-passants.
                 const bool mayHaveBeenCapture =
                     move.type != MoveType::EnPassant
+                    && move.type != MoveType::Castle
                     && !(movedPiece.type() == PieceType::Pawn && move.from.file() == move.to.file());
 
                 const auto& uncaptures = 
@@ -425,9 +426,43 @@ namespace movegen
 
                     for (Piece uncapture : uncaptures)
                     {
-                        if (!canBePawnUncapture && uncapture.type() == PieceType::Pawn)
+                        Bitboard updatedLocalCandidateOldEpSquares = updatedCandidateOldEpSquares;
+
+                        if (uncapture.type() == PieceType::Pawn)
                         {
-                            continue;
+                            if (!canBePawnUncapture)
+                            {
+                                continue;
+                            }
+
+                            // If we uncapture a pawn it may become suspectible to en-passant.
+                            // We have to check that and update updatedCandidateOldEpSquares if true.
+                            const Bitboard theirPawns = pos.piecesBB(Piece(PieceType::Pawn, !sideToUnmove));
+                            const Bitboard ourPawns = pos.piecesBB(Piece(PieceType::Pawn, sideToUnmove));
+                            const Bitboard ourPawnAttacks = bb::pawnAttacks(ourPawns, sideToUnmove);
+
+                            // The piece may have been preventing double push before the move
+                            // so we or with move.from.
+                            const Bitboard occupied = pos.piecesBB() | move.from;
+
+                            if (sideToUnmove == Color::White)
+                            {
+                                const Bitboard pawnsOn6 = theirPawns & bb::rank6;
+                                updatedLocalCandidateOldEpSquares |= (
+                                    pawnsOn6
+                                    & ~(occupied.shiftedVertically(-1) | occupied.shiftedVertically(-2))
+                                    ).shiftedVertically(1)
+                                    & ourPawnAttacks; // we have to & after moving the ep square candidates to the proper rank
+                            }
+                            else
+                            {
+                                const Bitboard pawnsOn3 = theirPawns & bb::rank3;
+                                updatedLocalCandidateOldEpSquares |= (
+                                    pawnsOn3
+                                    & ~(occupied.shiftedVertically(1) | occupied.shiftedVertically(2))
+                                    ).shiftedVertically(-1)
+                                    & ourPawnAttacks;
+                            }
                         }
 
                         const auto& oldCastlingRightsSet =
@@ -435,7 +470,7 @@ namespace movegen
                             ? possibleOldCastlingRightsSetIfRookUncapture
                             : possibleOldCastlingRightsSetIfNotRookUncapture;
 
-                        for (Square candidateOldEpSquare : updatedCandidateOldEpSquares)
+                        for (Square candidateOldEpSquare : updatedLocalCandidateOldEpSquares)
                         {
                             if (!isTimeTravelEpSquareValid(rm.move, candidateOldEpSquare, uncapture))
                             {
