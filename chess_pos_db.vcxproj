@@ -57,6 +57,7 @@
     <ClInclude Include="src\chess\MoveIndex.h" />
     <ClInclude Include="src\chess\Pgn.h" />
     <ClInclude Include="src\chess\Position.h" />
+    <ClInclude Include="src\chess\ReverseMoveGenerator.h" />
     <ClInclude Include="src\chess\San.h" />
     <ClInclude Include="src\chess\Uci.h" />
     <ClInclude Include="src\chess\Zobrist.h" />

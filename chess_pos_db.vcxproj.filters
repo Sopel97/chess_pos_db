@@ -249,6 +249,9 @@
     <ClInclude Include="src\chess\CastlingTraits.h">
       <Filter>Header Files\src\chess</Filter>
     </ClInclude>
+    <ClInclude Include="src\chess\ReverseMoveGenerator.h">
+      <Filter>Header Files\src\chess</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
