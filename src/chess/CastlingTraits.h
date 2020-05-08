@@ -8,14 +8,14 @@
 
 struct CastlingTraits
 {
-    static constexpr EnumArray2<Color, CastleType, Square> rookCastleDestinations = { { {{ f1, d1 }}, {{ f8, d8 }} } };
-    static constexpr EnumArray2<Color, CastleType, Square> kingCastleDestinations = { { {{ g1, c1 }}, {{ g8, c8 }} } };
+    static constexpr EnumArray2<Color, CastleType, Square> rookDestination = { { {{ f1, d1 }}, {{ f8, d8 }} } };
+    static constexpr EnumArray2<Color, CastleType, Square> kingDestination = { { {{ g1, c1 }}, {{ g8, c8 }} } };
 
-    static constexpr EnumArray2<Color, CastleType, Square> rookCastleSources = { { {{ h1, a1 }}, {{ h8, a8 }} } };
+    static constexpr EnumArray2<Color, CastleType, Square> rookStart = { { {{ h1, a1 }}, {{ h8, a8 }} } };
 
-    static constexpr EnumArray<Color, Square> kingStartSquare = { { e1, e8 } };
+    static constexpr EnumArray<Color, Square> kingStart = { { e1, e8 } };
 
-    static constexpr EnumArray2<Color, CastleType, Bitboard> castlingPaths = {
+    static constexpr EnumArray2<Color, CastleType, Bitboard> castlingPath = {
         {
             {{ Bitboard::square(f1) | g1, Bitboard::square(b1) | c1 | d1 }},
             {{ Bitboard::square(f8) | g8, Bitboard::square(b8) | c8 | d8 }}

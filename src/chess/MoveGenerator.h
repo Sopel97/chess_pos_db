@@ -276,14 +276,14 @@ namespace movegen
         // we first reduce the set of legal castlings by checking the paths for pieces
         if (sideToMove == Color::White)
         {
-            if ((CastlingTraits::castlingPaths[Color::White][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::WhiteKingSide;
-            if ((CastlingTraits::castlingPaths[Color::White][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::WhiteQueenSide;
+            if ((CastlingTraits::castlingPath[Color::White][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::WhiteKingSide;
+            if ((CastlingTraits::castlingPath[Color::White][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::WhiteQueenSide;
             rights &= ~CastlingRights::Black;
         }
         else
         {
-            if ((CastlingTraits::castlingPaths[Color::Black][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::BlackKingSide;
-            if ((CastlingTraits::castlingPaths[Color::Black][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::BlackQueenSide;
+            if ((CastlingTraits::castlingPath[Color::Black][CastleType::Short] & occupied).any()) rights &= ~CastlingRights::BlackKingSide;
+            if ((CastlingTraits::castlingPath[Color::Black][CastleType::Long] & occupied).any()) rights &= ~CastlingRights::BlackQueenSide;
             rights &= ~CastlingRights::White;
         }
 
@@ -320,7 +320,7 @@ namespace movegen
             // If it's a castling move then the change in square occupation
             // cannot have an effect because otherwise there would be
             // a slider attacker attacking the castling king.
-            if (pos.isSquareAttacked(CastlingTraits::kingCastleDestinations[sideToMove][castlingType], !sideToMove))
+            if (pos.isSquareAttacked(CastlingTraits::kingDestination[sideToMove][castlingType], !sideToMove))
             {
                 continue;
             }

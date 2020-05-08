@@ -21,7 +21,7 @@ namespace uci
         {
             const CastleType castleType = CastlingTraits::moveCastlingType(move);
 
-            const Square kingDestination = CastlingTraits::rookCastleDestinations[pos.sideToMove()][castleType];
+            const Square kingDestination = CastlingTraits::rookDestination[pos.sideToMove()][castleType];
             parser_bits::appendSquareToString(kingDestination, s);
         }
         else

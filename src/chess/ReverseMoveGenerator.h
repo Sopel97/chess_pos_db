@@ -360,7 +360,7 @@ namespace movegen
                 const CastlingRights requiredCastlingRight = CastlingTraits::castlingRights[sideToUnmove][castleType];
                 CastlingRights castlingRights = minCastlingRights | requiredCastlingRight;
 
-                const Square otherRookSq = CastlingTraits::rookCastleSources[sideToUnmove][!castleType];
+                const Square otherRookSq = CastlingTraits::rookStart[sideToUnmove][!castleType];
                 if (board.pieceAt(otherRookSq) == ourRook)
                 {
                     castlingRights |= CastlingTraits::castlingRights[sideToUnmove][!castleType];;
@@ -378,10 +378,10 @@ namespace movegen
                 // If we move our king back to its starting position
                 // then we need to add castling rights for each rook still
                 // on its starting square.
-                if (rm.from == CastlingTraits::kingStartSquare[sideToUnmove])
+                if (rm.from == CastlingTraits::kingStart[sideToUnmove])
                 {
-                    const Square shortRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Short];
-                    const Square longRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Long];
+                    const Square shortRookSq = CastlingTraits::rookStart[sideToUnmove][CastleType::Short];
+                    const Square longRookSq = CastlingTraits::rookStart[sideToUnmove][CastleType::Long];
 
                     if (board.pieceAt(shortRookSq) == ourRook)
                     {
@@ -399,10 +399,10 @@ namespace movegen
                 // If we move a rook we only have to add its castling rights
                 // if we move to its starting square and the king is at the
                 // starting square.
-                if (board.pieceAt(CastlingTraits::kingStartSquare[sideToUnmove]) == ourKing)
+                if (board.pieceAt(CastlingTraits::kingStart[sideToUnmove]) == ourKing)
                 {
-                    const Square shortRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Short];
-                    const Square longRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Long];
+                    const Square shortRookSq = CastlingTraits::rookStart[sideToUnmove][CastleType::Short];
+                    const Square longRookSq = CastlingTraits::rookStart[sideToUnmove][CastleType::Long];
 
                     if (rm.from == shortRookSq)
                     {
@@ -421,12 +421,12 @@ namespace movegen
                 // We can only add castling rights if the king is at the start place.
                 const Color opponentSide = !sideToUnmove;
                 const Piece theirKing = Piece(PieceType::King, opponentSide);
-                if (board.pieceAt(CastlingTraits::kingStartSquare[opponentSide]) == theirKing)
+                if (board.pieceAt(CastlingTraits::kingStart[opponentSide]) == theirKing)
                 {
                     const Piece theirRook = Piece(PieceType::Rook, opponentSide);
 
-                    const Square shortRookSq = CastlingTraits::rookCastleSources[opponentSide][CastleType::Short];
-                    const Square longRookSq = CastlingTraits::rookCastleSources[opponentSide][CastleType::Long];
+                    const Square shortRookSq = CastlingTraits::rookStart[opponentSide][CastleType::Short];
+                    const Square longRookSq = CastlingTraits::rookStart[opponentSide][CastleType::Long];
 
                     if (rm.to == shortRookSq)
                     {

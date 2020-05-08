@@ -117,9 +117,9 @@
                 const CastleType castleType = CastlingTraits::moveCastlingType(move);
 
                 king ^= move.from;
-                king ^= CastlingTraits::kingCastleDestinations[attackerColor][castleType];
+                king ^= CastlingTraits::kingDestination[attackerColor][castleType];
                 rooks ^= move.to;
-                rooks ^= CastlingTraits::rookCastleDestinations[attackerColor][castleType];
+                rooks ^= CastlingTraits::rookDestination[attackerColor][castleType];
 
                 break;
             }

@@ -407,8 +407,8 @@ struct Board
             const Color color = king.color();
 
             const CastleType castleType = CastlingTraits::moveCastlingType(move);
-            const Square rookToSq = CastlingTraits::rookCastleDestinations[color][castleType];
-            const Square kingToSq = CastlingTraits::kingCastleDestinations[color][castleType];
+            const Square rookToSq = CastlingTraits::rookDestination[color][castleType];
+            const Square kingToSq = CastlingTraits::kingDestination[color][castleType];
 
             // 4 squares are involved
             m_pieces[rookFromSq] = Piece::none();
@@ -561,8 +561,8 @@ struct Board
             const Color color = king.color();
 
             const CastleType castleType = CastlingTraits::moveCastlingType(move);
-            const Square rookToSq = CastlingTraits::rookCastleDestinations[color][castleType];
-            const Square kingToSq = CastlingTraits::kingCastleDestinations[color][castleType];
+            const Square rookToSq = CastlingTraits::rookDestination[color][castleType];
+            const Square kingToSq = CastlingTraits::kingDestination[color][castleType];
 
             // 4 squares are involved
             m_pieces[rookFromSq] = Piece::none();
@@ -660,8 +660,8 @@ struct Board
             const Color color = move.to.rank() == rank1 ? Color::White : Color::Black;
 
             const CastleType castleType = CastlingTraits::moveCastlingType(move);
-            const Square rookToSq = CastlingTraits::rookCastleDestinations[color][castleType];
-            const Square kingToSq = CastlingTraits::kingCastleDestinations[color][castleType];
+            const Square rookToSq = CastlingTraits::rookDestination[color][castleType];
+            const Square kingToSq = CastlingTraits::kingDestination[color][castleType];
 
             const Piece rook = m_pieces[rookToSq];
             const Piece king = m_pieces[kingToSq];
