@@ -518,9 +518,26 @@ struct Offset
     std::int8_t files;
     std::int8_t ranks;
 
+    constexpr Offset() :
+        files(0),
+        ranks(0)
+    {
+    }
+
+    constexpr Offset(int files, int ranks) :
+        files(files),
+        ranks(ranks)
+    {
+    }
+
     [[nodiscard]] constexpr FlatSquareOffset flat() const
     {
         return { files, ranks };
+    }
+
+    [[nodiscard]] constexpr Offset operator-() const
+    {
+        return { -files, -ranks };
     }
 };
 

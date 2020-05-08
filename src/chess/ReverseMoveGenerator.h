@@ -793,6 +793,8 @@ namespace movegen
             ? 1
             : -1;
 
+        // pushes
+
         const FlatSquareOffset singlePawnUnpush = FlatSquareOffset(0, -forward);
         const FlatSquareOffset doublePawnUnpush = FlatSquareOffset(0, -forward * 2);
 
@@ -829,6 +831,39 @@ namespace movegen
         for (Square to : doubleUnpushablePawns)
         {
             const Square from = to + doublePawnUnpush;
+            const Move move = Move::normal(from, to);
+            func(move);
+        }
+
+        // captures
+
+        const Offset eastCapture = Offset(1, forward);
+        const Offset westCapture = Offset(-1, forward);
+        const FlatSquareOffset eastUncapture = (-eastCapture).flat();
+        const FlatSquareOffset westUncapture = (-westCapture).flat();
+
+        const Bitboard pawnsThatMayHaveCaptured =
+            pawns
+            & singleUnpushPawnsMask;
+
+        const Bitboard pawnsThatMayHaveCapturedEast =
+            pawnsThatMayHaveCaptured
+            & ~pieces.shifted(eastCapture);
+
+        const Bitboard pawnsThatMayHaveCapturedWest =
+            pawnsThatMayHaveCaptured
+            & ~pieces.shifted(westCapture);
+
+        for (Square to : pawnsThatMayHaveCapturedEast)
+        {
+            const Square from = to + eastUncapture;
+            const Move move = Move::normal(from, to);
+            func(move);
+        }
+
+        for (Square to : pawnsThatMayHaveCapturedWest)
+        {
+            const Square from = to + westUncapture;
             const Move move = Move::normal(from, to);
             func(move);
         }
