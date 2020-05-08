@@ -877,7 +877,81 @@ namespace movegen
         FuncT&& func
     )
     {
+        const Color sideToUnmove = !pos.sideToMove();
 
+        const int forward =
+            sideToUnmove == Color::White
+            ? 1
+            : -1;
+
+        const FlatSquareOffset singlePawnUnpush = FlatSquareOffset(0, -forward);
+
+        const Bitboard promotionRank =
+            sideToUnmove == Color::White
+            ? bb::rank8
+            : bb::rank1;
+
+        const Bitboard piecesOnPromotionRank = pos.piecesBB(sideToUnmove) & promotionRank;
+        Bitboard promotionTargets = Bitboard::none();
+        for (Square sq : piecesOnPromotionRank)
+        {
+            const Color sqColor = sq.color();
+            const PieceType pt = pos.pieceAt(sq).type();
+            if (
+                (sqColor == Color::White && isValidLightSquareUnpromotion[pt])
+                || (sqColor == Color::Black && isValidDarkSquareUnpromotion[pt])
+                )
+            {
+                promotionTargets |= sq;
+            }
+        }
+
+        const Bitboard pieces = pos.piecesBB();
+
+        // pushes
+
+        const Bitboard pushUnpromotions =
+            promotionTargets
+            & ~pieces.shiftedVertically(forward);
+
+        for (Square to : pushUnpromotions)
+        {
+            const Piece piece = pos.pieceAt(to);
+            const Square from = to + singlePawnUnpush;
+            const Move move = Move::promotion(from, to, piece);
+            func(move);
+        }
+
+        // captures
+
+        const Offset eastCapture = Offset(1, forward);
+        const Offset westCapture = Offset(-1, forward);
+        const FlatSquareOffset eastUncapture = (-eastCapture).flat();
+        const FlatSquareOffset westUncapture = (-westCapture).flat();
+
+        const Bitboard eastCapturePromotions =
+            promotionTargets
+            & ~pieces.shifted(eastCapture);
+
+        const Bitboard westCapturePromotions =
+            promotionTargets
+            & ~pieces.shifted(westCapture);
+
+        for (Square to : eastCapturePromotions)
+        {
+            const Piece piece = pos.pieceAt(to);
+            const Square from = to + eastUncapture;
+            const Move move = Move::promotion(from, to, piece);
+            func(move);
+        }
+
+        for (Square to : westCapturePromotions)
+        {
+            const Piece piece = pos.pieceAt(to);
+            const Square from = to + westUncapture;
+            const Move move = Move::promotion(from, to, piece);
+            func(move);
+        }
     }
 
     template <typename FuncT>
