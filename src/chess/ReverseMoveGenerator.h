@@ -530,6 +530,27 @@ namespace movegen
             FuncT&& func;
             decltype(makeTimeTravelEpSquareValidityChecker(pos)) isTimeTravelEpSquareValid;
 
+            [[nodiscard]] bool canUncapturePawn() const
+            {
+                for (Piece p : lightSquareUncaptures)
+                {
+                    if (p.type() == PieceType::Pawn)
+                    {
+                        return true;
+                    }
+                }
+
+                for (Piece p : darkSquareUncaptures)
+                {
+                    if (p.type() == PieceType::Pawn)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
             void emitPermutations(const Move& move) const
             {
                 const Color sideToUnmove = !pos.sideToMove();
@@ -582,7 +603,8 @@ namespace movegen
                     ? lightSquareUncaptures 
                     : darkSquareUncaptures;
 
-                ReverseMove rm{ move };
+                ReverseMove rm{};
+                rm.move = move;
                 if (mayHaveBeenCapture)
                 {
                     // Not all squares allow a pawn uncapture.
@@ -605,8 +627,8 @@ namespace movegen
 
                         const auto& oldCastlingRightsSet =
                             uncapture.type() == PieceType::Rook
-                            ? possibleOldCastlingRights.ifRookUncapture
-                            : possibleOldCastlingRights.ifNotRookUncapture;
+                            ? possibleOldCastlingRightsSetIfNotRookUncapture
+                            : possibleOldCastlingRightsSetIfRookUncapture;
 
                         rm.capturedPiece = uncapture;
                         for (Square candidateOldEpSquare : actualCandidateOldEpSquares)
@@ -641,11 +663,14 @@ namespace movegen
                     // In case of an en-passant there is only one 
                     // possible oldEpSquare, because it was used.
                     // No need to check anything.
+                    const auto& oldCastlingRightsSet =
+                        possibleOldCastlingRightsSetIfNotRookUncapture;
+
                     if (move.type == MoveType::EnPassant)
                     {
                         rm.oldEpSquare = candidateOldEpSquares.ifNoUncapture.first();
 
-                        for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
+                        for (CastlingRights oldCastlingRights : oldCastlingRightsSet)
                         {
                             rm.oldCastlingRights = oldCastlingRights;
                             func(rm);
@@ -661,7 +686,7 @@ namespace movegen
                             }
 
                             rm.oldEpSquare = candidateOldEpSquare;
-                            for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
+                            for (CastlingRights oldCastlingRights : oldCastlingRightsSet)
                             {
                                 rm.oldCastlingRights = oldCastlingRights;
                                 func(rm);
@@ -671,7 +696,7 @@ namespace movegen
                         // If we're reversing a non en-passant move then it's possible
                         // that there was no epSquare set before the move.
                         rm.oldEpSquare = Square::none();
-                        for (CastlingRights oldCastlingRights : possibleOldCastlingRights.ifNotRookUncapture)
+                        for (CastlingRights oldCastlingRights : oldCastlingRightsSet)
                         {
                             rm.oldCastlingRights = oldCastlingRights;
                             func(rm);
@@ -747,9 +772,58 @@ namespace movegen
     }
 
     template <typename FuncT>
-    void forEachPseudoLegalPawnReverseMove(detail::Permutator<FuncT>& permutator)
+    void forEachPseudoLegalPawnNormalReverseMove(
+        const Position& pos, 
+        FuncT&& func
+    )
     {
 
+    }
+
+    template <typename FuncT>
+    void forEachPseudoLegalPawnPromotionReverseMove(
+        const Position& pos,
+        const EnumArray<PieceType, bool>& isValidLightSquareUnpromotion,
+        const EnumArray<PieceType, bool>& isValidDarkSquareUnpromotion,
+        FuncT&& func
+    )
+    {
+
+    }
+
+    template <typename FuncT>
+    void forEachPseudoLegalPawnEnPassantReverseMove(
+        const Position& pos,
+        FuncT&& func
+    )
+    {
+
+    }
+
+    template <typename FuncT>
+    void forEachPseudoLegalPawnReverseMove(detail::Permutator<FuncT>& permutator)
+    {
+        auto fwd = [&permutator](const Move& m) { permutator.emitPermutations(m); };
+
+        forEachPseudoLegalPawnNormalReverseMove(
+            permutator.pos,
+            fwd
+        );
+
+        forEachPseudoLegalPawnPromotionReverseMove(
+            permutator.pos,
+            permutator.isValidLightSquareUnpromotion,
+            permutator.isValidDarkSquareUnpromotion,
+            fwd
+        );
+
+        if (permutator.canUncapturePawn())
+        {
+            forEachPseudoLegalPawnEnPassantReverseMove(
+                permutator.pos,
+                fwd
+            );
+        }
     }
 
     template <typename FuncT>
