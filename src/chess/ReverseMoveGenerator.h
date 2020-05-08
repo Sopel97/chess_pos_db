@@ -346,8 +346,100 @@ namespace movegen
             const Move& rm
             )
         {
-            // TODO: add castling rights
-            return { minCastlingRights, minCastlingRights };
+            const Piece ourRook = Piece(PieceType::Rook, sideToUnmove);
+            const Piece ourKing = Piece(PieceType::King, sideToUnmove);
+
+
+            if (rm.type == MoveType::Castle)
+            {
+                // We only have to consider adding the castling right used
+                // and possibly for the other castle type. No need
+                // to add anything for the opponent, and since we
+                // cannot capture when castling both returned rights are the same.
+                const CastleType castleType = CastlingTraits::moveCastlingType(rm);
+                const CastlingRights requiredCastlingRight = CastlingTraits::castlingRights[sideToUnmove][castleType];
+                CastlingRights castlingRights = minCastlingRights | requiredCastlingRight;
+
+                const Square otherRookSq = CastlingTraits::rookCastleSources[sideToUnmove][!castleType];
+                if (board.pieceAt(otherRookSq) == ourRook)
+                {
+                    castlingRights |= CastlingTraits::castlingRights[sideToUnmove][!castleType];;
+                }
+
+                return { castlingRights, castlingRights };
+            }
+
+            // This is only reached if not a castling move.
+
+            CastlingRights castlingRightsIfNotRookCapture = minCastlingRights;
+            const Piece movedPiece = board.pieceAt(rm.to);
+            if (movedPiece.type() == PieceType::King)
+            {
+                // If we move our king back to its starting position
+                // then we need to add castling rights for each rook still
+                // on its starting square.
+                if (rm.from == CastlingTraits::kingStartSquare[sideToUnmove])
+                {
+                    const Square shortRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Short];
+                    const Square longRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Long];
+
+                    if (board.pieceAt(shortRookSq) == ourRook)
+                    {
+                        castlingRightsIfNotRookCapture |= CastlingTraits::castlingRights[sideToUnmove][CastleType::Short];
+                    }
+
+                    if (board.pieceAt(longRookSq) == ourRook)
+                    {
+                        castlingRightsIfNotRookCapture |= CastlingTraits::castlingRights[sideToUnmove][CastleType::Long];
+                    }
+                }
+            }
+            else if (movedPiece.type() == PieceType::Rook)
+            {
+                // If we move a rook we only have to add its castling rights
+                // if we move to its starting square and the king is at the
+                // starting square.
+                if (board.pieceAt(CastlingTraits::kingStartSquare[sideToUnmove]) == ourKing)
+                {
+                    const Square shortRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Short];
+                    const Square longRookSq = CastlingTraits::rookCastleSources[sideToUnmove][CastleType::Long];
+
+                    if (rm.from == shortRookSq)
+                    {
+                        castlingRightsIfNotRookCapture |= CastlingTraits::castlingRights[sideToUnmove][CastleType::Short];
+                    }
+                    else if (rm.from == longRookSq)
+                    {
+                        castlingRightsIfNotRookCapture |= CastlingTraits::castlingRights[sideToUnmove][CastleType::Short];
+                    }
+                }
+            }
+
+            CastlingRights castlingRightsIfRookCapture = castlingRightsIfNotRookCapture;
+            {
+                // Now we're interested in possible uncaptures of an opponent's rook.
+                // We can only add castling rights if the king is at the start place.
+                const Color opponentSide = !sideToUnmove;
+                const Piece theirKing = Piece(PieceType::King, opponentSide);
+                if (board.pieceAt(CastlingTraits::kingStartSquare[opponentSide]) == theirKing)
+                {
+                    const Piece theirRook = Piece(PieceType::Rook, opponentSide);
+
+                    const Square shortRookSq = CastlingTraits::rookCastleSources[opponentSide][CastleType::Short];
+                    const Square longRookSq = CastlingTraits::rookCastleSources[opponentSide][CastleType::Long];
+
+                    if (rm.to == shortRookSq)
+                    {
+                        castlingRightsIfRookCapture |= CastlingTraits::castlingRights[opponentSide][CastleType::Short];
+                    }
+                    else if (rm.to == longRookSq)
+                    {
+                        castlingRightsIfRookCapture |= CastlingTraits::castlingRights[opponentSide][CastleType::Short];
+                    }
+                }
+            }
+
+            return { castlingRightsIfNotRookCapture, castlingRightsIfRookCapture };
         }
 
         [[nodiscard]] FixedVector<CastlingRights, 16> allCastlingRightsBetween(

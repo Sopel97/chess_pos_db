@@ -917,6 +917,11 @@ enum struct CastleType : std::uint8_t
     Long
 };
 
+[[nodiscard]] CastleType operator!(CastleType ct)
+{
+    return static_cast<CastleType>(static_cast<std::uint8_t>(ct) ^ 1);
+}
+
 template <>
 struct EnumTraits<CastleType>
 {
