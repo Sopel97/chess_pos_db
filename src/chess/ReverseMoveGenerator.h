@@ -777,7 +777,61 @@ namespace movegen
         FuncT&& func
     )
     {
+        constexpr Bitboard whiteSingleUnpushPawnsMask =
+            bb::rank3 | bb::rank4 | bb::rank5 | bb::rank6 | bb::rank7;
 
+        constexpr Bitboard blackSingleUnpushPawnsMask =
+            bb::rank2 | bb::rank3 | bb::rank4 | bb::rank5 | bb::rank6;
+
+        constexpr Bitboard whiteDoubleUnpushPawnsMask = bb::rank4;
+        constexpr Bitboard blackDoubleUnpushPawnsMask = bb::rank5;
+
+        const Color sideToUnmove = !pos.sideToMove();
+
+        const int forward =
+            sideToUnmove == Color::White
+            ? 1
+            : -1;
+
+        const FlatSquareOffset singlePawnUnpush = FlatSquareOffset(0, -forward);
+        const FlatSquareOffset doublePawnUnpush = FlatSquareOffset(0, -forward * 2);
+
+        const Bitboard singleUnpushPawnsMask =
+            sideToUnmove == Color::White
+            ? whiteSingleUnpushPawnsMask
+            : blackSingleUnpushPawnsMask;
+
+        const Bitboard doubleUnpushPawnsMask =
+            sideToUnmove == Color::White
+            ? whiteDoubleUnpushPawnsMask
+            : blackDoubleUnpushPawnsMask;
+
+        const Bitboard pieces = pos.piecesBB();
+        const Bitboard pawns = pos.piecesBB(Piece(PieceType::Pawn, sideToUnmove));
+
+        const Bitboard singleUnpushablePawns = 
+            pawns 
+            & ~pieces.shiftedVertically(forward) 
+            & singleUnpushPawnsMask;
+
+        const Bitboard doubleUnpushablePawns = 
+            singleUnpushablePawns 
+            & ~pieces.shiftedVertically(forward * 2) 
+            & doubleUnpushPawnsMask;
+
+        for (Square to : singleUnpushablePawns)
+        {
+            const Square from = to + singlePawnUnpush;
+            const Move move = Move::normal(from, to);
+            func(move);
+        }
+
+        for (Square to : doubleUnpushablePawns)
+        {
+            const Square from = to + doublePawnUnpush;
+            const Move move = Move::normal(from, to);
+            func(move);
+        }
     }
 
     template <typename FuncT>
