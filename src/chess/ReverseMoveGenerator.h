@@ -798,6 +798,16 @@ namespace movegen
         const FlatSquareOffset singlePawnUnpush = FlatSquareOffset(0, -forward);
         const FlatSquareOffset doublePawnUnpush = FlatSquareOffset(0, -forward * 2);
 
+        if (pos.epSquare() != Square::none())
+        {
+            // The move must have been a double pawn push.
+            const Square from = pos.epSquare() + singlePawnUnpush;
+            const Square to = pos.epSquare() + -singlePawnUnpush;
+            const Move move = Move::normal(from, to);
+            func(move);
+            return;
+        }
+
         const Bitboard singleUnpushPawnsMask =
             sideToUnmove == Color::White
             ? whiteSingleUnpushPawnsMask
@@ -877,6 +887,11 @@ namespace movegen
         FuncT&& func
     )
     {
+        if (pos.epSquare() != Square::none())
+        {
+            return;
+        }
+
         const Color sideToUnmove = !pos.sideToMove();
 
         const int forward =
@@ -960,7 +975,10 @@ namespace movegen
         FuncT&& func
     )
     {
-
+        if (pos.epSquare() != Square::none())
+        {
+            return;
+        }
     }
 
     template <PieceType PieceTypeV, typename FuncT>
@@ -971,6 +989,11 @@ namespace movegen
     {
         static_assert(PieceTypeV != PieceType::None);
         static_assert(PieceTypeV != PieceType::Pawn);
+
+        if (pos.epSquare() != Square::none())
+        {
+            return;
+        }
 
         const Color sideToUnmove = !pos.sideToMove();
         const Bitboard ourPieces = pos.piecesBB(sideToUnmove);

@@ -511,6 +511,17 @@ struct FlatSquareOffset
         ASSERT(files + ranks * cardinality<File>() >= std::numeric_limits<std::int8_t>::min());
         ASSERT(files + ranks * cardinality<File>() <= std::numeric_limits<std::int8_t>::max());
     }
+
+    constexpr FlatSquareOffset operator-() const noexcept
+    {
+        return FlatSquareOffset(-value);
+    }
+
+private:
+    constexpr FlatSquareOffset(int v) noexcept :
+        value(v)
+    {
+    }
 };
 
 struct Offset
