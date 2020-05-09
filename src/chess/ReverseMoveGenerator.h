@@ -963,6 +963,32 @@ namespace movegen
 
     }
 
+    template <PieceType PieceTypeV, typename FuncT>
+    void forEachPseudoLegalPieceReverseMove(
+        const Position& pos,
+        FuncT&& func
+    )
+    {
+        static_assert(PieceTypeV != PieceType::None);
+        static_assert(PieceTypeV != PieceType::Pawn);
+
+        const Color sideToUnmove = !pos.sideToMove();
+        const Bitboard ourPieces = pos.piecesBB(sideToUnmove);
+        const Bitboard theirPieces = pos.piecesBB(!sideToUnmove);
+        const Bitboard occupied = ourPieces | theirPieces;
+        const Bitboard pieces = pos.piecesBB(Piece(PieceTypeV, sideToUnmove));
+
+        for (Square to : pieces)
+        {
+            const Bitboard attacks = bb::attacks<PieceTypeV>(to, occupied) & ~ourPieces;
+            for (Square from : attacks)
+            {
+                Move move = Move::normal(from, to);
+                func(move);
+            }
+        }
+    }
+
     template <typename FuncT>
     void forEachPseudoLegalPawnReverseMove(detail::Permutator<FuncT>& permutator)
     {
@@ -987,6 +1013,12 @@ namespace movegen
                 fwd
             );
         }
+
+        forEachPseudoLegalPieceReverseMove<PieceType::Knight>(permutator.pos, fwd);
+        forEachPseudoLegalPieceReverseMove<PieceType::Bishop>(permutator.pos, fwd);
+        forEachPseudoLegalPieceReverseMove<PieceType::Rook>(permutator.pos, fwd);
+        forEachPseudoLegalPieceReverseMove<PieceType::Queen>(permutator.pos, fwd);
+        forEachPseudoLegalPieceReverseMove<PieceType::King>(permutator.pos, fwd);
     }
 
     template <typename FuncT>
