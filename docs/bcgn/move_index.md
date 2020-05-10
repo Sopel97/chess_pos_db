@@ -148,9 +148,19 @@ if (moved_piece.type == KING)
     return 2 + destination_index(KING, from_sq, to_sq)
 }
 
+offset = 2 + 8
+
+// Add up upper bounds for lower piece types
+for each piece_type lower than moved_piece.type
+{
+    offset +=
+        popcount(pos.piecesBB(piece_type, pos.side_to_move))
+        * max_moves_on_empty_board(piece_type)
+}
+
+// Add up upper bounds for all pieces of the same type before the one that moved.
 num_same_pieces_before = popcount(pos.piecesBB(moved_piece) & before_bb(from_sq))
-local_offset = max_moves_on_empty_board(moved_piece.type) * num_same_pieces_before
-offset = 2 + 8 + localOffset
+offset += max_moves_on_empty_board(moved_piece.type) * num_same_pieces_before
 
 // now we have to compute the destination index and add it to the offset
 if (moved_piece.type == PAWN)
