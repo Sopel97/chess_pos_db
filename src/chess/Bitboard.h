@@ -533,6 +533,171 @@ private:
 
 namespace bb
 {
+    namespace fancy_magics
+    {
+        // Implementation based on https://github.com/syzygy1/Cfish
+
+        alignas(64) constexpr EnumArray<Square, std::uint64_t> g_rookMagics{ {
+            0x0A80004000801220ull,
+            0x8040004010002008ull,
+            0x2080200010008008ull,
+            0x1100100008210004ull,
+            0xC200209084020008ull,
+            0x2100010004000208ull,
+            0x0400081000822421ull,
+            0x0200010422048844ull,
+            0x0800800080400024ull,
+            0x0001402000401000ull,
+            0x3000801000802001ull,
+            0x4400800800100083ull,
+            0x0904802402480080ull,
+            0x4040800400020080ull,
+            0x0018808042000100ull,
+            0x4040800080004100ull,
+            0x0040048001458024ull,
+            0x00A0004000205000ull,
+            0x3100808010002000ull,
+            0x4825010010000820ull,
+            0x5004808008000401ull,
+            0x2024818004000A00ull,
+            0x0005808002000100ull,
+            0x2100060004806104ull,
+            0x0080400880008421ull,
+            0x4062220600410280ull,
+            0x010A004A00108022ull,
+            0x0000100080080080ull,
+            0x0021000500080010ull,
+            0x0044000202001008ull,
+            0x0000100400080102ull,
+            0xC020128200040545ull,
+            0x0080002000400040ull,
+            0x0000804000802004ull,
+            0x0000120022004080ull,
+            0x010A386103001001ull,
+            0x9010080080800400ull,
+            0x8440020080800400ull,
+            0x0004228824001001ull,
+            0x000000490A000084ull,
+            0x0080002000504000ull,
+            0x200020005000C000ull,
+            0x0012088020420010ull,
+            0x0010010080080800ull,
+            0x0085001008010004ull,
+            0x0002000204008080ull,
+            0x0040413002040008ull,
+            0x0000304081020004ull,
+            0x0080204000800080ull,
+            0x3008804000290100ull,
+            0x1010100080200080ull,
+            0x2008100208028080ull,
+            0x5000850800910100ull,
+            0x8402019004680200ull,
+            0x0120911028020400ull,
+            0x0000008044010200ull,
+            0x0020850200244012ull,
+            0x0020850200244012ull,
+            0x0000102001040841ull,
+            0x140900040A100021ull,
+            0x000200282410A102ull,
+            0x000200282410A102ull,
+            0x000200282410A102ull,
+            0x4048240043802106ull
+                } };
+        alignas(64) extern EnumArray<Square, Bitboard> g_rookMasks;
+        alignas(64) extern EnumArray<Square, std::uint8_t> g_rookShifts;
+        alignas(64) extern EnumArray<Square, const Bitboard*> g_rookAttacks;
+
+        alignas(64) constexpr EnumArray<Square, std::uint64_t> g_bishopMagics{ {
+            0x40106000A1160020ull,
+            0x0020010250810120ull,
+            0x2010010220280081ull,
+            0x002806004050C040ull,
+            0x0002021018000000ull,
+            0x2001112010000400ull,
+            0x0881010120218080ull,
+            0x1030820110010500ull,
+            0x0000120222042400ull,
+            0x2000020404040044ull,
+            0x8000480094208000ull,
+            0x0003422A02000001ull,
+            0x000A220210100040ull,
+            0x8004820202226000ull,
+            0x0018234854100800ull,
+            0x0100004042101040ull,
+            0x0004001004082820ull,
+            0x0010000810010048ull,
+            0x1014004208081300ull,
+            0x2080818802044202ull,
+            0x0040880C00A00100ull,
+            0x0080400200522010ull,
+            0x0001000188180B04ull,
+            0x0080249202020204ull,
+            0x1004400004100410ull,
+            0x00013100A0022206ull,
+            0x2148500001040080ull,
+            0x4241080011004300ull,
+            0x4020848004002000ull,
+            0x10101380D1004100ull,
+            0x0008004422020284ull,
+            0x01010A1041008080ull,
+            0x0808080400082121ull,
+            0x0808080400082121ull,
+            0x0091128200100C00ull,
+            0x0202200802010104ull,
+            0x8C0A020200440085ull,
+            0x01A0008080B10040ull,
+            0x0889520080122800ull,
+            0x100902022202010Aull,
+            0x04081A0816002000ull,
+            0x0000681208005000ull,
+            0x8170840041008802ull,
+            0x0A00004200810805ull,
+            0x0830404408210100ull,
+            0x2602208106006102ull,
+            0x1048300680802628ull,
+            0x2602208106006102ull,
+            0x0602010120110040ull,
+            0x0941010801043000ull,
+            0x000040440A210428ull,
+            0x0008240020880021ull,
+            0x0400002012048200ull,
+            0x00AC102001210220ull,
+            0x0220021002009900ull,
+            0x84440C080A013080ull,
+            0x0001008044200440ull,
+            0x0004C04410841000ull,
+            0x2000500104011130ull,
+            0x1A0C010011C20229ull,
+            0x0044800112202200ull,
+            0x0434804908100424ull,
+            0x0300404822C08200ull,
+            0x48081010008A2A80ull
+        } };
+        alignas(64) extern EnumArray<Square, Bitboard> g_bishopMasks;
+        alignas(64) extern EnumArray<Square, std::uint8_t> g_bishopShifts;
+        alignas(64) extern EnumArray<Square, const Bitboard*> g_bishopAttacks;
+
+        inline Bitboard bishopAttacks(Square s, Bitboard occupied)
+        {
+            const std::size_t idx =
+                (occupied & fancy_magics::g_bishopMasks[s]).bits()
+                * fancy_magics::g_bishopMagics[s]
+                >> fancy_magics::g_bishopShifts[s];
+
+            return fancy_magics::g_bishopAttacks[s][idx];
+        }
+
+        inline Bitboard rookAttacks(Square s, Bitboard occupied)
+        {
+            const std::size_t idx = 
+                (occupied & fancy_magics::g_rookMasks[s]).bits()
+                * fancy_magics::g_rookMagics[s]
+                >> fancy_magics::g_rookShifts[s];
+
+            return fancy_magics::g_rookAttacks[s][idx];
+        }
+    }
+
     [[nodiscard]] constexpr Bitboard square(Square sq)
     {
         return Bitboard::square(sq);
@@ -661,9 +826,48 @@ namespace bb
     [[nodiscard]] Bitboard pseudoAttacks(PieceType pt, Square sq);
 
     template <PieceType PieceTypeV>
-    [[nodiscard]] Bitboard attacks(Square sq, Bitboard occupied);
+    Bitboard attacks(Square sq, Bitboard occupied)
+    {
+        static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
 
-    [[nodiscard]] Bitboard attacks(PieceType pt, Square sq, Bitboard occupied);
+        ASSERT(sq.isOk());
+
+        if constexpr (PieceTypeV == PieceType::Bishop)
+        {
+            return fancy_magics::bishopAttacks(sq, occupied);
+        }
+        else if constexpr (PieceTypeV == PieceType::Rook)
+        {
+            return fancy_magics::rookAttacks(sq, occupied);
+        }
+        else if constexpr (PieceTypeV == PieceType::Queen)
+        {
+            return
+                fancy_magics::bishopAttacks(sq, occupied)
+                | fancy_magics::rookAttacks(sq, occupied);
+        }
+        else
+        {
+            return pseudoAttacks<PieceTypeV>(sq);
+        }
+    }
+
+    [[nodiscard]] inline Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
+    {
+        ASSERT(sq.isOk());
+
+        switch (pt)
+        {
+        case PieceType::Bishop:
+            return attacks<PieceType::Bishop>(sq, occupied);
+        case PieceType::Rook:
+            return attacks<PieceType::Rook>(sq, occupied);
+        case PieceType::Queen:
+            return attacks<PieceType::Queen>(sq, occupied);
+        default:
+            return pseudoAttacks(pt, sq);
+        }
+    }
 
     [[nodiscard]] Bitboard pawnAttacks(Bitboard pawns, Color color);
 

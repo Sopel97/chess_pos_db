@@ -267,6 +267,46 @@ namespace bb
         template Bitboard slidingAttacks<Direction::West>(Square, Bitboard);
         template Bitboard slidingAttacks<Direction::NorthWest>(Square, Bitboard);
 
+        template <PieceType PieceTypeV>
+        [[nodiscard]] Bitboard pieceSlidingAttacks(Square sq, Bitboard occupied)
+        {
+            static_assert(
+                PieceTypeV == PieceType::Rook
+                || PieceTypeV == PieceType::Bishop
+                || PieceTypeV == PieceType::Queen);
+
+            ASSERT(sq.isOk());
+
+            if constexpr (PieceTypeV == PieceType::Bishop)
+            {
+                return
+                    detail::slidingAttacks<detail::NorthEast>(sq, occupied)
+                    | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
+                    | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
+                    | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
+            }
+            else if constexpr (PieceTypeV == PieceType::Rook)
+            {
+                return
+                    detail::slidingAttacks<detail::North>(sq, occupied)
+                    | detail::slidingAttacks<detail::East>(sq, occupied)
+                    | detail::slidingAttacks<detail::South>(sq, occupied)
+                    | detail::slidingAttacks<detail::West>(sq, occupied);
+            }
+            else // if constexpr (PieceTypeV == PieceType::Queen)
+            {
+                return
+                    detail::slidingAttacks<detail::North>(sq, occupied)
+                    | detail::slidingAttacks<detail::NorthEast>(sq, occupied)
+                    | detail::slidingAttacks<detail::East>(sq, occupied)
+                    | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
+                    | detail::slidingAttacks<detail::South>(sq, occupied)
+                    | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
+                    | detail::slidingAttacks<detail::West>(sq, occupied)
+                    | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
+            }
+        }
+
         static Bitboard generateBetween(Square s1, Square s2)
         {
             Bitboard bb = Bitboard::none();
@@ -342,6 +382,88 @@ namespace bb
         }();
     }
 
+    namespace fancy_magics
+    {
+        enum struct MagicsType
+        {
+            Rook,
+            Bishop
+        };
+
+        alignas(64) EnumArray<Square, Bitboard> g_rookMasks;
+        alignas(64) EnumArray<Square, std::uint8_t> g_rookShifts;
+        alignas(64) EnumArray<Square, const Bitboard*> g_rookAttacks;
+
+        alignas(64) EnumArray<Square, Bitboard> g_bishopMasks;
+        alignas(64) EnumArray<Square, std::uint8_t> g_bishopShifts;
+        alignas(64) EnumArray<Square, const Bitboard*> g_bishopAttacks;
+
+        alignas(64) static std::array<Bitboard, 102400> g_allRookAttacks;
+        alignas(64) static std::array<Bitboard, 5248> g_allBishopAttacks;
+
+        template <MagicsType TypeV>
+        [[nodiscard]] Bitboard slidingAttacks(Square sq, Bitboard occupied)
+        {
+            if (TypeV == MagicsType::Rook)
+            {
+                return ::bb::detail::pieceSlidingAttacks<PieceType::Rook>(sq, occupied);
+            }
+
+            if (TypeV == MagicsType::Bishop)
+            {
+                return ::bb::detail::pieceSlidingAttacks<PieceType::Bishop>(sq, occupied);
+            }
+
+            return Bitboard::none();
+        }
+
+        template <MagicsType TypeV, std::size_t SizeV>
+        [[nodiscard]] bool initMagics(
+            const EnumArray<Square, std::uint64_t>& magics,
+            std::array<Bitboard, SizeV>& table,
+            EnumArray<Square, Bitboard>& masks,
+            EnumArray<Square, std::uint8_t>& shifts,
+            EnumArray<Square, const Bitboard*>& attacks
+        )
+        {
+            std::size_t size = 0;
+            for (Square sq : values<Square>()) 
+            {
+                const Bitboard edges =
+                    ((bb::rank1 | bb::rank8) & ~Bitboard::rank(sq.rank()))
+                    | ((bb::fileA | bb::fileH) & ~Bitboard::file(sq.file()));
+
+                Bitboard* currentAttacks = table.data() + size;
+
+                attacks[sq] = currentAttacks;
+                masks[sq] = slidingAttacks<TypeV>(sq, Bitboard::none()) & ~edges;
+                shifts[sq] = 64 - masks[sq].count();
+
+                Bitboard occupied = Bitboard::none();
+                do 
+                {
+                    const std::size_t idx = 
+                        (occupied & masks[sq]).bits()
+                        * magics[sq] 
+                        >> shifts[sq];
+
+                    currentAttacks[idx] = slidingAttacks<TypeV>(sq, occupied);
+
+                    ++size;
+                    occupied = Bitboard::fromBits(occupied.bits() - masks[sq].bits()) & masks[sq];
+                } while (occupied.any());
+            }
+
+            return true;
+        }
+
+        static bool g_isRookMagicsInitialized = 
+            initMagics<MagicsType::Rook>(g_rookMagics, g_allRookAttacks, g_rookMasks, g_rookShifts, g_rookAttacks);
+
+        static bool g_isBishopMagicsInitialized = 
+            initMagics<MagicsType::Bishop>(g_bishopMagics, g_allBishopAttacks, g_bishopMasks, g_bishopShifts, g_bishopAttacks);
+    }
+
     [[nodiscard]] Bitboard between(Square s1, Square s2)
     {
         return detail::between[s1][s2];
@@ -373,70 +495,6 @@ namespace bb
         ASSERT(sq.isOk());
 
         return detail::pseudoAttacks[pt][sq];
-    }
-
-    template <PieceType PieceTypeV>
-    [[nodiscard]] Bitboard attacks(Square sq, Bitboard occupied)
-    {
-        static_assert(PieceTypeV != PieceType::None && PieceTypeV != PieceType::Pawn);
-
-        ASSERT(sq.isOk());
-
-        if constexpr (PieceTypeV == PieceType::Bishop)
-        {
-            return
-                detail::slidingAttacks<detail::NorthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
-                | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
-        }
-        else if constexpr (PieceTypeV == PieceType::Rook)
-        {
-            return
-                detail::slidingAttacks<detail::North>(sq, occupied)
-                | detail::slidingAttacks<detail::East>(sq, occupied)
-                | detail::slidingAttacks<detail::South>(sq, occupied)
-                | detail::slidingAttacks<detail::West>(sq, occupied);
-        }
-        else if constexpr (PieceTypeV == PieceType::Queen)
-        {
-            return
-                detail::slidingAttacks<detail::North>(sq, occupied)
-                | detail::slidingAttacks<detail::NorthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::East>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthEast>(sq, occupied)
-                | detail::slidingAttacks<detail::South>(sq, occupied)
-                | detail::slidingAttacks<detail::SouthWest>(sq, occupied)
-                | detail::slidingAttacks<detail::West>(sq, occupied)
-                | detail::slidingAttacks<detail::NorthWest>(sq, occupied);
-        }
-        else
-        {
-            return pseudoAttacks<PieceTypeV>(sq);
-        }
-    }
-
-    template Bitboard attacks<PieceType::Knight>(Square, Bitboard);
-    template Bitboard attacks<PieceType::Bishop>(Square, Bitboard);
-    template Bitboard attacks<PieceType::Rook>(Square, Bitboard);
-    template Bitboard attacks<PieceType::Queen>(Square, Bitboard);
-    template Bitboard attacks<PieceType::King>(Square, Bitboard);
-
-    [[nodiscard]] Bitboard attacks(PieceType pt, Square sq, Bitboard occupied)
-    {
-        ASSERT(sq.isOk());
-
-        switch (pt)
-        {
-        case PieceType::Bishop:
-            return attacks<PieceType::Bishop>(sq, occupied);
-        case PieceType::Rook:
-            return attacks<PieceType::Rook>(sq, occupied);
-        case PieceType::Queen:
-            return attacks<PieceType::Queen>(sq, occupied);
-        default:
-            return pseudoAttacks(pt, sq);
-        }
     }
 
     [[nodiscard]] Bitboard pawnAttacks(Bitboard pawns, Color color)
