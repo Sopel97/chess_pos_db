@@ -979,6 +979,59 @@ namespace movegen
         {
             return;
         }
+
+        const Color sideToUnmove = !pos.sideToMove();
+
+        const int forward =
+            sideToUnmove == Color::White
+            ? 1
+            : -1;
+
+        const Bitboard epSquareRank =
+            sideToUnmove == Color::White
+            ? bb::rank6
+            : bb::rank3;
+
+        const Bitboard pieces = pos.piecesBB();
+        const Bitboard pawns = pos.piecesBB(Piece(PieceType::Pawn, sideToUnmove));
+
+        const Bitboard pawnsThatMayHaveCapturedEnPassant =
+            pawns
+            & epSquareRank
+            & ~pieces.shiftedVertically(1) // the square above and below the ep square has to be empty
+            & ~pieces.shiftedVertically(-1);
+
+        if (pawnsThatMayHaveCapturedEnPassant.isEmpty())
+        {
+            return;
+        }
+
+        const Offset eastCapture = Offset(1, forward);
+        const Offset westCapture = Offset(-1, forward);
+        const FlatSquareOffset eastUncapture = (-eastCapture).flat();
+        const FlatSquareOffset westUncapture = (-westCapture).flat();
+
+        const Bitboard pawnsThatMayHaveCapturedEastEnPassant =
+            pawnsThatMayHaveCapturedEnPassant
+            & ~pieces.shifted(eastCapture);
+
+        const Bitboard pawnsThatMayHaveCapturedWestEnPassant =
+            pawnsThatMayHaveCapturedEnPassant
+            & ~pieces.shifted(westCapture);
+
+        for (Square to : pawnsThatMayHaveCapturedEastEnPassant)
+        {
+            const Square from = to + eastUncapture;
+            const Move move = Move::enPassant(from, to);
+            func(move);
+        }
+
+        for (Square to : pawnsThatMayHaveCapturedWestEnPassant)
+        {
+            const Square from = to + westUncapture;
+            const Move move = Move::enPassant(from, to);
+            func(move);
+        }
     }
 
     template <PieceType PieceTypeV, typename FuncT>
