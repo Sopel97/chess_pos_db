@@ -461,21 +461,6 @@ namespace persistence
             ) override;
 
             ImportStats import(
-                std::execution::parallel_unsequenced_policy,
-                const ImportableFiles& files,
-                std::size_t memory,
-                std::size_t numThreads = std::thread::hardware_concurrency(),
-                ImportProgressCallback progressCallback = {}
-            ) override;
-
-            ImportStats import(
-                std::execution::sequenced_policy,
-                const ImportableFiles& files,
-                std::size_t memory,
-                ImportProgressCallback progressCallback = {}
-            ) override;
-
-            ImportStats import(
                 const ImportableFiles& files,
                 std::size_t memory,
                 ImportProgressCallback progressCallback = {}
@@ -525,31 +510,9 @@ namespace persistence
             [[nodiscard]] std::vector<detail::Key> getKeys(const query::PositionQueries& queries);
 
             ImportStats importImpl(
-                std::execution::sequenced_policy,
                 detail::AsyncStorePipeline& pipeline,
                 const ImportableFiles& files,
                 std::function<void(const std::filesystem::path& file)> completionCallback
-            );
-
-            struct Block
-            {
-                typename ImportableFiles::const_iterator begin;
-                typename ImportableFiles::const_iterator end;
-                std::uint32_t nextId;
-            };
-
-            [[nodiscard]] std::vector<Block> divideIntoBlocks(
-                const ImportableFiles& files,
-                std::size_t bufferSize,
-                std::size_t numBlocks
-            );
-
-            ImportStats importImpl(
-                std::execution::parallel_unsequenced_policy,
-                detail::AsyncStorePipeline& pipeline,
-                const ImportableFiles& files,
-                std::size_t bufferSize,
-                std::size_t numThreads
             );
 
             void store(
@@ -560,18 +523,6 @@ namespace persistence
             void store(
                 detail::AsyncStorePipeline& pipeline,
                 std::vector<detail::Entry>&& entries
-            );
-
-            void store(
-                detail::AsyncStorePipeline& pipeline,
-                std::vector<detail::Entry>& entries,
-                std::uint32_t id
-            );
-
-            void store(
-                detail::AsyncStorePipeline& pipeline,
-                std::vector<detail::Entry>&& entries,
-                std::uint32_t id
             );
         };
     }

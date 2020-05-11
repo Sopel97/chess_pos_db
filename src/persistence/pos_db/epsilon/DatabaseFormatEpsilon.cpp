@@ -915,59 +915,6 @@ namespace persistence
         }
 
         ImportStats Database::import(
-            std::execution::parallel_unsequenced_policy,
-            const ImportableFiles& files,
-            std::size_t memory,
-            std::size_t numThreads,
-            Database::ImportProgressCallback progressCallback
-            )
-        {
-            // TODO: progress reporting
-
-            if (files.empty())
-            {
-                return {};
-            }
-
-            if (numThreads <= 4)
-            {
-                return import(std::execution::seq, files, memory);
-            }
-
-            const std::size_t numWorkerThreads = numThreads / 4;
-            const std::size_t numSortingThreads = numThreads - numWorkerThreads;
-
-            const std::size_t numBuffers = numWorkerThreads;
-
-            const std::size_t numAdditionalBuffers = numBuffers * 4;
-
-            const std::size_t bucketSize =
-                ext::numObjectsPerBufferUnit<detail::Entry>(
-                    memory,
-                    numBuffers + numAdditionalBuffers
-                    );
-
-            detail::AsyncStorePipeline pipeline(
-                detail::createBuffers<detail::Entry>(numBuffers + numAdditionalBuffers, bucketSize),
-                numSortingThreads
-            );
-
-            // We do different game levels sequentially because
-            // importing is parallelized on file granularity.
-            ImportStats stats = importImpl(std::execution::par_unseq, pipeline, files, bucketSize, numWorkerThreads);
-
-            pipeline.waitForCompletion();
-            collectFutureFiles();
-
-            flush();
-
-            BaseType::addStats(stats);
-
-            return stats;
-        }
-
-        ImportStats Database::import(
-            std::execution::sequenced_policy,
             const ImportableFiles& files,
             std::size_t memory,
             Database::ImportProgressCallback progressCallback
@@ -1004,7 +951,6 @@ namespace persistence
 
             Logger::instance().logInfo(": Importing files...");
             ImportStats statsTotal = importImpl(
-                std::execution::seq,
                 pipeline,
                 files,
                 [&progressCallback, &totalSize, &totalSizeProcessed](auto&& file) {
@@ -1041,11 +987,6 @@ namespace persistence
             BaseType::addStats(statsTotal);
 
             return statsTotal;
-        }
-
-        ImportStats Database::import(const ImportableFiles& files, std::size_t memory, Database::ImportProgressCallback progressCallback)
-        {
-            return import(std::execution::seq, files, memory, progressCallback);
         }
 
         void Database::flush()
@@ -1113,7 +1054,6 @@ namespace persistence
         }
 
         ImportStats Database::importImpl(
-            std::execution::sequenced_policy,
             detail::AsyncStorePipeline& pipeline,
             const ImportableFiles& files,
             std::function<void(const std::filesystem::path& file)> completionCallback
@@ -1235,249 +1175,6 @@ namespace persistence
             return stats;
         }
 
-        [[nodiscard]] std::vector<Database::Block> Database::divideIntoBlocks(
-            const ImportableFiles& files,
-            std::size_t bufferSize,
-            std::size_t numBlocks
-        )
-        {
-            constexpr std::size_t minPgnBytesPerMove = 4;
-            constexpr std::size_t minBcgnBytesPerMove = 1;
-
-            // We compute the total size of the files
-            std::vector<std::size_t> fileSizes;
-            fileSizes.reserve(files.size());
-            std::size_t totalFileSize = 0;
-            for (auto& file : files)
-            {
-                const std::size_t size = std::filesystem::file_size(file.path());
-                totalFileSize += size;
-                fileSizes.emplace_back(size);
-            }
-
-            // and try to divide it as equal as possible into exactly numBlocks blocks
-            const std::size_t blockSizeThreshold = ext::ceilDiv(totalFileSize, numBlocks);
-
-            std::vector<Block> blocks;
-            blocks.reserve(numBlocks);
-            {
-                // we prepare the next free file id for each file
-                // and store just one global offset because we 
-                // don't know the distribution of the games
-                // and have to assume that all positions could go
-                // into one file
-                std::uint32_t idOffset = 0;
-                std::uint32_t baseNextId = m_partition.nextId();
-
-                std::size_t blockSize = 0;
-                std::size_t maxNumberOfMovesInBlock = 0;
-                auto start = files.begin();
-                for (int i = 0; i < files.size(); ++i)
-                {
-                    blockSize += fileSizes[i];
-
-                    const auto minBytesPerMove =
-                        files[i].type() == ImportableFileType::Pgn
-                        ? minPgnBytesPerMove
-                        : minBcgnBytesPerMove;
-                    maxNumberOfMovesInBlock += (fileSizes[i] / minBytesPerMove) + 1u;
-
-                    if (blockSize >= blockSizeThreshold)
-                    {
-                        // here we apply the offset
-                        std::uint32_t nextIds = baseNextId + idOffset;
-
-                        // store the block of desired size
-                        auto end = files.begin() + i;
-                        blocks.emplace_back(Block{ start, end, nextIds });
-                        start = end;
-                        idOffset += static_cast<std::uint32_t>(maxNumberOfMovesInBlock / bufferSize) + 1u;
-                        blockSize = 0;
-                        maxNumberOfMovesInBlock = 0;
-                    }
-                }
-
-                // if anything is left over we have to handle it here as in the
-                // loop we only handle full blocks; last one may be only partially full
-                if (start != files.end())
-                {
-                    std::uint32_t nextId = baseNextId + idOffset;
-                    blocks.emplace_back(Block{ start, files.end(), nextId });
-                }
-
-                ASSERT(blocks.size() <= numBlocks);
-
-                blocks.resize(numBlocks);
-
-                ASSERT(blocks.size() == numBlocks);
-            }
-
-            return blocks;
-        }
-
-        ImportStats Database::importImpl(
-            std::execution::parallel_unsequenced_policy,
-            detail::AsyncStorePipeline& pipeline,
-            const ImportableFiles& files,
-            std::size_t bufferSize,
-            std::size_t numThreads
-        )
-        {
-            const auto blocks = divideIntoBlocks(files, bufferSize, numThreads);
-
-            // Here almost everything is as in the sequential algorithm.
-            // Synchronization is handled in deeper layers.
-            // We only have to force file ids (info kept in blocks) to
-            // ensure proper order of resulting files.
-            auto work = [&](const Block& block) {
-
-                std::vector<detail::Entry> entries = pipeline.getEmptyBuffer();
-
-                auto processPosition = [this, &pipeline, &entries](
-                    const PositionWithZobrist& position,
-                    const ReverseMove& reverseMove,
-                    GameLevel level,
-                    GameResult result,
-                    std::uint32_t& nextId
-                    ) {
-                    entries.emplace_back(position, reverseMove, level, result);
-
-                    if (entries.size() == entries.capacity())
-                    {
-                        // Here we force the id and move to the next one.
-                        // This doesn't have to be atomic since we're the only
-                        // ones using this blocks and there is enough space left for
-                        // all files before the next already present id.
-                        store(pipeline, entries, nextId++);
-                    }
-                };
-
-                ImportStats stats{};
-                auto [begin, end, nextId] = block;
-
-                for (; begin != end; ++begin)
-                {
-                    auto& file = *begin;
-                    const auto& path = file.path();
-                    const auto level = file.level();
-                    const auto type = file.type();
-
-                    if (type == ImportableFileType::Pgn)
-                    {
-                        pgn::LazyPgnFileReader fr(path, m_pgnParserMemory.bytes());
-                        if (!fr.isOpen())
-                        {
-                            Logger::instance().logError("Failed to open file ", path);
-                            break;
-                        }
-
-                        for (auto& game : fr)
-                        {
-                            const std::optional<GameResult> result = game.result();
-                            if (!result.has_value())
-                            {
-                                stats.statsByLevel[level].numSkippedGames += 1;
-                                continue;
-                            }
-
-                            std::size_t numPositionsInGame = 0;
-
-                            PositionWithZobrist position = PositionWithZobrist::startPosition();
-                            ReverseMove reverseMove{};
-                            processPosition(position, reverseMove, level, *result, nextId);
-                            for (auto& san : game.moves())
-                            {
-                                const Move move = san::sanToMove(position, san);
-                                if (move == Move::null())
-                                {
-                                    break;
-                                }
-
-                                reverseMove = position.doMove(move);
-                                processPosition(position, reverseMove, level, *result, nextId);
-                            }
-
-                            ASSERT(numPositionsInGame > 0);
-
-                            stats.statsByLevel[level].numGames += 1;
-                            stats.statsByLevel[level].numPositions += numPositionsInGame;
-                        }
-                    }
-                    else if (type == ImportableFileType::Bcgn)
-                    {
-                        bcgn::BcgnFileReader fr(path, m_bcgnParserMemory.bytes());
-                        if (!fr.isOpen())
-                        {
-                            Logger::instance().logError("Failed to open file ", path);
-                            break;
-                        }
-
-                        for (auto& game : fr)
-                        {
-                            const std::optional<GameResult> result = game.result();
-                            if (!result.has_value())
-                            {
-                                stats.statsByLevel[level].numSkippedGames += 1;
-                                continue;
-                            }
-
-                            PositionWithZobrist position = PositionWithZobrist::startPosition();
-                            ReverseMove reverseMove{};
-                            processPosition(position, reverseMove, level, *result, nextId);
-                            auto moves = game.moves();
-                            while(moves.hasNext())
-                            {
-                                const Move move = moves.next(position);
-                                reverseMove = position.doMove(move);
-                                processPosition(position, reverseMove, level, *result, nextId);
-                            }
-
-                            stats.statsByLevel[level].numGames += 1;
-                            stats.statsByLevel[level].numPositions += game.numPlies() + 1;
-                        }
-                    }
-                    else
-                    {
-                        Logger::instance().logError("Importing files other than PGN or BCGN is not supported by db_epsilon.");
-                        throw std::runtime_error("Importing files other than PGN or BCGN is not supported by db_epsilon.");
-                    }
-                }
-
-                // flush buffers and return them to the pipeline for later use
-                store(pipeline, std::move(entries), nextId);
-
-                return stats;
-            };
-
-            // Schedule the work
-            std::vector<std::future<ImportStats>> futureStats;
-            futureStats.reserve(blocks.size());
-            for (int i = 1; i < blocks.size(); ++i)
-            {
-                const auto& block = blocks[i];
-                if (block.begin == block.end)
-                {
-                    continue;
-                }
-                futureStats.emplace_back(std::async(std::launch::async, work, block));
-            }
-
-            ImportStats totalStats{};
-            // and wait for completion, gather stats.
-            // One worker is run in the main thread.
-            if (!blocks.empty())
-            {
-                totalStats += work(blocks.front());
-            }
-
-            for (auto& f : futureStats)
-            {
-                totalStats += f.get();
-            }
-
-            return totalStats;
-        }
-
         void Database::store(
             detail::AsyncStorePipeline& pipeline,
             std::vector<detail::Entry>& entries
@@ -1504,44 +1201,6 @@ namespace persistence
             }
 
             m_partition.storeUnordered(pipeline, std::move(entries));
-        }
-
-        void Database::store(
-            detail::AsyncStorePipeline& pipeline,
-            std::vector<detail::Entry>& entries,
-            std::uint32_t id
-        )
-        {
-            // Here we force the id - it's helpful when we need more control.
-            // For example when access is not sequential.
-            // It is required that the file with this id does not exist already.
-
-            if (entries.empty())
-            {
-                return;
-            }
-
-            auto newBuffer = pipeline.getEmptyBuffer();
-            entries.swap(newBuffer);
-            m_partition.storeUnordered(pipeline, std::move(newBuffer), id);
-        }
-
-        void Database::store(
-            detail::AsyncStorePipeline& pipeline,
-            std::vector<detail::Entry>&& entries,
-            std::uint32_t id
-        )
-        {
-            // Here we force the id - it's helpful when we need more control.
-            // For example when access is not sequential.
-            // It is required that the file with this id does not exist already.
-
-            if (entries.empty())
-            {
-                return;
-            }
-
-            m_partition.storeUnordered(pipeline, std::move(entries), id);
         }
     }
 }

@@ -155,21 +155,6 @@ namespace persistence
         ) = 0;
 
         virtual ImportStats import(
-            std::execution::parallel_unsequenced_policy,
-            const ImportableFiles& pgns,
-            std::size_t memory,
-            std::size_t numThreads = std::thread::hardware_concurrency(),
-            ImportProgressCallback progressCallback = {}
-        ) = 0;
-
-        virtual ImportStats import(
-            std::execution::sequenced_policy,
-            const ImportableFiles& pgns,
-            std::size_t memory,
-            ImportProgressCallback progressCallback = {}
-        ) = 0;
-
-        virtual ImportStats import(
             const ImportableFiles& pgns, 
             std::size_t memory,
             ImportProgressCallback progressCallback = {}
