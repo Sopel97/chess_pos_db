@@ -2045,8 +2045,6 @@ namespace ext
         {
             using InputRange = ContainerIterRange<ImmutableSpan<T>>;
 
-            ASSERT(outputBufferSize * sizeof(T) < maxMemoryBytes);
-
             const std::size_t outputBufferElements = outputBufferSize.elements<T>() / 2 + 1;
 
             BinaryOutputFile outFile(outPath);
