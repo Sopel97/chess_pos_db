@@ -1295,6 +1295,19 @@ struct ReverseMove
     }
 
     [[nodiscard]] constexpr CompressedReverseMove compress() const noexcept;
+
+    [[nodiscard]] constexpr friend bool operator==(const ReverseMove& lhs, const ReverseMove& rhs) noexcept
+    {
+        return lhs.move == rhs.move
+            && lhs.capturedPiece == rhs.capturedPiece
+            && lhs.oldEpSquare == rhs.oldEpSquare
+            && lhs.oldCastlingRights == rhs.oldCastlingRights;
+    }
+
+    [[nodiscard]] constexpr friend bool operator!=(const ReverseMove& lhs, const ReverseMove& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
 };
 
 static_assert(sizeof(ReverseMove) == 7);
