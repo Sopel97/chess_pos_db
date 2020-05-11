@@ -1105,6 +1105,8 @@ namespace movegen
         forEachPseudoLegalPawnReverseMove(permutator);
     }
 
+    // NOTE: currently doesn't generate reverse castling moves and doesn't
+    //       check if old en-passant square was possible.
     template <typename FuncT>
     void forEachPseudoLegalReverseMove(const Position& pos, const PieceSet& startPieceSet, FuncT&& func)
     {
@@ -1113,6 +1115,8 @@ namespace movegen
         forEachPseudoLegalReverseMove(permutator);
     }
 
+    // NOTE: currently doesn't generate reverse castling moves and doesn't
+    //       check if old en-passant square was possible.
     template <typename FuncT>
     void forEachPseudoLegalReverseMove(const Position& pos, FuncT&& func)
     {
