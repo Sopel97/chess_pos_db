@@ -37,4 +37,6 @@ The is only one partition - directory /data
 
 The partition can contain many files.
 
-Even though this format uses more space for a single position than the alpha format it starts using less when the number of positions hits ~1 billion. Empirical data shows usage of an average o 17.5 bytes per position when there is ~6 billion positions.
+It's currently practically limited to 4 billion games by the header storage scheme, but it may change in the future.
+
+This format is more efficient the more duplicated positions there are. Empirical data shows usage of an average o 17.5 bytes per position when there is ~6 billion positions.

@@ -22,7 +22,7 @@ Some tags and other values from each pgn game imported are stored in a packed ma
     - white
     - black
 
-\_index files store 8B offsets into the \_header file. A value in position i of the \_index file is the offset of the entry in \_header file of the ith game. (Alpha format uses indirect access through index, beta format uses direct access through offsets for example)
+\_index files store 8B offsets into the \_header file. A value in position i of the \_index file is the offset of the entry in \_header file of the ith game. (Delta format uses indirect access through index, beta format uses direct access through offsets for example)
 
 
 #Manifest
