@@ -132,7 +132,7 @@ namespace eran
             if (moveSv[0] == 'x')
             {
                 moveSv.remove_prefix(1);
-                if (!parser_bits::isSquare(sv.data()))
+                if (!parser_bits::isSquare(moveSv.data()))
                 {
                     // captured piece type
                     capturedPieceType = *EnumTraits<PieceType>::fromChar(moveSv[0]);
@@ -174,9 +174,12 @@ namespace eran
             move.type = MoveType::EnPassant;
         }
 
-        ReverseMove rm;
+        ReverseMove rm{};
         rm.move = move;
-        rm.capturedPiece = Piece(capturedPieceType, pos.sideToMove());
+        if (capturedPieceType != PieceType::None)
+        {
+            rm.capturedPiece = Piece(capturedPieceType, pos.sideToMove());
+        }
         rm.oldCastlingRights = oldCastlingRights;
         rm.oldEpSquare = oldEpSquare;
 

@@ -137,6 +137,7 @@
       </ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release-Clang|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="test\chess\ReverseMoveGeneratorTest.cpp" />
     <ClCompile Include="test\chess\SanTest.cpp">
       <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
       </DeploymentContent>

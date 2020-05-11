@@ -122,11 +122,11 @@ namespace movegen
 
             return {
                 hasUnusedPawnPromotions,
-                hasUnusedPawnPromotions || (current.queenCount < queenCount),
-                hasUnusedPawnPromotions || (current.rookCount < rookCount),
+                hasUnusedPawnPromotions || (current.knightCount < knightCount),
                 hasUnusedPawnPromotions || (current.lightSquareBishopCount < lightSquareBishopCount),
                 hasUnusedPawnPromotions || (current.darkSquareBishopCount < darkSquareBishopCount),
-                hasUnusedPawnPromotions || (current.knightCount < knightCount)
+                hasUnusedPawnPromotions || (current.rookCount < rookCount),
+                hasUnusedPawnPromotions || (current.queenCount < queenCount)
             };
         }
 
@@ -180,11 +180,11 @@ namespace movegen
 
             return {
                 false,
-                hasUnusedPawnPromotions || (current.queenCount > queenCount),
-                hasUnusedPawnPromotions || (current.rookCount > rookCount),
+                hasUnusedPawnPromotions || (current.knightCount > knightCount),
                 hasUnusedPawnPromotions || (current.lightSquareBishopCount > lightSquareBishopCount),
                 hasUnusedPawnPromotions || (current.darkSquareBishopCount > darkSquareBishopCount),
-                hasUnusedPawnPromotions || (current.knightCount > knightCount)
+                hasUnusedPawnPromotions || (current.rookCount > rookCount),
+                hasUnusedPawnPromotions || (current.queenCount > queenCount)
             };
         }
 
@@ -260,7 +260,7 @@ namespace movegen
                     // That's because there can be only one epSquare for a given
                     // position.
 
-                    const Bitboard epSquare = Bitboard::square(Square(rm.to.file(), rm.from.rank()));
+                    const Bitboard epSquare = Bitboard::square(rm.to);
                     return { epSquare, epSquare, epSquare };
                 }
             }
@@ -271,7 +271,7 @@ namespace movegen
             {
                 // Case 1. no uncapture
                 candidateEpSquares.ifNoUncapture = (
-                    theirPawns & bb::rank6
+                    theirPawns & bb::rank5
                     & ~(pieces.shiftedVertically(-1) | pieces.shiftedVertically(-2))
                     ).shiftedVertically(1);
 
@@ -282,7 +282,7 @@ namespace movegen
                 pieces ^= rm.to;
                 const Bitboard unobstructed = ~(pieces.shiftedVertically(-1) | pieces.shiftedVertically(-2));
                 candidateEpSquares.ifOtherUncapture = (
-                    theirPawns & bb::rank6
+                    theirPawns & bb::rank5
                     & unobstructed
                     ).shiftedVertically(1);
 
@@ -295,7 +295,7 @@ namespace movegen
                 //         This is a generalization of Case 2. The `pieces` is already
                 //         updated there.
                 candidateEpSquares.ifPawnUncapture = (
-                    (theirPawns | rm.to) & bb::rank6
+                    (theirPawns | rm.to) & bb::rank5
                     & unobstructed
                     ).shiftedVertically(1);
             }
@@ -303,7 +303,7 @@ namespace movegen
             {
                 // Case 1.
                 candidateEpSquares.ifNoUncapture = (
-                    theirPawns & bb::rank3
+                    theirPawns & bb::rank4
                     & ~(pieces.shiftedVertically(1) | pieces.shiftedVertically(2))
                     ).shiftedVertically(-1);
 
@@ -311,13 +311,13 @@ namespace movegen
                 pieces ^= rm.to;
                 const Bitboard unobstructed = ~(pieces.shiftedVertically(1) | pieces.shiftedVertically(2));
                 candidateEpSquares.ifOtherUncapture = (
-                    theirPawns & bb::rank3
+                    theirPawns & bb::rank4
                     & unobstructed
                     ).shiftedVertically(-1);
 
                 // Case 3.
                 candidateEpSquares.ifPawnUncapture = (
-                    (theirPawns | rm.to) & bb::rank3
+                    (theirPawns | rm.to) & bb::rank4
                     & unobstructed
                     ).shiftedVertically(-1);
             }
@@ -410,7 +410,7 @@ namespace movegen
                     }
                     else if (rm.from == longRookSq)
                     {
-                        castlingRightsIfNotRookCapture |= CastlingTraits::castlingRights[sideToUnmove][CastleType::Short];
+                        castlingRightsIfNotRookCapture |= CastlingTraits::castlingRights[sideToUnmove][CastleType::Long];
                     }
                 }
             }
@@ -434,7 +434,7 @@ namespace movegen
                     }
                     else if (rm.to == longRookSq)
                     {
-                        castlingRightsIfRookCapture |= CastlingTraits::castlingRights[opponentSide][CastleType::Short];
+                        castlingRightsIfRookCapture |= CastlingTraits::castlingRights[opponentSide][CastleType::Long];
                     }
                 }
             }
@@ -627,8 +627,8 @@ namespace movegen
 
                         const auto& oldCastlingRightsSet =
                             uncapture.type() == PieceType::Rook
-                            ? possibleOldCastlingRightsSetIfNotRookUncapture
-                            : possibleOldCastlingRightsSetIfRookUncapture;
+                            ? possibleOldCastlingRightsSetIfRookUncapture
+                            : possibleOldCastlingRightsSetIfNotRookUncapture;
 
                         rm.capturedPiece = uncapture;
                         for (Square candidateOldEpSquare : actualCandidateOldEpSquares)
@@ -1095,6 +1095,8 @@ namespace movegen
         forEachPseudoLegalPieceReverseMove<PieceType::Rook>(permutator.pos, fwd);
         forEachPseudoLegalPieceReverseMove<PieceType::Queen>(permutator.pos, fwd);
         forEachPseudoLegalPieceReverseMove<PieceType::King>(permutator.pos, fwd);
+
+        // TODO: Generate reverse castling moves.
     }
 
     template <typename FuncT>

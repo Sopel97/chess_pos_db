@@ -347,5 +347,8 @@
     <ClCompile Include="src\chess\Uci.cpp">
       <Filter>Source Files\src\chess</Filter>
     </ClCompile>
+    <ClCompile Include="test\chess\ReverseMoveGeneratorTest.cpp">
+      <Filter>Source Files\test\chess</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
