@@ -25,7 +25,6 @@
 
 #include "enum/EnumArray.h"
 
-#include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"
 #include "persistence/pos_db/delta/DatabaseFormatDelta.h"
 #include "persistence/pos_db/epsilon/DatabaseFormatEpsilon.h"
@@ -120,7 +119,6 @@ namespace command_line_app
     static const persistence::DatabaseFactory g_factory = []() {
         persistence::DatabaseFactory g_factory;
 
-        g_factory.registerDatabaseType<persistence::db_alpha::Database>();
         g_factory.registerDatabaseType<persistence::db_beta::Database>();
         g_factory.registerDatabaseType<persistence::db_delta::Database>();
         g_factory.registerDatabaseType<persistence::db_epsilon::Database>();

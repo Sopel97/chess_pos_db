@@ -16,7 +16,6 @@
 
 #include "external_storage/External.h"
 
-#include "persistence/pos_db/alpha/DatabaseFormatAlpha.h"
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"
 #include "persistence/pos_db/delta/DatabaseFormatDelta.h"
 #include "persistence/pos_db/epsilon/DatabaseFormatEpsilon.h"

@@ -46,9 +46,6 @@
     <Filter Include="Header Files\src\persistence\pos_db">
       <UniqueIdentifier>{6df9e82f-0fd1-4055-b5c7-74a3df84cc15}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\src\persistence\pos_db\alpha">
-      <UniqueIdentifier>{14bdba46-7748-4e19-910e-55d4d415b1c1}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\src\persistence\pos_db\beta">
       <UniqueIdentifier>{a083e92e-6c66-44a3-a13b-796b329bbc98}</UniqueIdentifier>
     </Filter>
@@ -78,9 +75,6 @@
     </Filter>
     <Filter Include="Source Files\src\persistence\pos_db">
       <UniqueIdentifier>{b6fbcfde-f708-453b-b1d5-09f30be3e406}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\src\persistence\pos_db\alpha">
-      <UniqueIdentifier>{7a24c6cc-5e26-41f0-8f1f-41e9f21ae1cc}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\src\persistence\pos_db\beta">
       <UniqueIdentifier>{0372b924-af2b-467b-bc44-f9340288f398}</UniqueIdentifier>
@@ -185,9 +179,6 @@
     </ClInclude>
     <ClInclude Include="src\persistence\pos_db\StorageHeader.h">
       <Filter>Header Files\src\persistence\pos_db</Filter>
-    </ClInclude>
-    <ClInclude Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.h">
-      <Filter>Header Files\src\persistence\pos_db\alpha</Filter>
     </ClInclude>
     <ClInclude Include="src\persistence\pos_db\beta\DatabaseFormatBeta.h">
       <Filter>Header Files\src\persistence\pos_db\beta</Filter>
@@ -301,9 +292,6 @@
     </ClCompile>
     <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp">
       <Filter>Source Files\src\persistence\pos_db</Filter>
-    </ClCompile>
-    <ClCompile Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.cpp">
-      <Filter>Source Files\src\persistence\pos_db\alpha</Filter>
     </ClCompile>
     <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBeta.cpp">
       <Filter>Source Files\src\persistence\pos_db\beta</Filter>

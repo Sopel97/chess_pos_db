@@ -73,7 +73,6 @@
     <ClInclude Include="src\external_storage\External.h" />
     <ClInclude Include="src\intrin\Intrinsics.h" />
     <ClInclude Include="src\Logger.h" />
-    <ClInclude Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.h" />
     <ClInclude Include="src\persistence\pos_db\beta\DatabaseFormatBeta.h" />
     <ClInclude Include="src\persistence\pos_db\Database.h" />
     <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
@@ -108,7 +107,6 @@
     <ClCompile Include="src\Configuration.cpp" />
     <ClCompile Include="src\ConsoleApp.cpp" />
     <ClCompile Include="src\external_storage\External.cpp" />
-    <ClCompile Include="src\persistence\pos_db\alpha\DatabaseFormatAlpha.cpp" />
     <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBeta.cpp" />
     <ClCompile Include="src\persistence\pos_db\Database.cpp" />
     <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
