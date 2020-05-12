@@ -365,7 +365,7 @@ namespace command_line_app
             query::Request request = json;
             if (request.isValid())
             {
-                auto response = nlohmann::json(db.executeQuery(request)).dump();
+                auto response = nlohmann::json(db.executeQuery(request)).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
                 Logger::instance().logInfo("Handled valid request. Response size: ", response.size());
                 sendMessage(session, response);
                 return;
@@ -378,7 +378,7 @@ namespace command_line_app
 
         Logger::instance().logInfo("Invalid request");
 
-        auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump();
+        auto errorJson = nlohmann::json::object({ {"error", "InvalidRequest" } }).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
         sendMessage(session, std::move(errorJson));
     }
 
@@ -478,7 +478,7 @@ namespace command_line_app
             { "operation", operation }
         };
         finishedResponse.merge_patch(additionalData);
-        std::string finisedResponseStr = finishedResponse.dump();
+        std::string finisedResponseStr = finishedResponse.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 
         sendMessage(session, std::move(finisedResponseStr));
     }
@@ -507,7 +507,7 @@ namespace command_line_app
                 reportJson["imported_file_path"] = report.importedPgnPath->string();
             }
 
-            auto reportStr = reportJson.dump();
+            auto reportStr = reportJson.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 
             sendMessage(session, std::move(reportStr));
         };
@@ -524,7 +524,7 @@ namespace command_line_app
                 { "finished", false }
             };
 
-            auto reportStr = reportJson.dump();
+            auto reportStr = reportJson.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
             sendMessage(session, reportStr);
         };
     }
@@ -695,7 +695,7 @@ namespace command_line_app
 
         query::Request request = json["query"];
         auto response = db->executeQuery(request);
-        auto responseStr = nlohmann::json(response).dump();
+        auto responseStr = nlohmann::json(response).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
 
         Logger::instance().logInfo("Handled valid request. Response size: ", responseStr.size());
 
@@ -727,7 +727,7 @@ namespace command_line_app
             }},
         };
 
-        auto responseStr = nlohmann::json(response).dump();
+        auto responseStr = nlohmann::json(response).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
         sendMessage(session, responseStr);
     }
 
@@ -807,7 +807,7 @@ namespace command_line_app
                                 { "finished", false }
                             };
 
-                            auto reportStr = reportJson.dump();
+                            auto reportStr = reportJson.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
                             sendMessage(session, reportStr);
                         }
 
@@ -1111,7 +1111,7 @@ namespace command_line_app
                         { "finished", false }
                     };
 
-                    auto reportStr = reportJson.dump();
+                    auto reportStr = reportJson.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
                     sendMessage(session, reportStr);
                 }; 
                 
@@ -1215,7 +1215,7 @@ namespace command_line_app
             { "support_manifests", manifestsJson }
         };
 
-        auto responseStr = nlohmann::json(response).dump();
+        auto responseStr = nlohmann::json(response).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
         sendMessage(session, responseStr);
     }
 
@@ -1253,16 +1253,30 @@ namespace command_line_app
         }
         catch (std::runtime_error& ex)
         {
-            Logger::instance().logError("Error while trying to perform request");
+            Logger::instance().logError("Error while trying to perform request: " + std::string(ex.what()));
 
-            auto errorJson = nlohmann::json::object({ {"error", ex.what() } }).dump();
+            auto errorJson = nlohmann::json::object({ {"error", ex.what() } }).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+            sendMessage(session, errorJson);
+        }
+        catch (nlohmann::json::exception& ex)
+        {
+            Logger::instance().logError("Error while trying to perform request: " + std::string(ex.what()));
+
+            auto errorJson = nlohmann::json::object({ {"error", ex.what() } }).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+            sendMessage(session, errorJson);
+        }
+        catch (std::out_of_range& ex)
+        {
+            Logger::instance().logError("Error while trying to perform request: " + std::string(ex.what()));
+
+            auto errorJson = nlohmann::json::object({ {"error", ex.what() } }).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
             sendMessage(session, errorJson);
         }
         catch (...)
         {
             Logger::instance().logError("Unknown error");
 
-            auto errorJson = nlohmann::json::object({ {"error", "Unknown error" } }).dump();
+            auto errorJson = nlohmann::json::object({ {"error", "Unknown error" } }).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
             sendMessage(session, errorJson);
         }
 
