@@ -740,79 +740,15 @@ namespace persistence
                 bool deleteOld
             )
             {
-                ASSERT(!m_files.empty());
+                auto files = getAllFiles();
 
-                ext::IndexBuilder<Entry, Entry::CompareLessWithoutReverseMove, decltype(extractEntryKey)> ib(indexGranularity, {}, extractEntryKey);
-                {
-                    auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
-                        ib.append(reinterpret_cast<const Entry*>(data), count);
-                    };
-
-                    ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
-                    std::vector<ext::ImmutableSpan<Entry>> files;
-                    files.reserve(m_files.size());
-                    for (auto&& file : m_files)
-                    {
-                        files.emplace_back(file->entries());
-                    }
-
-                    {
-                        const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<Entry>(mergeMemory.bytes() / 32, 2);
-                        ext::BackInserter<Entry> out(outFile, util::DoubleBuffer<Entry>(outBufferSize));
-
-                        auto cmp = Entry::CompareEqualFull{};
-                        bool first = true;
-                        Entry accumulator;
-                        auto append = [&](const Entry& entry) {
-                            if (first)
-                            {
-                                first = false;
-                                accumulator = entry;
-                            }
-                            else if (cmp(accumulator, entry))
-                            {
-                                accumulator.combine(entry);
-                            }
-                            else
-                            {
-                                out.emplace(accumulator);
-                                accumulator = entry;
-                            }
-                        };
-
-                        const ext::MergePlan plan = makeMergePlan(files, outFilePath, temporaryDirs);
-                        ext::MergeCallbacks callbacks{
-                            progressCallback,
-                            [deleteOld, &files, this](int passId) {
-                                if (passId == 0)
-                                {
-                                    files.clear();
-                                    if (deleteOld)
-                                    {
-                                        clear();
-                                    }
-                                }
-                            }
-                        };
-                        ext::merge_for_each(plan, callbacks, files, append, Entry::CompareLessFull{});
-
-                        if (deleteOld && !m_files.empty())
-                        {
-                            files.clear();
-                            clear();
-                        }
-
-                        if (!first) // if we did anything, ie. accumulator holds something from merge
-                        {
-                            out.emplace(accumulator);
-                        }
-                    }
-                }
-
-                Index index = ib.end();
-                writeIndexFor(outFilePath, index);
-
-                return index;
+                return mergeFilesIntoFile(
+                    files,
+                    outFilePath,
+                    temporaryDirs,
+                    std::move(progressCallback),
+                    deleteOld
+                );
             }
 
             [[nodiscard]] ext::MergePlan Partition::makeMergePlan(
@@ -846,6 +782,150 @@ namespace persistence
                 {
                     return ext::make_merge_plan(files, temporaryDirs[0], temporaryDirs[1]);
                 }
+            }
+
+            [[nodiscard]] Index Partition::mergeFilesIntoFile(
+                const std::vector<File*>& files,
+                const std::filesystem::path& outFilePath,
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::function<void(const ext::Progress&)> progressCallback,
+                bool deleteOld
+            )
+            {
+                ASSERT(files.size() >= 2);
+
+                ext::IndexBuilder<Entry, Entry::CompareLessWithoutReverseMove, decltype(extractEntryKey)> ib(indexGranularity, {}, extractEntryKey);
+                {
+                    auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
+                        ib.append(reinterpret_cast<const Entry*>(data), count);
+                    };
+
+                    ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
+                    std::vector<ext::ImmutableSpan<Entry>> spans;
+                    spans.reserve(files.size());
+                    for (auto&& file : files)
+                    {
+                        spans.emplace_back(file->entries());
+                    }
+
+                    {
+                        const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<Entry>(mergeMemory.bytes() / 32, 2);
+                        ext::BackInserter<Entry> out(outFile, util::DoubleBuffer<Entry>(outBufferSize));
+
+                        auto cmp = Entry::CompareEqualFull{};
+                        bool first = true;
+                        Entry accumulator;
+                        auto append = [&](const Entry& entry) {
+                            if (first)
+                            {
+                                first = false;
+                                accumulator = entry;
+                            }
+                            else if (cmp(accumulator, entry))
+                            {
+                                accumulator.combine(entry);
+                            }
+                            else
+                            {
+                                out.emplace(accumulator);
+                                accumulator = entry;
+                            }
+                        };
+
+                        const ext::MergePlan plan = makeMergePlan(spans, outFilePath, temporaryDirs);
+                        ext::MergeCallbacks callbacks{
+                            progressCallback,
+                            [deleteOld, &spans, &files, this](int passId) {
+                                if (passId == 0)
+                                {
+                                    if (deleteOld)
+                                    {
+                                        spans.clear();
+                                        removeFiles(files);
+                                    }
+                                }
+                            }
+                        };
+                        ext::merge_for_each(plan, callbacks, spans, append, Entry::CompareLessFull{});
+
+                        if (deleteOld && !spans.empty())
+                        {
+                            spans.clear();
+                            removeFiles(files);
+                        }
+
+                        if (!first) // if we did anything, ie. accumulator holds something from merge
+                        {
+                            out.emplace(accumulator);
+                        }
+                    }
+                }
+
+                Index index = ib.end();
+                writeIndexFor(outFilePath, index);
+
+                return index;
+            }
+
+            void Partition::removeFiles(
+                const std::vector<File*>& files
+            )
+            {
+                collectFutureFiles();
+
+                // TODO: maybe optimize this, it's currently O(n^2)
+                // But it shouldn't be a problem.
+                for (auto&& file : files)
+                {
+                    auto it = std::find_if(m_files.begin(), m_files.end(), [&file](const std::unique_ptr<File>& lhs) {
+                        return lhs.get() == file;
+                        });
+                    if (it == m_files.end()) continue;
+
+                    auto path = (*it)->path();
+                    auto indexPath = pathForIndex(path);
+
+                    m_files.erase(it);
+
+                    std::filesystem::remove(path);
+                    std::filesystem::remove(indexPath);
+                }
+            }
+
+            [[nodiscard]] std::vector<File*> Partition::getFilesByNames(
+                const std::vector<std::string>& names
+            )
+            {
+                std::vector<File*> selectedFiles;
+                selectedFiles.reserve(names.size());
+
+                std::set<std::string> namesSet(names.begin(), names.end());
+
+                for (auto&& file : m_files)
+                {
+                    auto it = namesSet.find(file->path().filename().string());
+                    if (it == namesSet.end())
+                    {
+                        continue;
+                    }
+
+                    selectedFiles.push_back(file.get());
+                }
+
+                return selectedFiles;
+            }
+
+            [[nodiscard]] std::vector<File*> Partition::getAllFiles()
+            {
+                std::vector<File*> files;
+
+                files.reserve(m_files.size());
+                for (auto&& f : m_files)
+                {
+                    files.push_back(f.get());
+                }
+
+                return files;
             }
 
             void Partition::discoverFiles()

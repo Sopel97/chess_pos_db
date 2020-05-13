@@ -421,6 +421,24 @@ namespace persistence
                     const std::vector<std::filesystem::path>& temporaryDirs
                 ) const;
 
+                [[nodiscard]] Index mergeFilesIntoFile(
+                    const std::vector<File*>& files,
+                    const std::filesystem::path& outFilePath,
+                    const std::vector<std::filesystem::path>& temporaryDirs,
+                    std::function<void(const ext::Progress&)> progressCallback,
+                    bool deleteOld
+                );
+
+                void removeFiles(
+                    const std::vector<File*>& files
+                );
+
+                [[nodiscard]] std::vector<File*> getFilesByNames(
+                    const std::vector<std::string>& names
+                );
+
+                [[nodiscard]] std::vector<File*> getAllFiles();
+
                 void discoverFiles();
             };
         }
