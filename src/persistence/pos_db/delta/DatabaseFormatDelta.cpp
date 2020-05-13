@@ -615,24 +615,11 @@ namespace persistence
                 std::function<void(const ext::Progress&)> progressCallback
             )
             {
-                if (m_files.size() < 2)
-                {
-                    progressCallback(ext::Progress{ 1, 1 });
-                    return;
-                }
+                // TODO: param
+                const MemoryAmount temporarySpace = MemoryAmount::megabytes(800);
 
-                const auto outFilePath = m_path / "merge_tmp";
-                const std::uint32_t id = m_files.front()->id();
-                auto index = mergeAllIntoFile(outFilePath, temporaryDirs, progressCallback, true);
-
-                // We had to use a temporary name because we're working in the same directory.
-                // Now we can safely rename after old ones are removed.
-                auto newFilePath = outFilePath;
-                newFilePath.replace_filename(std::to_string(id));
-                std::filesystem::rename(outFilePath, newFilePath);
-                std::filesystem::rename(pathForIndex(outFilePath), pathForIndex(newFilePath));
-
-                m_files.emplace_back(std::make_unique<File>(newFilePath, std::move(index)));
+                auto files = getAllFiles();
+                mergeFiles(files, temporaryDirs, progressCallback, temporarySpace);
             }
 
             // data has to be sorted in ascending order
@@ -733,24 +720,6 @@ namespace persistence
                 return pathForId(nextId());
             }
 
-            [[nodiscard]] Index Partition::mergeAllIntoFile(
-                const std::filesystem::path& outFilePath, 
-                const std::vector<std::filesystem::path>& temporaryDirs,
-                std::function<void(const ext::Progress&)> progressCallback,
-                bool deleteOld
-            )
-            {
-                auto files = getAllFiles();
-
-                return mergeFilesIntoFile(
-                    files,
-                    outFilePath,
-                    temporaryDirs,
-                    std::move(progressCallback),
-                    deleteOld
-                );
-            }
-
             [[nodiscard]] ext::MergePlan Partition::makeMergePlan(
                 const std::vector<ext::ImmutableSpan<Entry>>& files,
                 const std::filesystem::path& outFilePath,
@@ -782,6 +751,93 @@ namespace persistence
                 {
                     return ext::make_merge_plan(files, temporaryDirs[0], temporaryDirs[1]);
                 }
+            }
+
+            void Partition::mergeFiles(
+                const std::vector<File*>& files,
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::function<void(const ext::Progress&)> progressCallback,
+                MemoryAmount temporarySpace
+            )
+            {
+                auto groups = ext::groupConsecutiveSpans(
+                    files, 
+                    temporarySpace, 
+                    [](File* file) { return file->entries().size_bytes(); }
+                );
+
+                // assess total work
+                std::size_t totalWork = 0;
+                for (auto&& filesInGroup : groups)
+                {
+                    if (filesInGroup.size() < 2)
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        std::vector<ext::ImmutableSpan<Entry>> spans;
+                        spans.reserve(filesInGroup.size());
+                        for (auto&& file : filesInGroup)
+                        {
+                            spans.emplace_back(file->entries());
+                        }
+                        totalWork += ext::merge_assess_work(spans);
+                    }
+                }
+
+                ext::Progress progress{ static_cast<std::size_t>(0), totalWork };
+                std::size_t totalWorkDone = 0;
+                auto internalProgressCallback = [&totalWorkDone, &progress, &progressCallback](const ext::Progress& newProgress)
+                {
+                    progress.workDone = totalWorkDone + newProgress.workDone;
+                    progressCallback(progress);
+
+                    if (newProgress.workDone == newProgress.workTotal)
+                    {
+                        totalWorkDone = newProgress.workTotal;
+                    }
+                };
+
+                for(auto&& filesInGroup : groups)
+                {
+                    if (filesInGroup.size() < 2)
+                    {
+                        continue;
+                    }
+
+                    mergeFiles(
+                        filesInGroup,
+                        temporaryDirs,
+                        internalProgressCallback
+                    );
+                }
+            }
+
+            void Partition::mergeFiles(
+                const std::vector<File*>& files,
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::function<void(const ext::Progress&)> progressCallback
+            )
+            {
+                if (files.size() < 2)
+                {
+                    progressCallback(ext::Progress{ 1, 1 });
+                    return;
+                }
+
+                const auto outFilePath = m_path / "merge_tmp";
+                const std::uint32_t id = files.front()->id();
+                auto index = mergeFilesIntoFile(files, outFilePath, temporaryDirs, progressCallback, true);
+
+                // We had to use a temporary name because we're working in the same directory.
+                // Now we can safely rename after old ones are removed.
+                auto newFilePath = outFilePath;
+                newFilePath.replace_filename(std::to_string(id));
+                std::filesystem::rename(outFilePath, newFilePath);
+                std::filesystem::rename(pathForIndex(outFilePath), pathForIndex(newFilePath));
+
+                m_files.emplace_back(std::make_unique<File>(newFilePath, std::move(index)));
             }
 
             [[nodiscard]] Index Partition::mergeFilesIntoFile(

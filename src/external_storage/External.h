@@ -2101,21 +2101,22 @@ namespace ext
     // Each group contains consecutive spans.
     // If there's only one span in the group then its size may
     // be larger than the limit. That's the only case when this happens.
-    template <typename T>
-    std::vector<std::vector<ImmutableSpan<T>>> groupConsecutiveSpans(
-        std::vector<ImmutableSpan<T>>&& spans,
-        MemoryAmount maxGroupSize
+    template <typename ElementWithSizeT, typename SizeFuncT>
+    std::vector<std::vector<ElementWithSizeT>> groupConsecutiveSpans(
+        std::vector<ElementWithSizeT>&& spans,
+        MemoryAmount maxGroupSize,
+        SizeFuncT&& getSize
     )
     {
-        const std::size_t maxGroupSizeBytes = maxGroupSize;
+        const std::size_t maxGroupSizeBytes = maxGroupSize.bytes();
 
-        std::vector<std::vector<ImmutableSpan<T>>> groups{};
+        std::vector<std::vector<ElementWithSizeT>> groups{};
 
         // set it as if the last group is full so we create a new one.
         std::size_t lastGroupSizeBytes = maxGroupSize.bytes() + 1;
         for (auto&& span : spans)
         {
-            const std::size_t spanSizeBytes = span.size_bytes();
+            const std::size_t spanSizeBytes = getSize(span);
             if (lastGroupSizeBytes + spanSizeBytes > maxGroupSizeBytes)
             {
                 groups.emplace_back();
@@ -2124,6 +2125,36 @@ namespace ext
 
             lastGroupSizeBytes += spanSizeBytes;
             groups.back().emplace_back(std::move(span));
+        }
+
+        return groups;
+    }
+
+    // Same as above but for const&
+    template <typename ElementWithSizeT, typename SizeFuncT>
+    std::vector<std::vector<ElementWithSizeT>> groupConsecutiveSpans(
+        const std::vector<ElementWithSizeT>& spans,
+        MemoryAmount maxGroupSize,
+        SizeFuncT&& getSize
+    )
+    {
+        const std::size_t maxGroupSizeBytes = maxGroupSize.bytes();
+
+        std::vector<std::vector<ElementWithSizeT>> groups{};
+
+        // set it as if the last group is full so we create a new one.
+        std::size_t lastGroupSizeBytes = maxGroupSize.bytes() + 1;
+        for (auto&& span : spans)
+        {
+            const std::size_t spanSizeBytes = getSize(span);
+            if (lastGroupSizeBytes + spanSizeBytes > maxGroupSizeBytes)
+            {
+                groups.emplace_back();
+                lastGroupSizeBytes = 0;
+            }
+
+            lastGroupSizeBytes += spanSizeBytes;
+            groups.back().emplace_back(span);
         }
 
         return groups;
