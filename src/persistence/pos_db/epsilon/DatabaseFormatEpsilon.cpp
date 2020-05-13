@@ -890,6 +890,7 @@ namespace persistence
 
         void Database::mergeAll(
             const std::vector<std::filesystem::path>& temporaryDirs,
+            std::optional<MemoryAmount> temporarySpace,
             Database::MergeProgressCallback progressCallback
         )
         {

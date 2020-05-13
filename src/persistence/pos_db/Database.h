@@ -150,7 +150,8 @@ namespace persistence
         [[nodiscard]] virtual query::Response executeQuery(query::Request query) = 0;
 
         virtual void mergeAll(
-            const std::vector<std::filesystem::path>& temporaryDirs, 
+            const std::vector<std::filesystem::path>& temporaryDirs,
+            std::optional<MemoryAmount> temporarySpace,
             MergeProgressCallback progressCallback = {}
         ) = 0;
 

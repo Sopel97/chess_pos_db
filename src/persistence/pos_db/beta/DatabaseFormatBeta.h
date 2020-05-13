@@ -659,6 +659,7 @@ namespace persistence
 
             void mergeAll(
                 const std::vector<std::filesystem::path>& temporaryDirs,
+                std::optional<MemoryAmount> temporarySpace,
                 MergeProgressCallback progressCallback = {}
             ) override;
 

@@ -612,14 +612,19 @@ namespace persistence
 
             void Partition::mergeAll(
                 const std::vector<std::filesystem::path>& temporaryDirs,
+                std::optional<MemoryAmount> temporarySpace,
                 std::function<void(const ext::Progress&)> progressCallback
             )
             {
-                // TODO: param
-                const MemoryAmount temporarySpace = MemoryAmount::megabytes(800);
-
                 auto files = getAllFiles();
-                mergeFiles(files, temporaryDirs, progressCallback, temporarySpace);
+                if (temporarySpace.has_value())
+                {
+                    mergeFiles(files, temporaryDirs, progressCallback, *temporarySpace);
+                }
+                else
+                {
+                    mergeFiles(files, temporaryDirs, progressCallback);
+                }
             }
 
             // data has to be sorted in ascending order
@@ -1126,6 +1131,7 @@ namespace persistence
 
         void Database::mergeAll(
             const std::vector<std::filesystem::path>& temporaryDirs,
+            std::optional<MemoryAmount> temporarySpace,
             Database::MergeProgressCallback progressCallback
         )
         {
@@ -1144,7 +1150,7 @@ namespace persistence
                 }
             };
 
-            m_partition.mergeAll(temporaryDirs, progressReport);
+            m_partition.mergeAll(temporaryDirs, temporarySpace, progressReport);
 
             Logger::instance().logInfo(": Finalizing...");
             Logger::instance().logInfo(": Completed.");

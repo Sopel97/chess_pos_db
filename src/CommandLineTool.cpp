@@ -208,7 +208,7 @@ namespace command_line_app
         {
             auto db = instantiateDatabase(key, destination);
             db->import(pgns, importMemory.bytes());
-            db->mergeAll({ temp });
+            db->mergeAll({ temp }, std::nullopt);
         }
 
         std::filesystem::remove_all(temp);
@@ -233,7 +233,7 @@ namespace command_line_app
     static void mergeImpl(const std::filesystem::path& path)
     {
         auto db = loadDatabase(path);
-        db->mergeAll({});
+        db->mergeAll({}, std::nullopt);
     }
 
     static void merge(const Args& args)
@@ -536,6 +536,7 @@ namespace command_line_app
         const std::filesystem::path& destination,
         const persistence::ImportableFiles& pgns,
         const std::filesystem::path& temp,
+        std::optional<MemoryAmount> temporarySpace,
         bool doMerge,
         bool doReportProgress
     )
@@ -556,7 +557,7 @@ namespace command_line_app
 
                 {
                     auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                    db->mergeAll({ temp }, callback);
+                    db->mergeAll({ temp }, temporarySpace, callback);
                 }
             }
 
@@ -582,6 +583,7 @@ namespace command_line_app
         const std::string& key,
         const std::filesystem::path& destination,
         const persistence::ImportableFiles& pgns,
+        std::optional<MemoryAmount> temporarySpace,
         bool doMerge,
         bool doReportProgress
     )
@@ -598,7 +600,7 @@ namespace command_line_app
             if (doMerge)
             {
                 auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                db->mergeAll({}, callback);
+                db->mergeAll({}, temporarySpace, callback);
             }
         }
 
@@ -623,14 +625,20 @@ namespace command_line_app
 
         const std::string databaseFormat = json["database_format"].get<std::string>();
 
+        std::optional<MemoryAmount> temporarySpace = std::nullopt;
+        if (json.contains("temporary_space"))
+        {
+            temporarySpace = json["temporary_space"].get<MemoryAmount>();
+        }
+
         if (json.contains("temporary_path"))
         {
             const std::string temp = json["temporary_path"].get<std::string>();
-            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temp, doMerge, doReportProgress);
+            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temp, temporarySpace, doMerge, doReportProgress);
         }
         else
         {
-            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, doMerge, doReportProgress);
+            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temporarySpace, doMerge, doReportProgress);
         }
     }
 
@@ -643,7 +651,7 @@ namespace command_line_app
         assertDatabaseOpen(db);
 
         auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-        db->mergeAll({}, callback);
+        db->mergeAll({}, std::nullopt, callback);
 
         // We have to always sent some info that we finished
         sendProgressFinished(session, "merge");

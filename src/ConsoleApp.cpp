@@ -354,7 +354,7 @@ namespace console_app
 
     static void merge(persistence::Database& db)
     {
-        db.mergeAll({});
+        db.mergeAll({}, std::nullopt);
     }
 
     [[nodiscard]] static bool verifyPgnTags(const pgn::UnparsedGame& game, std::size_t idx)
@@ -426,7 +426,7 @@ namespace console_app
         {
             DbType db(destination);
             db.import(pgns, importMemory.bytes());
-            db.mergeAll({ temp });
+            db.mergeAll({ temp }, std::nullopt);
         }
         std::filesystem::remove_all(temp);
     }
