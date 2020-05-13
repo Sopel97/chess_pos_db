@@ -612,7 +612,6 @@ namespace bcgn
 
         case BcgnCompressionLevel::Level_2:
         {
-            const Bitboard occupied = pos.piecesBB();
             const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
             const std::uint8_t pieceId = (pos.piecesBB(pos.sideToMove()) & bb::before(move.from)).count();
             std::uint8_t moveId = 0;
@@ -624,15 +623,13 @@ namespace bcgn
                 break;
             case PieceType::King:
             {
-                const Bitboard attacks = bb::attacks(pt, move.from, occupied) & ~ourPieces;
+                const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(move.from) & ~ourPieces;
                 if (move.type == MoveType::Castle)
                 {
                     const auto attacksSize = attacks.count();
                     moveId = attacksSize - 1;
-                    const auto longCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteQueenSide : CastlingRights::BlackQueenSide;
-                    const auto shortCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteKingSide : CastlingRights::BlackKingSide;
-                    const auto cr = pos.castlingRights();
-                    if (contains(cr, longCastlingRights))
+                    const auto longCastlingRights = CastlingTraits::castlingRights[pos.sideToMove()][CastleType::Long];
+                    if (contains(pos.castlingRights(), longCastlingRights))
                     {
                         moveId += 1;
                     }
@@ -649,6 +646,7 @@ namespace bcgn
             }
             default:
             {
+                const Bitboard occupied = pos.piecesBB();
                 const Bitboard attacks = bb::attacks(pt, move.from, occupied) & ~ourPieces;
                 moveId = (attacks & bb::before(move.to)).count();
             }
@@ -787,7 +785,6 @@ namespace bcgn
             const auto moveId = index & 255;
             const auto pieceId = static_cast<std::uint8_t>(index >> 8);
 
-            const Bitboard occupied = pos.piecesBB();
             const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
             const auto from = Square(nthSetBitIndex(ourPieces.bits(), pieceId));
             const auto pt = pos.pieceAt(from).type();
@@ -797,15 +794,12 @@ namespace bcgn
                 return move_index::destinationIndexToPawnMove(pos, moveId, from, pos.sideToMove());
             case PieceType::King:
             {
-                const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
+                const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(from) & ~ourPieces;
                 const auto attacksSize = attacks.count();
                 if (moveId >= attacksSize)
                 {
                     int idx = moveId - attacksSize;
-                    const auto longCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteQueenSide : CastlingRights::BlackQueenSide;
-                    const auto shortCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteKingSide : CastlingRights::BlackKingSide;
-                    const auto cr = pos.castlingRights();
-                    if (idx == 0 && contains(cr, longCastlingRights))
+                    if (idx == 0 && contains(pos.castlingRights(), CastlingTraits::castlingRights[pos.sideToMove()][CastleType::Long]))
                     {
                         return Move::castle(CastleType::Long, pos.sideToMove());
                     }
@@ -820,6 +814,7 @@ namespace bcgn
             }
             default:
             {
+                const Bitboard occupied = pos.piecesBB();
                 const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
                 auto to = Square(nthSetBitIndex(attacks.bits(), moveId));
                 return Move::normal(from, to);
