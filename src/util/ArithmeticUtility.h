@@ -153,3 +153,56 @@ ToT signExtend(FromT value)
         return static_cast<ToT>(value);
     }
 }
+
+namespace lookup
+{
+    constexpr int nthSetBitIndexNaive(std::uint64_t value, int n)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            value &= value - 1;
+        }
+        return intrin::lsb_constexpr(value);
+    }
+
+    constexpr std::array<std::array<std::uint8_t, 8>, 256> nthSetBitIndex = []()
+    {
+        std::array<std::array<std::uint8_t, 8>, 256> t{};
+        
+        for (int i = 0; i < 256; ++i)
+        {
+            for (int j = 0; j < 8; ++j)
+            {
+                t[i][j] = nthSetBitIndexNaive(i, j);
+            }
+        }
+
+        return t;
+    }();
+}
+
+inline int nthSetBitIndex(std::uint64_t v, int n)
+{
+    int p = intrin::popcount(v & 0xFFFFFFFFull);
+    int shift = 0;
+    if (p <= n) {
+        v >>= 32;
+        shift += 32;
+        n -= p;
+    }
+    p = intrin::popcount(v & 0xFFFFull);
+    if (p <= n) {
+        v >>= 16;
+        shift += 16;
+        n -= p;
+    }
+    p = intrin::popcount(v & 0xFFull);
+    if (p <= n) {
+        shift += 8;
+        v >>= 8;
+        n -= p;
+    }
+
+    if (n >= 8) return 0; // optional safety, in case n > # of set bits
+    return lookup::nthSetBitIndex[v & 0xFF][n] + shift;
+}

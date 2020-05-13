@@ -789,13 +789,7 @@ namespace bcgn
 
             const Bitboard occupied = pos.piecesBB();
             const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
-            Bitboard ourPiecesTemp = ourPieces;
-
-            for (int i = 0; i < pieceId; ++i)
-            {
-                ourPiecesTemp.popFirst();
-            }
-            const Square from = ourPiecesTemp.first();
+            const auto from = Square(nthSetBitIndex(ourPieces.bits(), pieceId));
             const auto pt = pos.pieceAt(from).type();
             switch (pt)
             {
@@ -819,12 +813,7 @@ namespace bcgn
                 }
                 else
                 {
-                    Bitboard attacksTemp = attacks;
-                    for (int i = 0; i < moveId; ++i)
-                    {
-                        attacksTemp.popFirst();
-                    }
-                    auto to = attacksTemp.first();
+                    auto to = Square(nthSetBitIndex(attacks.bits(), moveId));
                     return Move::normal(from, to);
                 }
                 break;
@@ -832,12 +821,7 @@ namespace bcgn
             default:
             {
                 const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
-                Bitboard attacksTemp = attacks;
-                for (int i = 0; i < moveId; ++i)
-                {
-                    attacksTemp.popFirst();
-                }
-                auto to = attacksTemp.first();
+                auto to = Square(nthSetBitIndex(attacks.bits(), moveId));
                 return Move::normal(from, to);
             }
             }
