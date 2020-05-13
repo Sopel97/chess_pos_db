@@ -894,25 +894,101 @@ namespace persistence
                         };
 
                         const ext::MergePlan plan = makeMergePlan(spans, outFilePath, temporaryDirs);
-                        ext::MergeCallbacks callbacks{
-                            progressCallback,
-                            [deleteOld, &spans, &files, this](int passId) {
-                                if (passId == 0)
+                        // Now we have two options.
+                        // Either we have to copy the files or not.
+                        const bool requiresCopyFirst = plan.passes[0].readDir != outFilePath.parent_path();
+                        if (requiresCopyFirst)
+                        {
+                            // We have to include the copying progress.
+                            std::size_t totalFileSize = 0;
+                            for (auto&& file : files)
+                            {
+                                totalFileSize += file->entries().size_bytes();
+                            }
+                            ext::Progress internalProgress{ 0, totalFileSize };
+
+                            const std::filesystem::path copyDestinationDir = plan.passes[0].readDir;
+                            std::vector<std::filesystem::path> copiedFilesPaths;
+                            copiedFilesPaths.reserve(files.size());
+                            for (auto&& file : files)
+                            {
+                                const std::size_t size = file->entries().size_bytes();
+
+                                std::filesystem::path destinationPath = copyDestinationDir / file->path().filename();
+                                std::filesystem::copy_file(file->path(), destinationPath);
+                                copiedFilesPaths.emplace_back(std::move(destinationPath));
+
+                                internalProgress.workDone += size;
+                                progressCallback(internalProgress);
+                            }
+
+                            spans.clear();
+
+                            if (deleteOld)
+                            {
+                                removeFiles(files);
+                            }
+
+                            for (auto&& path : copiedFilesPaths)
+                            {
+                                spans.emplace_back(ext::ImmutableBinaryFile(ext::Pooled{}, path));
+                            }
+
+                            auto internalProgressCallback = [&progressCallback, &internalProgress, totalFileSize](const ext::Progress& progress)
+                            {
+                                internalProgress.workDone = totalFileSize + progress.workDone;
+                                internalProgress.workTotal = totalFileSize + progress.workTotal;
+                                progressCallback(internalProgress);
+                            };
+
+                            auto cleanup = [&spans, &copiedFilesPaths]() {
+                                spans.clear();
+
+                                for (auto&& path : copiedFilesPaths)
                                 {
-                                    if (deleteOld)
+                                    std::filesystem::remove(path);
+                                }
+                                copiedFilesPaths.clear();
+                            };
+
+                            ext::MergeCallbacks callbacks{
+                                internalProgressCallback,
+                                [&cleanup](int passId) {
+                                    if (passId == 0)
                                     {
-                                        spans.clear();
-                                        removeFiles(files);
+                                        cleanup();
                                     }
                                 }
-                            }
-                        };
-                        ext::merge_for_each(plan, callbacks, spans, append, Entry::CompareLessFull{});
+                            };
+                            ext::merge_for_each(plan, callbacks, spans, append, Entry::CompareLessFull{});
 
-                        if (deleteOld && !spans.empty())
+                            if (!spans.empty())
+                            {
+                                cleanup();
+                            }
+                        }
+                        else
                         {
-                            spans.clear();
-                            removeFiles(files);
+                            ext::MergeCallbacks callbacks{
+                                progressCallback,
+                                [deleteOld, &spans, &files, this](int passId) {
+                                    if (passId == 0)
+                                    {
+                                        if (deleteOld)
+                                        {
+                                            spans.clear();
+                                            removeFiles(files);
+                                        }
+                                    }
+                                }
+                            };
+                            ext::merge_for_each(plan, callbacks, spans, append, Entry::CompareLessFull{});
+
+                            if (deleteOld && !spans.empty())
+                            {
+                                spans.clear();
+                                removeFiles(files);
+                            }
                         }
 
                         if (!first) // if we did anything, ie. accumulator holds something from merge
