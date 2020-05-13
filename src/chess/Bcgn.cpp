@@ -609,6 +609,53 @@ namespace bcgn
             }
 
             break;
+
+        case BcgnCompressionLevel::Level_2:
+        {
+            const Bitboard occupied = pos.piecesBB();
+            const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
+            const std::uint8_t pieceId = (pos.piecesBB(pos.sideToMove()) & bb::before(move.from)).count();
+            std::uint8_t moveId = 0;
+            const auto pt = pos.pieceAt(move.from).type();
+            switch (pt)
+            {
+            case PieceType::Pawn:
+                moveId = move_index::pawnDestinationIndex(move.from, move.to, pos.sideToMove(), move.promotedPiece.type());
+                break;
+            case PieceType::King:
+            {
+                const Bitboard attacks = bb::attacks(pt, move.from, occupied) & ~ourPieces;
+                if (move.type == MoveType::Castle)
+                {
+                    const auto attacksSize = attacks.count();
+                    moveId = attacksSize - 1;
+                    const auto longCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteQueenSide : CastlingRights::BlackQueenSide;
+                    const auto shortCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteKingSide : CastlingRights::BlackKingSide;
+                    const auto cr = pos.castlingRights();
+                    if (contains(cr, longCastlingRights))
+                    {
+                        moveId += 1;
+                    }
+                    if (CastlingTraits::moveCastlingType(move) == CastleType::Short)
+                    {
+                        moveId += 1;
+                    }
+                }
+                else
+                {
+                    moveId = (attacks & bb::before(move.to)).count();
+                }
+                break;
+            }
+            default:
+            {
+                const Bitboard attacks = bb::attacks(pt, move.from, occupied) & ~ourPieces;
+                moveId = (attacks & bb::before(move.to)).count();
+            }
+            }
+            m_game->addLongMove((pieceId << 8) | moveId);
+            break;
+        }
         }
     }
 
@@ -729,6 +776,72 @@ namespace bcgn
                 m_encodedMovetext.remove_prefix(1);
                 return move;
             }
+        }
+
+        case BcgnCompressionLevel::Level_2:
+        {
+            const std::uint16_t index =
+                ((m_encodedMovetext[0]) << 8)
+                | m_encodedMovetext[1];
+            m_encodedMovetext.remove_prefix(2);
+            const auto moveId = index & 255;
+            const auto pieceId = static_cast<std::uint8_t>(index >> 8);
+
+            const Bitboard occupied = pos.piecesBB();
+            const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
+            Bitboard ourPiecesTemp = ourPieces;
+
+            for (int i = 0; i < pieceId; ++i)
+            {
+                ourPiecesTemp.popFirst();
+            }
+            const Square from = ourPiecesTemp.first();
+            const auto pt = pos.pieceAt(from).type();
+            switch (pt)
+            {
+            case PieceType::Pawn:
+                return move_index::destinationIndexToPawnMove(pos, moveId, from, pos.sideToMove());
+            case PieceType::King:
+            {
+                const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
+                const auto attacksSize = attacks.count();
+                if (moveId >= attacksSize)
+                {
+                    int idx = moveId - attacksSize;
+                    const auto longCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteQueenSide : CastlingRights::BlackQueenSide;
+                    const auto shortCastlingRights = pos.sideToMove() == Color::White ? CastlingRights::WhiteKingSide : CastlingRights::BlackKingSide;
+                    const auto cr = pos.castlingRights();
+                    if (idx == 0 && contains(cr, longCastlingRights))
+                    {
+                        return Move::castle(CastleType::Long, pos.sideToMove());
+                    }
+                    return Move::castle(CastleType::Short, pos.sideToMove());
+                }
+                else
+                {
+                    Bitboard attacksTemp = attacks;
+                    for (int i = 0; i < moveId; ++i)
+                    {
+                        attacksTemp.popFirst();
+                    }
+                    auto to = attacksTemp.first();
+                    return Move::normal(from, to);
+                }
+                break;
+            }
+            default:
+            {
+                const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
+                Bitboard attacksTemp = attacks;
+                for (int i = 0; i < moveId; ++i)
+                {
+                    attacksTemp.popFirst();
+                }
+                auto to = attacksTemp.first();
+                return Move::normal(from, to);
+            }
+            }
+            break;
         }
         }
 

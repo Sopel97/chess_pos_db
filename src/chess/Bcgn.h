@@ -51,6 +51,7 @@ namespace bcgn
     {
         Level_0 = 0,
         Level_1 = 1,
+        Level_2 = 2,
         SIZE
     };
 
