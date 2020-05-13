@@ -181,28 +181,27 @@ namespace lookup
     }();
 }
 
-inline int nthSetBitIndex(std::uint64_t v, int n)
+inline int nthSetBitIndex(std::uint64_t v, std::uint64_t n)
 {
-    int p = intrin::popcount(v & 0xFFFFFFFFull);
-    int shift = 0;
-    if (p <= n) {
-        v >>= 32;
-        shift += 32;
-        n -= p;
-    }
-    p = intrin::popcount(v & 0xFFFFull);
-    if (p <= n) {
-        v >>= 16;
-        shift += 16;
-        n -= p;
-    }
-    p = intrin::popcount(v & 0xFFull);
-    if (p <= n) {
-        shift += 8;
-        v >>= 8;
-        n -= p;
-    }
+    std::uint64_t shift = 0;
 
-    if (n >= 8) return 0; // optional safety, in case n > # of set bits
-    return lookup::nthSetBitIndex[v & 0xFF][n] + shift;
+    std::uint64_t p = intrin::popcount(v & 0xFFFFFFFFull);
+    std::uint64_t pmask = static_cast<std::uint64_t>(p > n) - 1ull;
+    v >>= 32 & pmask;
+    shift += 32 & pmask;
+    n -= p & pmask;
+
+    p = intrin::popcount(v & 0xFFFFull);
+    pmask = static_cast<std::uint64_t>(p > n) - 1ull;
+    v >>= 16 & pmask;
+    shift += 16 & pmask;
+    n -= p & pmask;
+
+    p = intrin::popcount(v & 0xFFull);
+    pmask = static_cast<std::uint64_t>(p > n) - 1ull;
+    shift += 8 & pmask;
+    v >>= 8 & pmask;
+    n -= p & pmask;
+
+    return static_cast<int>(lookup::nthSetBitIndex[v & 0xFFull][n] + shift);
 }
