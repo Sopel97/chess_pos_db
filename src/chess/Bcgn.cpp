@@ -612,6 +612,7 @@ namespace bcgn
 
         case BcgnCompressionLevel::Level_2:
         {
+            // TODO: we need to write bits, and just enough for the job
             const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
             const std::uint8_t pieceId = (pos.piecesBB(pos.sideToMove()) & bb::before(move.from)).count();
             std::uint8_t moveId = 0;
@@ -619,6 +620,7 @@ namespace bcgn
             switch (pt)
             {
             case PieceType::Pawn:
+                // TODO: pawns need a different encoding scheme
                 moveId = move_index::pawnDestinationIndex(move.from, move.to, pos.sideToMove(), move.promotedPiece.type());
                 break;
             case PieceType::King:
@@ -778,6 +780,7 @@ namespace bcgn
 
         case BcgnCompressionLevel::Level_2:
         {
+            // TODO: we need to read bits, and just enough for the job
             const std::uint16_t index =
                 ((m_encodedMovetext[0]) << 8)
                 | m_encodedMovetext[1];
@@ -791,6 +794,7 @@ namespace bcgn
             switch (pt)
             {
             case PieceType::Pawn:
+                // TODO: pawns need a different encoding scheme
                 return move_index::destinationIndexToPawnMove(pos, moveId, from, pos.sideToMove());
             case PieceType::King:
             {
