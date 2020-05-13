@@ -16,9 +16,16 @@
     // client regular updates on the progress.
     "report_progress" : true,
 
-    // The path used for the imported pgns data
-    // if "merge" is true.
-    "temporary_path" : "path", // optional
+    // The paths used for the imported pgns data
+    // if "merge" is true. Maximum of 2 paths will be used.
+    "temporary_paths" : ["path1", "path2"], // optional
+
+    // The volume that each of the temporary paths
+    // can fit. This effectively limits
+    // the size of resulting merged files.
+    // If not specified then it is assumed
+    // to be enough for merging all files at once.
+    "temporary_space" : "100GiB", // optional
 
     // Lists of paths of the pgns for each game level.
     "human_pgns" : ["path", "path"],
@@ -50,17 +57,6 @@
     "num_games_imported" : 123, // only if finished is true
     "num_positions_imported" : 123, // only if finished is true
     "num_games_skipped" : 123 // only if finished is true
-}
-
-// Merge files of the currently open database
-{
-    "command" : "merge",
-
-    // Optional destination path. If present it must be
-    // different than the current path of the database.
-    "destination_path" : "path",
-
-    "report_progress" : true
 }
 
 // This is sent during/after the merging process (if specified)
