@@ -582,7 +582,7 @@ namespace persistence
             {
                 for (auto&& file : m_files)
                 {
-                    file.executeQuery(query, keys, queries, stats);
+                    file->executeQuery(query, keys, queries, stats);
                 }
             }
 
@@ -604,7 +604,7 @@ namespace persistence
 
                 for (auto&& file : m_files)
                 {
-                    file.queryRetractions(query, pos, retractionsStats);
+                    file->queryRetractions(query, pos, retractionsStats);
                 }
 
                 return retractionsStats;
@@ -622,7 +622,7 @@ namespace persistence
                 }
 
                 const auto outFilePath = m_path / "merge_tmp";
-                const std::uint32_t id = m_files.front().id();
+                const std::uint32_t id = m_files.front()->id();
                 auto index = mergeAllIntoFile(outFilePath, temporaryDirs, progressCallback, true);
 
                 // We had to use a temporary name because we're working in the same directory.
@@ -632,7 +632,7 @@ namespace persistence
                 std::filesystem::rename(outFilePath, newFilePath);
                 std::filesystem::rename(pathForIndex(outFilePath), pathForIndex(newFilePath));
 
-                m_files.emplace_back(newFilePath, std::move(index));
+                m_files.emplace_back(std::make_unique<File>(newFilePath, std::move(index)));
             }
 
             // data has to be sorted in ascending order
@@ -642,7 +642,7 @@ namespace persistence
 
                 auto path = nextPath();
                 (void)ext::writeFile(path, data, count);
-                m_files.emplace_back(path);
+                m_files.emplace_back(std::make_unique<File>(path));
             }
 
             // entries have to be sorted in ascending order
@@ -671,11 +671,13 @@ namespace persistence
             {
                 while (!m_futureFiles.empty())
                     m_files.emplace_back(
-                        m_futureFiles.extract(
-                            m_futureFiles.begin()
+                        std::make_unique<File>(
+                            m_futureFiles.extract(
+                                m_futureFiles.begin()
+                            )
+                            .value()
+                            .get()
                         )
-                        .value()
-                        .get()
                     );
                 m_futureFiles.clear();
             }
@@ -689,7 +691,7 @@ namespace persistence
 
                 if (!m_files.empty())
                 {
-                    return m_files.back().id() + 1;
+                    return m_files.back()->id() + 1;
                 }
 
                 return 0;
@@ -706,7 +708,7 @@ namespace persistence
 
                 while (!m_files.empty())
                 {
-                    auto path = m_files.back().path();
+                    auto path = m_files.back()->path();
                     m_files.pop_back();
 
                     std::filesystem::remove(path);
@@ -751,7 +753,7 @@ namespace persistence
                     files.reserve(m_files.size());
                     for (auto&& file : m_files)
                     {
-                        files.emplace_back(file.entries());
+                        files.emplace_back(file->entries());
                     }
 
                     {
@@ -871,7 +873,7 @@ namespace persistence
                         continue;
                     }
 
-                    m_files.emplace_back(entry.path());
+                    m_files.emplace_back(std::make_unique<File>(entry.path()));
                 }
 
                 std::sort(m_files.begin(), m_files.end());

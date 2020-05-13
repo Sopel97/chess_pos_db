@@ -201,6 +201,12 @@ namespace persistence
             {
                 static std::filesystem::path pathForId(const std::filesystem::path& path, std::uint32_t id);
 
+                File(const File&) = delete;
+                File(File&&) noexcept = default;
+
+                File& operator=(const File&) = delete;
+                File& operator=(File&&) noexcept = default;
+
                 File(std::filesystem::path path);
 
                 File(ext::ImmutableSpan<Entry>&& entries);
@@ -388,7 +394,7 @@ namespace persistence
 
             private:
                 std::filesystem::path m_path;
-                std::vector<File> m_files;
+                std::vector<std::unique_ptr<File>> m_files;
 
                 // We store it in a set because then we can change insertion
                 // order through forcing ids. It's easier to keep it
