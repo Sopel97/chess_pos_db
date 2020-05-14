@@ -1189,6 +1189,7 @@ namespace persistence
                 "_server"
             };
 
+            static inline const MemoryAmount m_headerBufferMemory = cfg::g_config["persistence"][name]["header_buffer_memory"].get<MemoryAmount>();
             static inline const MemoryAmount m_pgnParserMemory = cfg::g_config["persistence"][name]["pgn_parser_memory"].get<MemoryAmount>();
             static inline const MemoryAmount m_bcgnParserMemory = cfg::g_config["persistence"][name]["bcgn_parser_memory"].get<MemoryAmount>();
 
@@ -1196,15 +1197,7 @@ namespace persistence
             OrderedEntrySetPositionDatabase(std::filesystem::path path) :
                 BaseType(path, m_manifest),
                 m_path(path),
-                m_headers(makeHeaders(path)),
-                m_partition(path / partitionDirectory)
-            {
-            }
-
-            OrderedEntrySetPositionDatabase(std::filesystem::path path, MemoryAmount headerBufferMemory) :
-                BaseType(path, m_manifest),
-                m_path(path),
-                m_headers(makeHeaders(path, headerBufferMemory)),
+                m_headers(makeHeaders(path, m_headerBufferMemory)),
                 m_partition(path / partitionDirectory)
             {
             }
@@ -1233,6 +1226,8 @@ namespace persistence
 
             void clear() override
             {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
                 if constexpr (hasGameHeaders)
                 {
                     for (auto& header : m_headers)
@@ -1250,6 +1245,8 @@ namespace persistence
 
             [[nodiscard]] query::Response executeQuery(query::Request query) override
             {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
                 disableUnsupportedQueryFeatures(query);
 
                 query::PositionQueries posQueries = query::gatherPositionQueries(query);
@@ -1298,6 +1295,8 @@ namespace persistence
                 MergeProgressCallback progressCallback = {}
             ) override
             {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
                 Logger::instance().logInfo(": Merging files...");
 
                 auto progressReport = [&progressCallback](const ext::Progress& report) {
@@ -1325,6 +1324,8 @@ namespace persistence
                 ImportProgressCallback progressCallback = {}
             ) override
             {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
                 const std::size_t numSortingThreads = std::clamp(std::thread::hardware_concurrency(), 2u, 3u) - 1u;
 
                 if (files.empty())
@@ -1381,7 +1382,6 @@ namespace persistence
                 Logger::instance().logInfo(": Finalizing...");
 
                 pipeline.waitForCompletion();
-                collectFutureFiles();
 
                 flush();
 
@@ -1394,17 +1394,6 @@ namespace persistence
                 return statsTotal;
             }
 
-            void flush() override
-            {
-                if constexpr (hasGameHeaders)
-                {
-                    for (auto& header : m_headers)
-                    {
-                        header->flush();
-                    }
-                }
-            }
-
         private:
             std::filesystem::path m_path;
 
@@ -1414,9 +1403,19 @@ namespace persistence
             // We only have one partition for this format
             Partition m_partition;
 
-            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> makeHeaders(const std::filesystem::path& path)
+            std::mutex m_mutex;
+
+            void flush() override
             {
-                return makeHeaders(path, IndexedGameHeaderStorage::defaultMemory);
+                collectFutureFiles();
+
+                if constexpr (hasGameHeaders)
+                {
+                    for (auto& header : m_headers)
+                    {
+                        header->flush();
+                    }
+                }
             }
 
             [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> makeHeaders(const std::filesystem::path& path, MemoryAmount headerBufferMemory)
