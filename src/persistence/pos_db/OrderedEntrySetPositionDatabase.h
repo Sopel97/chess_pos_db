@@ -1394,17 +1394,6 @@ namespace persistence
                 return statsTotal;
             }
 
-        private:
-            std::filesystem::path m_path;
-
-            // TODO: don't include them when !hasGameHeaders
-            EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> m_headers;
-
-            // We only have one partition for this format
-            Partition m_partition;
-
-            std::mutex m_mutex;
-
             void flush() override
             {
                 collectFutureFiles();
@@ -1418,6 +1407,17 @@ namespace persistence
                 }
             }
 
+
+        private:
+            std::filesystem::path m_path;
+
+            // TODO: don't include them when !hasGameHeaders
+            EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> m_headers;
+
+            // We only have one partition for this format
+            Partition m_partition;
+
+            std::mutex m_mutex;
             [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> makeHeaders(const std::filesystem::path& path, MemoryAmount headerBufferMemory)
             {
                 if constexpr (hasGameHeaders)
