@@ -365,7 +365,7 @@ namespace persistence
             }
         };
 
-        void CountAndGameOffset::combine(const PackedCountAndGameOffset& rhs)
+        inline void CountAndGameOffset::combine(const PackedCountAndGameOffset& rhs)
         {
             combine(rhs.unpack());
         }

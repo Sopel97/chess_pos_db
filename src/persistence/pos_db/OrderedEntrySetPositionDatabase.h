@@ -1237,9 +1237,12 @@ namespace persistence
 
             void clear() override
             {
-                for (auto& header : m_headers)
+                if constexpr (hasGameHeaders)
                 {
-                    header->clear();
+                    for (auto& header : m_headers)
+                    {
+                        header->clear();
+                    }
                 }
                 m_partition.clear();
             }
@@ -1397,9 +1400,12 @@ namespace persistence
 
             void flush() override
             {
-                for (auto& header : m_headers)
+                if constexpr (hasGameHeaders)
                 {
-                    header->flush();
+                    for (auto& header : m_headers)
+                    {
+                        header->flush();
+                    }
                 }
             }
 
