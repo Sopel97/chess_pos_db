@@ -246,6 +246,9 @@
     <ClInclude Include="src\persistence\pos_db\OrderedEntrySetPositionDatabase.h">
       <Filter>Header Files\src\persistence\pos_db</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.h">
+      <Filter>Header Files\src\persistence\pos_db\delta</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -340,6 +343,9 @@
     </ClCompile>
     <ClCompile Include="test\chess\ReverseMoveGeneratorTest.cpp">
       <Filter>Source Files\test\chess</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.cpp">
+      <Filter>Source Files\src\persistence\pos_db\delta</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

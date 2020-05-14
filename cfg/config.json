@@ -154,7 +154,11 @@
 
             "max_merge_buffer_size" : "1GiB",
 
-            "pgn_parser_memory" : "4MiB"
+            "pgn_parser_memory" : "4MiB",
+
+            "bcgn_parser_memory" : "4MiB",
+
+            "index_writer_buffer_size" : "4MiB"
         },
 
         "db_delta" : {
@@ -166,7 +170,11 @@
 
             "max_merge_buffer_size" : "1GiB",
 
-            "pgn_parser_memory" : "4MiB"
+            "pgn_parser_memory" : "4MiB",
+
+            "bcgn_parser_memory" : "4MiB",
+
+            "index_writer_buffer_size" : "4MiB"
         },
 
         "db_epsilon" : {
@@ -180,7 +188,9 @@
 
             "pgn_parser_memory" : "4MiB",
 
-            "bcgn_parser_memory" : "4MiB"
+            "bcgn_parser_memory" : "4MiB",
+
+            "index_writer_buffer_size" : "4MiB"
         }
     },
 

@@ -77,6 +77,7 @@
     <ClInclude Include="src\persistence\pos_db\Database.h" />
     <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h" />
+    <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.h" />
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h" />
     <ClInclude Include="src\persistence\pos_db\OrderedEntrySetPositionDatabase.h" />
     <ClInclude Include="src\persistence\pos_db\Query.h" />
@@ -112,6 +113,7 @@
     <ClCompile Include="src\persistence\pos_db\Database.cpp" />
     <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp" />
+    <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.cpp" />
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp" />
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
     <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp" />

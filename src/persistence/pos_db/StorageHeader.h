@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chess/Bcgn.h"
 #include "chess/Date.h"
 #include "chess/Eco.h"
 #include "chess/GameClassification.h"
@@ -27,6 +28,10 @@ namespace persistence
         PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx, std::uint16_t plyCount);
 
         PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx);
+
+        PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx, std::uint16_t plyCount);
+
+        PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx);
 
         [[nodiscard]] const char* data() const;
 
@@ -138,6 +143,12 @@ namespace persistence
         static constexpr std::size_t minMemory = 1024;
 
         Header(std::filesystem::path path, std::size_t memory = defaultMemory, std::string name = "");
+
+        Header(const Header&) = delete;
+        Header(Header&&) noexcept = default;
+
+        Header& operator=(const Header&) = delete;
+        Header& operator=(Header&&) noexcept = default;
 
         [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game);
 

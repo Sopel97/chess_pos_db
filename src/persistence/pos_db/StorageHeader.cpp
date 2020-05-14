@@ -60,6 +60,33 @@ namespace persistence
         fillPackedStrings(event, white, black);
     }
 
+    PackedGameHeader::PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx, std::uint16_t plyCount) :
+        m_gameIdx(gameIdx),
+        m_plyCount(plyCount)
+    {
+        auto header = game.gameHeader();
+        m_date = header.date();
+        m_eco = header.eco();
+        std::string_view event = header.event();
+        std::string_view white = header.whitePlayer();
+        std::string_view black = header.blackPlayer();
+        m_result = *header.result();
+        fillPackedStrings(event, white, black);
+    }
+
+    PackedGameHeader::PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx) :
+        m_gameIdx(gameIdx)
+    {
+        auto header = game.gameHeader();
+        m_date = header.date();
+        m_eco = header.eco();
+        std::string_view event = header.event();
+        std::string_view white = header.whitePlayer();
+        std::string_view black = header.blackPlayer();
+        m_result = *header.result();
+        fillPackedStrings(event, white, black);
+    }
+
     [[nodiscard]] const char* PackedGameHeader::data() const
     {
         return reinterpret_cast<const char*>(this);

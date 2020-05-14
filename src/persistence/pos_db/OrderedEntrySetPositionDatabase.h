@@ -5,15 +5,21 @@
 
 #include "algorithm/Unsort.h"
 
+#include "chess/Bcgn.h"
+#include "chess/Chess.h"
 #include "chess/GameClassification.h"
+#include "chess/Position.h"
+#include "chess/San.h"
 
 #include "enum/EnumArray.h"
 
 #include "external_storage/External.h"
 
+#include "Configuration.h"
 #include "Logger.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <execution>
 #include <filesystem>
 #include <functional>
@@ -37,7 +43,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(size_t{ std::declval<const C>().eloDiff() }, Yes{});
+                    -> decltype(std::int64_t{ std::declval<const C>().eloDiff() }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -53,7 +59,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(size_t{ std::declval<const C>().firstGameIndex() }, Yes{});
+                    -> decltype(std::uint32_t{ std::declval<const C>().firstGameIndex() }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -69,7 +75,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(size_t{ std::declval<const C>().lastGameIndex() }, Yes{});
+                    -> decltype(std::uint32_t{ std::declval<const C>().lastGameIndex() }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -85,7 +91,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(size_t{ std::declval<const C>().firstGameOffset() }, Yes{});
+                    -> decltype(std::uint64_t{ std::declval<const C>().firstGameOffset() }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -101,7 +107,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(size_t{ std::declval<const C>().lastGameOffset() }, Yes{});
+                    -> decltype(std::uint64_t{ std::declval<const C>().lastGameOffset() }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -117,7 +123,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(size_t{ std::declval<const C>().reverseMove(std::declval<const Position>()) }, Yes{});
+                    -> decltype(ReverseMove{ std::declval<const C>().reverseMove(std::declval<const Position>()) }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -131,7 +137,7 @@ namespace persistence
             typename EntryT,
             typename TraitsT
         >
-        struct Database final : persistence::Database
+        struct OrderedEntrySetPositionDatabase final : persistence::Database
         {
             static_assert(std::is_trivially_copyable_v<EntryT>);
 
@@ -198,9 +204,22 @@ namespace persistence
                 (void)ext::writeFile<typename Index::EntryType>(indexPath, index.data(), index.size());
             }
 
-            static auto extractEntryKey = [](const EntryT& entry) {
-                return entry.key();
-            };
+            template <typename T>
+            [[nodiscard]] static std::vector<std::vector<T>> createBuffers(std::size_t numBuffers, std::size_t size)
+            {
+                ASSERT(size > 0);
+
+                std::vector<std::vector<T>> buffers;
+                buffers.resize(numBuffers);
+                for (auto& buffer : buffers)
+                {
+                    buffer.reserve(size);
+                }
+                return buffers;
+            }
+
+            static inline std::size_t m_indexGranularity = cfg::g_config["persistence"][name]["index_granularity"].get<std::size_t>();
+            static inline MemoryAmount m_indexWriterBufferSize = cfg::g_config["persistence"][name]["index_writer_buffer_size"].get<MemoryAmount>();
 
             struct File
             {
@@ -272,7 +291,8 @@ namespace persistence
                     const query::Request& query,
                     const std::vector<KeyT>& keys,
                     const query::PositionQueries& queries,
-                    std::vector<PositionStats>& stats)
+                    std::vector<PositionStats>& stats
+                )
                 {
                     ASSERT(queries.size() == stats.size());
                     ASSERT(queries.size() == keys.size());
@@ -292,7 +312,7 @@ namespace persistence
                     }
                 }
 
-                void File::queryRetractions(
+                void queryRetractions(
                     const query::Request& query,
                     const Position& pos,
                     RetractionsStats& retractionsStats
@@ -317,9 +337,10 @@ namespace persistence
                 void accumulateStatsFromEntries(
                     const std::vector<EntryT>& entries,
                     const query::Request& query,
-                    const Key& key,
+                    const KeyT& key,
                     query::PositionQueryOrigin origin,
-                    PositionStats& stats)
+                    PositionStats& stats
+                )
                 {
                     for (auto&& [select, fetch] : query.fetchingOptions)
                     {
@@ -455,7 +476,7 @@ namespace persistence
                     waitForCompletion();
                 }
 
-                [[nodiscard]] std::future<Index> scheduleUnordered(const std::filesystem::path& path, std::vector<Entry>&& elements)
+                [[nodiscard]] std::future<Index> scheduleUnordered(const std::filesystem::path& path, std::vector<EntryT>&& elements)
                 {
                     std::unique_lock<std::mutex> lock(m_mutex);
 
@@ -565,7 +586,9 @@ namespace persistence
 
                         lock.unlock();
 
-                        Index index = ext::makeIndex(job.buffer, indexGranularity, CompareLessWithoutReverseMove{}, extractEntryKey);
+                        Index index = ext::makeIndex(job.buffer, m_indexGranularity, CompareLessWithoutReverseMove{}, [](const EntryT& entry) {
+                            return entry.key();
+                            });
                         writeIndexFor(job.path, index);
                         job.promise.set_value(std::move(index));
 
@@ -779,7 +802,7 @@ namespace persistence
                 }
 
                 [[nodiscard]] ext::MergePlan makeMergePlan(
-                    const std::vector<ext::ImmutableSpan<Entry>>& files,
+                    const std::vector<ext::ImmutableSpan<EntryT>>& files,
                     const std::filesystem::path& outFilePath,
                     const std::vector<std::filesystem::path>& temporaryDirs
                 ) const
@@ -821,7 +844,10 @@ namespace persistence
                 {
                     ASSERT(files.size() >= 2);
 
-                    ext::IndexBuilder<EntryT, CompareLessWithoutReverseMove, decltype(extractEntryKey)> ib(indexGranularity, {}, extractEntryKey);
+                    auto extractKey = [](const EntryT& entry) {
+                        return entry.key();
+                    };
+                    ext::IndexBuilder<EntryT, CompareLessWithoutReverseMove, decltype(extractKey)> ib(m_indexGranularity, {}, extractKey);
                     {
                         auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
                             ib.append(reinterpret_cast<const EntryT*>(data), count);
@@ -836,12 +862,12 @@ namespace persistence
                         }
 
                         {
-                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(mergeMemory.bytes() / 32, 2);
+                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_indexWriterBufferSize.bytes() / 2, 2);
                             ext::BackInserter<EntryT> out(outFile, util::DoubleBuffer<EntryT>(outBufferSize));
 
                             auto cmp = CompareEqualFull{};
                             bool first = true;
-                            Entry accumulator;
+                            EntryT accumulator;
                             auto append = [&](const EntryT& entry) {
                                 if (first)
                                 {
@@ -926,7 +952,7 @@ namespace persistence
                                         }
                                     }
                                 };
-                                ext::merge_for_each(plan, callbacks, spans, append, Entry::CompareLessFull{});
+                                ext::merge_for_each(plan, callbacks, spans, append, CompareLessFull{});
 
                                 if (!spans.empty())
                                 {
@@ -948,7 +974,7 @@ namespace persistence
                                         }
                                     }
                                 };
-                                ext::merge_for_each(plan, callbacks, spans, append, Entry::CompareLessFull{});
+                                ext::merge_for_each(plan, callbacks, spans, append, CompareLessFull{});
 
                                 if (deleteOld && !spans.empty())
                                 {
@@ -1165,11 +1191,12 @@ namespace persistence
                 "_server"
             };
 
-            static const MemoryAmount m_pgnParserMemory = cfg::g_config["persistence"][name]["pgn_parser_memory"].get<MemoryAmount>();
+            static inline const MemoryAmount m_pgnParserMemory = cfg::g_config["persistence"][name]["pgn_parser_memory"].get<MemoryAmount>();
+            static inline const MemoryAmount m_bcgnParserMemory = cfg::g_config["persistence"][name]["bcgn_parser_memory"].get<MemoryAmount>();
 
         public:
-            Database(std::filesystem::path path) :
-                BaseType(path, Database::manifest()),
+            OrderedEntrySetPositionDatabase(std::filesystem::path path) :
+                BaseType(path, m_manifest),
                 m_path(path),
                 m_headers(makeHeaders(path)),
                 m_nextGameIdx(numGamesInHeaders()),
@@ -1177,8 +1204,8 @@ namespace persistence
             {
             }
 
-            Database(std::filesystem::path path, std::size_t headerBufferMemory) :
-                BaseType(path, Database::manifest()),
+            OrderedEntrySetPositionDatabase(std::filesystem::path path, std::size_t headerBufferMemory) :
+                BaseType(path, m_manifest),
                 m_path(path),
                 m_headers(makeHeaders(path, headerBufferMemory)),
                 m_nextGameIdx(numGamesInHeaders()),
@@ -1210,9 +1237,9 @@ namespace persistence
 
             void clear() override
             {
-                for (auto& header : *m_headers)
+                for (auto& header : m_headers)
                 {
-                    header.clear();
+                    header->clear();
                 }
                 m_partition.clear();
             }
@@ -1370,9 +1397,9 @@ namespace persistence
 
             void flush() override
             {
-                for (auto& header : *m_headers)
+                for (auto& header : m_headers)
                 {
-                    header.flush();
+                    header->flush();
                 }
             }
 
@@ -1380,30 +1407,30 @@ namespace persistence
             std::filesystem::path m_path;
 
             // TODO: don't include them when !hasGameHeaders
-            std::optional<EnumArray<GameLevel, Header>> m_headers;
+            EnumArray<GameLevel, std::unique_ptr<Header>> m_headers;
             std::atomic<std::uint32_t> m_nextGameIdx;
 
             // We only have one partition for this format
             Partition m_partition;
 
-            [[nodiscard]] std::optional<EnumArray<GameLevel, Header>> makeHeaders(const std::filesystem::path& path)
+            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<Header>> makeHeaders(const std::filesystem::path& path)
             {
-                return makeHeaders(Header::defaultMemory);
+                return makeHeaders(path, Header::defaultMemory);
             }
 
-            [[nodiscard]] std::optional<EnumArray<GameLevel, Header>> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
+            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<Header>> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
             {
                 if constexpr (hasGameHeaders)
                 {
                     return {
-                        Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
-                        Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
-                        Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
+                        std::make_unique<Header>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
+                        std::make_unique<Header>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
+                        std::make_unique<Header>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
                     };
                 }
                 else
                 {
-                    return std::nullopt;
+                    return {};
                 }
             }
 
@@ -1413,9 +1440,9 @@ namespace persistence
                 {
                     std::uint32_t total = 0;
 
-                    for (auto& header : *m_headers)
+                    for (auto& header : m_headers)
                     {
-                        total += header.numGames();
+                        total += header->numGames();
                     }
 
                     return total;
@@ -1431,12 +1458,12 @@ namespace persistence
                 m_partition.collectFutureFiles();
             }
 
-            [[nodiscard]] std::vector<PackedGameHeader> Database::queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, GameLevel level)
+            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, GameLevel level)
             {
-                return (*m_headers)[level].queryByOffsets(offsets);
+                return m_headers[level]->queryByOffsets(offsets);
             }
 
-            [[nodiscard]] std::vector<GameHeader> Database::queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestination>& destinations)
+            [[nodiscard]] std::vector<GameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestination>& destinations)
             {
                 EnumArray<GameLevel, std::vector<std::uint64_t>> offsetsByLevel;
                 EnumArray<GameLevel, std::vector<std::size_t>> indices;
@@ -1467,7 +1494,7 @@ namespace persistence
                 return headers;
             }
 
-            [[nodiscard]] std::vector<GameHeader> Database::queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestinationForRetraction>& destinations)
+            [[nodiscard]] std::vector<GameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestinationForRetraction>& destinations)
             {
                 EnumArray<GameLevel, std::vector<std::uint64_t>> offsetsByLevel;
                 EnumArray<GameLevel, std::vector<std::size_t>> indices;
@@ -1500,7 +1527,7 @@ namespace persistence
 
             [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, GameLevel level)
             {
-                return (*m_headers)[level].queryByIndices(indices);
+                return m_headers[level]->queryByIndices(indices);
             }
 
             [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestination>& destinations)
@@ -1688,7 +1715,6 @@ namespace persistence
                 std::vector<std::uint64_t> lastGameOffsets;
                 std::vector<query::GameHeaderDestinationForRetraction> firstGameDestinations;
                 std::vector<query::GameHeaderDestinationForRetraction> lastGameDestinations;
-                query::FetchLookups lookup = query::buildGameHeaderFetchLookup(query);
 
                 for (auto&& [reverseMove, stat] : unsegregated)
                 {
@@ -1705,7 +1731,7 @@ namespace persistence
                             {
                                 if constexpr (hasFirstGame)
                                 {
-                                    if (lookup[origin][select].fetchFirstGameForEach)
+                                    if (fetching.fetchFirstGameForEach)
                                     {
                                         if constexpr (hasFirstGameIndex)
                                         {
@@ -1717,13 +1743,13 @@ namespace persistence
                                             firstGameOffsets.emplace_back(entry.firstGameOffset());
                                         }
 
-                                        firstGameDestinations.emplace_back(i, select, level, result, &query::Entry::firstGame);
+                                        firstGameDestinations.emplace_back(reverseMove, level, result, &query::Entry::firstGame);
                                     }
                                 }
 
                                 if constexpr (hasLastGame)
                                 {
-                                    if (lookup[origin][select].fetchLastGameForEach)
+                                    if (fetching.fetchLastGameForEach)
                                     {
                                         if constexpr (hasLastGameIndex)
                                         {
@@ -1735,7 +1761,7 @@ namespace persistence
                                             lastGameOffsets.emplace_back(entry.lastGameOffset());
                                         }
 
-                                        lastGameDestinations.emplace_back(i, select, level, result, &query::Entry::lastGame);
+                                        lastGameDestinations.emplace_back(reverseMove, level, result, &query::Entry::lastGame);
                                     }
                                 }
                             }
@@ -1865,10 +1891,10 @@ namespace persistence
                                 else return 0;
                             }();
 
-                            const auto gameIndexOrOffset = [level]() {
-                                if constexpr (usesGameIndex) return (*m_headers)[level].nextGameId();
-                                if constexpr (usesGameOffset) return (*m_headers)[level].nextGameOffset();
-                                return 0;
+                            const auto gameIndexOrOffset = [this, level]() {
+                                if constexpr (usesGameIndex) return m_headers[level]->nextGameId();
+                                else if constexpr (usesGameOffset) return m_headers[level]->nextGameOffset();
+                                else return 0;
                             }();
 
                             PositionWithZobrist position = PositionWithZobrist::startPosition();
@@ -1895,7 +1921,7 @@ namespace persistence
                             if constexpr (hasGameHeaders)
                             {
                                 auto gameHeader = PackedGameHeader(game, m_nextGameIdx.fetch_add(1, std::memory_order_relaxed), static_cast<std::uint16_t>(numPositionsInGame - 1u));
-                                const std::uint64_t actualGameIndex = header.addHeaderNoLock(gameHeader).index;
+                                const std::uint64_t actualGameIndex = m_headers[level]->addHeaderNoLock(gameHeader).index;
                                 ASSERT(gameIndex == actualGameIndex);
                                 (void)actualGameIndex;
                             }
@@ -1926,16 +1952,16 @@ namespace persistence
                             const std::int64_t eloDiff = [&game]() {
                                 if constexpr (hasEloDiff)
                                 {
-                                    auto& gameHeader = game.gameHeader();
+                                    auto gameHeader = game.gameHeader();
                                     return (std::uint64_t)gameHeader.whiteElo() - (std::uint64_t)gameHeader.blackElo();
                                 }
                                 else return 0;
                             }();
 
-                            const auto gameIndexOrOffset = [level]() {
-                                if constexpr (usesGameIndex) return (*m_headers)[level].nextGameId();
-                                if constexpr (usesGameOffset) return (*m_headers)[level].nextGameOffset();
-                                return 0;
+                            const auto gameIndexOrOffset = [this, level]() {
+                                if constexpr (usesGameIndex) return m_headers[level]->nextGameId();
+                                else if constexpr (usesGameOffset) return m_headers[level]->nextGameOffset();
+                                else return 0;
                             }();
 
                             PositionWithZobrist position = PositionWithZobrist::startPosition();
@@ -1954,7 +1980,7 @@ namespace persistence
                             if constexpr (hasGameHeaders)
                             {
                                 auto gameHeader = PackedGameHeader(game, m_nextGameIdx.fetch_add(1, std::memory_order_relaxed), static_cast<std::uint16_t>(numPositionsInGame - 1u));
-                                const std::uint64_t actualGameIndex = header.addHeaderNoLock(gameHeader).index;
+                                const std::uint64_t actualGameIndex = m_headers[level]->addHeaderNoLock(gameHeader).index;
                                 ASSERT(gameIndex == actualGameIndex);
                                 (void)actualGameIndex;
                             }
