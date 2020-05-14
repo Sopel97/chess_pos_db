@@ -8,6 +8,8 @@
 
 #include "external_storage/External.h"
 
+#include "util/MemoryAmount.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <limits>
@@ -139,10 +141,10 @@ namespace persistence
         static inline const std::filesystem::path headerPath = "header";
         static inline const std::filesystem::path indexPath = "index";
 
-        static constexpr std::size_t defaultMemory = 4 * 1024 * 1024;
-        static constexpr std::size_t minMemory = 1024;
+        static constexpr MemoryAmount defaultMemory = MemoryAmount::mebibytes(4);
+        static constexpr MemoryAmount minMemory = MemoryAmount::kibibytes(1);
 
-        Header(std::filesystem::path path, std::size_t memory = defaultMemory, std::string name = "");
+        Header(std::filesystem::path path, MemoryAmount memory = defaultMemory, std::string name = "");
 
         Header(const Header&) = delete;
         Header(Header&&) noexcept = default;
@@ -151,12 +153,9 @@ namespace persistence
         Header& operator=(Header&&) noexcept = default;
 
         [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game);
-
-        [[nodiscard]] HeaderEntryLocation addGameNoLock(const pgn::UnparsedGame& game);
-
         [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount);
-
-        [[nodiscard]] HeaderEntryLocation addGameNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount);
+        [[nodiscard]] HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game);
+        [[nodiscard]] HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
 
         [[nodiscard]] std::uint32_t nextGameId() const;
 
@@ -172,12 +171,6 @@ namespace persistence
 
         [[nodiscard]] std::vector<PackedGameHeader> queryByIndices(std::vector<std::uint32_t> keys);
 
-        // returns the index of the header (not the address)
-        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const PackedGameHeader& header);
-
-        // returns the index of the header (not the address)
-        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeader& header);
-
         [[nodiscard]] std::uint32_t numGames() const;
 
     private:
@@ -188,14 +181,13 @@ namespace persistence
         ext::Vector<char> m_header;
         ext::Vector<std::size_t> m_index;
 
-        std::mutex m_mutex;
-
-        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount);
-
-        [[nodiscard]] HeaderEntryLocation addHeaderNoLock(const pgn::UnparsedGame& game);
-
         [[nodiscard]] HeaderEntryLocation addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount);
-
         [[nodiscard]] HeaderEntryLocation addHeader(const pgn::UnparsedGame& game);
+        [[nodiscard]] HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game);
+        [[nodiscard]] HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
+
+        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeader& entry);
+
+        [[nodiscard]] std::uint32_t nextId() const;
     };
 }

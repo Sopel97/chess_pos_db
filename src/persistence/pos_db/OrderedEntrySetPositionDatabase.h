@@ -36,7 +36,7 @@ namespace persistence
         namespace detail
         {
             template <typename T>
-            class hasEloDiff 
+            struct HasEloDiff
             {
             private:
                 using Yes = char;
@@ -52,7 +52,7 @@ namespace persistence
             };
 
             template <typename T>
-            class hasFirstGameIndex 
+            struct HasFirstGameIndex
             {
             private:
                 using Yes = char;
@@ -68,7 +68,7 @@ namespace persistence
             };
 
             template <typename T>
-            class hasLastGameIndex
+            struct HasLastGameIndex
             {
             private:
                 using Yes = char;
@@ -84,7 +84,7 @@ namespace persistence
             };
 
             template <typename T>
-            class hasFirstGameOffset
+            struct HasFirstGameOffset
             {
             private:
                 using Yes = char;
@@ -100,7 +100,7 @@ namespace persistence
             };
 
             template <typename T>
-            class hasLastGameOffset
+            struct HasLastGameOffset
             {
             private:
                 using Yes = char;
@@ -116,7 +116,7 @@ namespace persistence
             };
 
             template <typename T>
-            class hasReverseMove
+            struct HasReverseMove
             {
             private:
                 using Yes = char;
@@ -141,12 +141,12 @@ namespace persistence
         {
             static_assert(std::is_trivially_copyable_v<EntryT>);
 
-            static constexpr bool hasEloDiff = detail::hasEloDiff<EntryT>::value;
-            static constexpr bool hasFirstGameIndex = detail::hasFirstGameIndex<EntryT>::value;
-            static constexpr bool hasLastGameIndex = detail::hasLastGameIndex<EntryT>::value;
-            static constexpr bool hasFirstGameOffset = detail::hasFirstGameOffset<EntryT>::value;
-            static constexpr bool hasLastGameOffset = detail::hasLastGameOffset<EntryT>::value;
-            static constexpr bool hasReverseMove = detail::hasReverseMove<EntryT>::value;
+            static constexpr bool hasEloDiff = detail::HasEloDiff<EntryT>::value;
+            static constexpr bool hasFirstGameIndex = detail::HasFirstGameIndex<EntryT>::value;
+            static constexpr bool hasLastGameIndex = detail::HasLastGameIndex<EntryT>::value;
+            static constexpr bool hasFirstGameOffset = detail::HasFirstGameOffset<EntryT>::value;
+            static constexpr bool hasLastGameOffset = detail::HasLastGameOffset<EntryT>::value;
+            static constexpr bool hasReverseMove = detail::HasReverseMove<EntryT>::value;
 
             static constexpr bool usesGameIndex = hasFirstGameIndex || hasLastGameIndex;
             static constexpr bool usesGameOffset = hasFirstGameOffset || hasLastGameOffset;
@@ -419,7 +419,7 @@ namespace persistence
                     return m_id;
                 }
 
-                [[nodiscard]] File get()
+                [[nodiscard]] File get() &&
                 {
                     Index index = m_future.get();
                     return { m_path, std::move(index) };
@@ -644,23 +644,17 @@ namespace persistence
 
             struct Partition
             {
-                Partition() = default;
+                Partition() :
+                    m_lastId(0)
+                {
+                }
 
-                Partition(std::filesystem::path path)
+                Partition(std::filesystem::path path) :
+                    m_lastId(0)
                 {
                     ASSERT(!path.empty());
 
                     setPath(std::move(path));
-                }
-
-                void setPath(std::filesystem::path path)
-                {
-                    ASSERT(m_futureFiles.empty());
-
-                    m_path = std::move(path);
-                    std::filesystem::create_directories(m_path);
-
-                    discoverFiles();
                 }
 
                 void executeQuery(
@@ -709,48 +703,20 @@ namespace persistence
 
                 // Uses the passed id.
                 // It is required that the file with this id doesn't exist already.
-                void storeUnordered(AsyncStorePipeline& pipeline, std::vector<EntryT>&& entries, std::uint32_t id)
+                void storeUnordered(AsyncStorePipeline& pipeline, std::vector<EntryT>&& entries)
                 {
                     ASSERT(!m_path.empty());
 
-                    std::unique_lock<std::mutex> lock(m_mutex);
-                    auto path = pathForId(id);
-                    m_futureFiles.emplace(pipeline.scheduleUnordered(path, std::move(entries)), path);
-                }
-
-                void storeUnordered(AsyncStorePipeline& pipeline, std::vector<EntryT>&& entries)
-                {
-                    storeUnordered(pipeline, std::move(entries), nextId());
+                    addFutureFile(pipeline, std::move(entries));
                 }
 
                 void collectFutureFiles()
                 {
                     while (!m_futureFiles.empty())
-                        m_files.emplace_back(
-                            std::make_unique<File>(
-                                m_futureFiles.extract(
-                                    m_futureFiles.begin()
-                                )
-                                .value()
-                                .get()
-                                )
-                        );
-                    m_futureFiles.clear();
-                }
-
-                [[nodiscard]] std::uint32_t nextId() const
-                {
-                    if (!m_futureFiles.empty())
                     {
-                        return std::prev(m_futureFiles.end())->id() + 1;
+                        addFile(std::make_unique<File>(std::move(m_futureFiles.back()).get()));
+                        m_futureFiles.pop_back();
                     }
-
-                    if (!m_files.empty())
-                    {
-                        return m_files.back()->id() + 1;
-                    }
-
-                    return 0;
                 }
 
                 [[nodiscard]] const std::filesystem::path path() const
@@ -783,22 +749,28 @@ namespace persistence
                 std::filesystem::path m_path;
                 std::vector<std::unique_ptr<File>> m_files;
 
-                // We store it in a set because then we can change insertion
-                // order through forcing ids. It's easier to keep it
-                // ordered like that. And we need it ordered all the time
-                // because of queries to nextId()
-                std::set<FutureFile> m_futureFiles;
+                std::uint32_t m_lastId;
 
-                std::mutex m_mutex;
+                std::vector<FutureFile> m_futureFiles;
+
+                [[nodiscard]] std::uint32_t nextId() const
+                {
+                    return m_lastId + 1;
+                }
+
+                void setPath(std::filesystem::path path)
+                {
+                    ASSERT(m_futureFiles.empty());
+
+                    m_path = std::move(path);
+                    std::filesystem::create_directories(m_path);
+
+                    discoverFiles();
+                }
 
                 [[nodiscard]] std::filesystem::path pathForId(std::uint32_t id) const
                 {
                     return File::pathForId(m_path, id);
-                }
-
-                [[nodiscard]] std::filesystem::path nextPath() const
-                {
-                    return pathForId(nextId());
                 }
 
                 [[nodiscard]] ext::MergePlan makeMergePlan(
@@ -862,7 +834,7 @@ namespace persistence
                         }
 
                         {
-                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_indexWriterBufferSize.bytes() / 2, 2);
+                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_indexWriterBufferSize.bytes(), 2);
                             ext::BackInserter<EntryT> out(outFile, util::DoubleBuffer<EntryT>(outBufferSize));
 
                             auto cmp = CompareEqualFull{};
@@ -1080,7 +1052,7 @@ namespace persistence
                     std::filesystem::rename(outFilePath, newFilePath);
                     std::filesystem::rename(pathForIndex(outFilePath), pathForIndex(newFilePath));
 
-                    m_files.emplace_back(std::make_unique<File>(newFilePath, std::move(index)));
+                    addFile(std::make_unique<File>(newFilePath, std::move(index)));
                 }
 
                 void removeFiles(
@@ -1105,6 +1077,12 @@ namespace persistence
 
                         std::filesystem::remove(path);
                         std::filesystem::remove(indexPath);
+                    }
+
+                    m_lastId = 0;
+                    for (auto&& file : m_files)
+                    {
+                        m_lastId = std::max(m_lastId, file->id());
                     }
                 }
 
@@ -1151,6 +1129,7 @@ namespace persistence
                     collectFutureFiles();
 
                     m_files.clear();
+                    m_lastId = 0;
 
                     for (auto& entry : std::filesystem::directory_iterator(m_path))
                     {
@@ -1169,10 +1148,29 @@ namespace persistence
                             continue;
                         }
 
-                        m_files.emplace_back(std::make_unique<File>(entry.path()));
+                        addFile(entry.path());
                     }
+                }
 
-                    std::sort(m_files.begin(), m_files.end());
+                void addFile(const std::filesystem::path& path)
+                {
+                    auto file = std::make_unique<File>(path);
+                    m_lastId = std::max(m_lastId, file->id());
+                    m_files.emplace_back(std::move(file));
+                }
+
+                void addFile(std::unique_ptr<File> file)
+                {
+                    m_lastId = std::max(m_lastId, file->id());
+                    m_files.emplace_back(std::move(file));
+                }
+
+                void addFutureFile(AsyncStorePipeline& pipeline, std::vector<EntryT>&& entries)
+                {
+                    const std::uint32_t id = nextId();
+                    auto path = pathForId(id);
+                    m_lastId = std::max(m_lastId, id);
+                    m_futureFiles.emplace_back(pipeline.scheduleUnordered(path, std::move(entries)), path);
                 }
             };
 
@@ -1199,16 +1197,14 @@ namespace persistence
                 BaseType(path, m_manifest),
                 m_path(path),
                 m_headers(makeHeaders(path)),
-                m_nextGameIdx(numGamesInHeaders()),
                 m_partition(path / partitionDirectory)
             {
             }
 
-            OrderedEntrySetPositionDatabase(std::filesystem::path path, std::size_t headerBufferMemory) :
+            OrderedEntrySetPositionDatabase(std::filesystem::path path, MemoryAmount headerBufferMemory) :
                 BaseType(path, m_manifest),
                 m_path(path),
                 m_headers(makeHeaders(path, headerBufferMemory)),
-                m_nextGameIdx(numGamesInHeaders()),
                 m_partition(path / partitionDirectory)
             {
             }
@@ -1414,7 +1410,6 @@ namespace persistence
 
             // TODO: don't include them when !hasGameHeaders
             EnumArray<GameLevel, std::unique_ptr<Header>> m_headers;
-            std::atomic<std::uint32_t> m_nextGameIdx;
 
             // We only have one partition for this format
             Partition m_partition;
@@ -1424,7 +1419,7 @@ namespace persistence
                 return makeHeaders(path, Header::defaultMemory);
             }
 
-            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<Header>> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
+            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<Header>> makeHeaders(const std::filesystem::path& path, MemoryAmount headerBufferMemory)
             {
                 if constexpr (hasGameHeaders)
                 {
@@ -1437,25 +1432,6 @@ namespace persistence
                 else
                 {
                     return {};
-                }
-            }
-
-            [[nodiscard]] std::uint32_t numGamesInHeaders() const
-            {
-                if constexpr (hasGameHeaders)
-                {
-                    std::uint32_t total = 0;
-
-                    for (auto& header : m_headers)
-                    {
-                        total += header->numGames();
-                    }
-
-                    return total;
-                }
-                else
-                {
-                    return 0;
                 }
             }
 
@@ -1929,10 +1905,7 @@ namespace persistence
 
                             if constexpr (hasGameHeaders)
                             {
-                                auto gameHeader = PackedGameHeader(game, m_nextGameIdx.fetch_add(1, std::memory_order_relaxed), static_cast<std::uint16_t>(numPositionsInGame - 1u));
-                                const std::uint64_t actualGameIndex = m_headers[level]->addHeaderNoLock(gameHeader).index;
-                                ASSERT(gameIndex == actualGameIndex);
-                                (void)actualGameIndex;
+                                m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).index;
                             }
 
                             stats.statsByLevel[level].numGames += 1;
@@ -1988,10 +1961,7 @@ namespace persistence
 
                             if constexpr (hasGameHeaders)
                             {
-                                auto gameHeader = PackedGameHeader(game, m_nextGameIdx.fetch_add(1, std::memory_order_relaxed), static_cast<std::uint16_t>(numPositionsInGame - 1u));
-                                const std::uint64_t actualGameIndex = m_headers[level]->addHeaderNoLock(gameHeader).index;
-                                ASSERT(gameIndex == actualGameIndex);
-                                (void)actualGameIndex;
+                                m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).index;
                             }
 
                             stats.statsByLevel[level].numGames += 1;

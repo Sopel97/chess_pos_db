@@ -317,15 +317,15 @@ namespace persistence
         j["black"].get_to(data.m_black);
     }
 
-    Header::Header(std::filesystem::path path, std::size_t memory, std::string name) :
+    Header::Header(std::filesystem::path path, MemoryAmount memory, std::string name) :
         // here we use operator, to create directories before we try to
         // create files there
         m_name(std::move(name)),
         m_path((std::filesystem::create_directories(path), std::move(path))),
         m_headerPath(std::move((m_path / headerPath) += m_name)),
         m_indexPath(std::move((m_path / indexPath) += m_name)),
-        m_header({ m_headerPath, ext::OutputMode::Append }, util::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(std::max(memory, minMemory), 4))),
-        m_index({ m_indexPath, ext::OutputMode::Append }, util::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(std::max(memory, minMemory), 4)))
+        m_header({ m_headerPath, ext::OutputMode::Append }, util::DoubleBuffer<char>(ext::numObjectsPerBufferUnit<char>(std::max(memory.bytes(), minMemory.bytes()), 4))),
+        m_index({ m_indexPath, ext::OutputMode::Append }, util::DoubleBuffer<std::size_t>(ext::numObjectsPerBufferUnit<std::size_t>(std::max(memory.bytes(), minMemory.bytes()), 4)))
     {
     }
 
@@ -334,19 +334,19 @@ namespace persistence
         return addHeader(game);
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addGameNoLock(const pgn::UnparsedGame& game)
-    {
-        return addHeaderNoLock(game);
-    }
-
     [[nodiscard]] HeaderEntryLocation Header::addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
         return addHeader(game, plyCount);
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addGameNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    [[nodiscard]] HeaderEntryLocation Header::addGame(const bcgn::UnparsedBcgnGame& game)
     {
-        return addHeaderNoLock(game, plyCount);
+        return addHeader(game);
+    }
+
+    [[nodiscard]] HeaderEntryLocation Header::addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    {
+        return addHeader(game, plyCount);
     }
 
     [[nodiscard]] std::uint32_t Header::nextGameId() const
@@ -417,59 +417,42 @@ namespace persistence
         return queryByOffsets(offsets);
     }
 
-    // returns the index of the header (not the address)
-    [[nodiscard]] HeaderEntryLocation Header::addHeaderNoLock(const PackedGameHeader& header)
-    {
-        const std::uint32_t gameIdx = static_cast<std::uint32_t>(m_index.size());
-        const std::uint64_t headerSizeBytes = m_header.size();
-        m_header.append(header.data(), header.size());
-        m_index.emplace_back(headerSizeBytes);
-        return { headerSizeBytes, gameIdx };
-    }
-
-    // returns the index of the header (not the address)
-    [[nodiscard]] HeaderEntryLocation Header::addHeader(const PackedGameHeader& header)
-    {
-        std::unique_lock<std::mutex> lock(m_mutex);
-        return addHeaderNoLock(header);
-    }
-
     [[nodiscard]] std::uint32_t Header::numGames() const
     {
         return static_cast<std::uint32_t>(m_index.size());
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addHeaderNoLock(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    [[nodiscard]] HeaderEntryLocation Header::addHeader(const pgn::UnparsedGame& game)
     {
-        const std::uint32_t gameIdx = static_cast<std::uint32_t>(m_index.size());
-        const auto entry = PackedGameHeader(game, gameIdx, plyCount);
-
-        const std::uint64_t headerSizeBytes = m_header.size();
-        m_header.append(entry.data(), entry.size());
-        m_index.emplace_back(headerSizeBytes);
-        return { headerSizeBytes, gameIdx };
-    }
-
-    [[nodiscard]] HeaderEntryLocation Header::addHeaderNoLock(const pgn::UnparsedGame& game)
-    {
-        const std::uint32_t gameIdx = static_cast<std::uint32_t>(m_index.size());
-        const auto entry = PackedGameHeader(game, gameIdx);
-
-        const std::uint64_t headerSizeBytes = m_header.size();
-        m_header.append(entry.data(), entry.size());
-        m_index.emplace_back(headerSizeBytes);
-        return { headerSizeBytes, gameIdx };
+        return addHeader(PackedGameHeader(game, nextId()));
     }
 
     [[nodiscard]] HeaderEntryLocation Header::addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
-        std::unique_lock<std::mutex> lock(m_mutex);
-        return addHeaderNoLock(game, plyCount);
+        return addHeader(PackedGameHeader(game, nextId(), plyCount));
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addHeader(const pgn::UnparsedGame& game)
+    [[nodiscard]] HeaderEntryLocation Header::addHeader(const bcgn::UnparsedBcgnGame& game)
     {
-        std::unique_lock<std::mutex> lock(m_mutex);
-        return addHeaderNoLock(game);
+        return addHeader(PackedGameHeader(game, nextId()));
+    }
+
+    [[nodiscard]] HeaderEntryLocation Header::addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    {
+        return addHeader(PackedGameHeader(game, nextId(), plyCount));
+    }
+
+    [[nodiscard]] HeaderEntryLocation Header::addHeader(const PackedGameHeader& entry)
+    {
+        const std::uint32_t gameIdx = entry.gameIdx();
+        const std::uint64_t headerSizeBytes = m_header.size();
+        m_header.append(entry.data(), entry.size());
+        m_index.emplace_back(headerSizeBytes);
+        return { headerSizeBytes, gameIdx };
+    }
+
+    [[nodiscard]] std::uint32_t Header::nextId() const
+    {
+        return numGames();
     }
 }
