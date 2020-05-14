@@ -318,7 +318,7 @@ namespace persistence
                     RetractionsStats& retractionsStats
                 )
                 {
-                    const auto key = EntryT(PositionWithZobrist(pos));
+                    const auto key = KeyT(PositionWithZobrist(pos));
                     auto [a, b] = m_index.equal_range(key);
 
                     const std::size_t count = b.it - a.it;
@@ -1725,7 +1725,10 @@ namespace persistence
                         {
                             auto& entry = stat[level][result];
                             auto& segregatedEntry = segregatedEntries.emplace(level, result, entry.count());
-                            segregatedEntry.second.eloDiff = entry.eloDiff();
+                            if constexpr (hasEloDiff)
+                            {
+                                segregatedEntry.second.eloDiff = entry.eloDiff();
+                            }
 
                             if (entry.count() > 0)
                             {

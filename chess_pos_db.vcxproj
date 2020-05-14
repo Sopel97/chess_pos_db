@@ -74,11 +74,13 @@
     <ClInclude Include="src\intrin\Intrinsics.h" />
     <ClInclude Include="src\Logger.h" />
     <ClInclude Include="src\persistence\pos_db\beta\DatabaseFormatBeta.h" />
+    <ClInclude Include="src\persistence\pos_db\beta\DatabaseFormatBetaV2.h" />
     <ClInclude Include="src\persistence\pos_db\Database.h" />
     <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h" />
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.h" />
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h" />
+    <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonV2.h" />
     <ClInclude Include="src\persistence\pos_db\OrderedEntrySetPositionDatabase.h" />
     <ClInclude Include="src\persistence\pos_db\Query.h" />
     <ClInclude Include="src\persistence\pos_db\StorageHeader.h" />
@@ -110,11 +112,13 @@
     <ClCompile Include="src\ConsoleApp.cpp" />
     <ClCompile Include="src\external_storage\External.cpp" />
     <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBeta.cpp" />
+    <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBetaV2.cpp" />
     <ClCompile Include="src\persistence\pos_db\Database.cpp" />
     <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp" />
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.cpp" />
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp" />
+    <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonV2.cpp" />
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
     <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp" />
     <ClCompile Include="src\util\MemoryAmount.cpp" />

@@ -249,6 +249,12 @@
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.h">
       <Filter>Header Files\src\persistence\pos_db\delta</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\beta\DatabaseFormatBetaV2.h">
+      <Filter>Header Files\src\persistence\pos_db\beta</Filter>
+    </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonV2.h">
+      <Filter>Header Files\src\persistence\pos_db\epsilon</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -346,6 +352,12 @@
     </ClCompile>
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDeltaV2.cpp">
       <Filter>Source Files\src\persistence\pos_db\delta</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\beta\DatabaseFormatBetaV2.cpp">
+      <Filter>Source Files\src\persistence\pos_db\beta</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonV2.cpp">
+      <Filter>Source Files\src\persistence\pos_db\epsilon</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
