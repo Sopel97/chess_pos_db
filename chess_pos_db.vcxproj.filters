@@ -177,9 +177,6 @@
     <ClInclude Include="src\persistence\pos_db\Query.h">
       <Filter>Header Files\src\persistence\pos_db</Filter>
     </ClInclude>
-    <ClInclude Include="src\persistence\pos_db\StorageHeader.h">
-      <Filter>Header Files\src\persistence\pos_db</Filter>
-    </ClInclude>
     <ClInclude Include="src\Configuration.h">
       <Filter>Header Files\src</Filter>
     </ClInclude>
@@ -246,6 +243,9 @@
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h">
       <Filter>Header Files\src\persistence\pos_db\epsilon</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\GameHeader.h">
+      <Filter>Header Files\src\persistence\pos_db</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -293,9 +293,6 @@
     <ClCompile Include="src\Configuration.cpp">
       <Filter>Source Files\src</Filter>
     </ClCompile>
-    <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp">
-      <Filter>Source Files\src\persistence\pos_db</Filter>
-    </ClCompile>
     <ClCompile Include="src\persistence\pos_db\Database.cpp">
       <Filter>Source Files\src\persistence\pos_db</Filter>
     </ClCompile>
@@ -340,6 +337,9 @@
     </ClCompile>
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp">
       <Filter>Source Files\src\persistence\pos_db\epsilon</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\GameHeader.cpp">
+      <Filter>Source Files\src\persistence\pos_db</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

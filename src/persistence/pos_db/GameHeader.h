@@ -136,7 +136,7 @@ namespace persistence
         std::uint32_t index;
     };
 
-    struct Header
+    struct IndexedGameHeaderStorage
     {
         static inline const std::filesystem::path headerPath = "header";
         static inline const std::filesystem::path indexPath = "index";
@@ -144,13 +144,13 @@ namespace persistence
         static constexpr MemoryAmount defaultMemory = MemoryAmount::mebibytes(4);
         static constexpr MemoryAmount minMemory = MemoryAmount::kibibytes(1);
 
-        Header(std::filesystem::path path, MemoryAmount memory = defaultMemory, std::string name = "");
+        IndexedGameHeaderStorage(std::filesystem::path path, MemoryAmount memory = defaultMemory, std::string name = "");
 
-        Header(const Header&) = delete;
-        Header(Header&&) noexcept = default;
+        IndexedGameHeaderStorage(const IndexedGameHeaderStorage&) = delete;
+        IndexedGameHeaderStorage(IndexedGameHeaderStorage&&) noexcept = default;
 
-        Header& operator=(const Header&) = delete;
-        Header& operator=(Header&&) noexcept = default;
+        IndexedGameHeaderStorage& operator=(const IndexedGameHeaderStorage&) = delete;
+        IndexedGameHeaderStorage& operator=(IndexedGameHeaderStorage&&) noexcept = default;
 
         [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game);
         [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount);

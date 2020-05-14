@@ -1409,24 +1409,24 @@ namespace persistence
             std::filesystem::path m_path;
 
             // TODO: don't include them when !hasGameHeaders
-            EnumArray<GameLevel, std::unique_ptr<Header>> m_headers;
+            EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> m_headers;
 
             // We only have one partition for this format
             Partition m_partition;
 
-            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<Header>> makeHeaders(const std::filesystem::path& path)
+            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> makeHeaders(const std::filesystem::path& path)
             {
-                return makeHeaders(path, Header::defaultMemory);
+                return makeHeaders(path, IndexedGameHeaderStorage::defaultMemory);
             }
 
-            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<Header>> makeHeaders(const std::filesystem::path& path, MemoryAmount headerBufferMemory)
+            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> makeHeaders(const std::filesystem::path& path, MemoryAmount headerBufferMemory)
             {
                 if constexpr (hasGameHeaders)
                 {
                     return {
-                        std::make_unique<Header>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
-                        std::make_unique<Header>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
-                        std::make_unique<Header>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
+                        std::make_unique<IndexedGameHeaderStorage>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
+                        std::make_unique<IndexedGameHeaderStorage>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
+                        std::make_unique<IndexedGameHeaderStorage>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
                     };
                 }
                 else

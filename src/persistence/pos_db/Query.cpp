@@ -1,6 +1,6 @@
 #include "Query.h"
 
-#include "StorageHeader.h"
+#include "GameHeader.h"
 
 #include "chess/Eran.h"
 #include "chess/GameClassification.h"

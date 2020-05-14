@@ -80,7 +80,7 @@
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h" />
     <ClInclude Include="src\persistence\pos_db\OrderedEntrySetPositionDatabase.h" />
     <ClInclude Include="src\persistence\pos_db\Query.h" />
-    <ClInclude Include="src\persistence\pos_db\StorageHeader.h" />
+    <ClInclude Include="src\persistence\pos_db\GameHeader.h" />
     <ClInclude Include="src\util\ArithmeticUtility.h" />
     <ClInclude Include="src\util\Assert.h" />
     <ClInclude Include="src\util\Buffer.h" />
@@ -114,7 +114,7 @@
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp" />
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp" />
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
-    <ClCompile Include="src\persistence\pos_db\StorageHeader.cpp" />
+    <ClCompile Include="src\persistence\pos_db\GameHeader.cpp" />
     <ClCompile Include="src\util\MemoryAmount.cpp" />
     <ClCompile Include="test\chess\BcgnTest.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release-Clang|x64'">true</ExcludedFromBuild>

@@ -1,4 +1,4 @@
-#include "StorageHeader.h"
+#include "GameHeader.h"
 
 #include "algorithm/Unsort.h"
 
@@ -317,7 +317,7 @@ namespace persistence
         j["black"].get_to(data.m_black);
     }
 
-    Header::Header(std::filesystem::path path, MemoryAmount memory, std::string name) :
+    IndexedGameHeaderStorage::IndexedGameHeaderStorage(std::filesystem::path path, MemoryAmount memory, std::string name) :
         // here we use operator, to create directories before we try to
         // create files there
         m_name(std::move(name)),
@@ -329,49 +329,49 @@ namespace persistence
     {
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addGame(const pgn::UnparsedGame& game)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const pgn::UnparsedGame& game)
     {
         return addHeader(game);
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
         return addHeader(game, plyCount);
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addGame(const bcgn::UnparsedBcgnGame& game)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const bcgn::UnparsedBcgnGame& game)
     {
         return addHeader(game);
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
     {
         return addHeader(game, plyCount);
     }
 
-    [[nodiscard]] std::uint32_t Header::nextGameId() const
+    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::nextGameId() const
     {
         return static_cast<std::uint32_t>(m_index.size());
     }
 
-    [[nodiscard]] std::uint32_t Header::nextGameOffset() const
+    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::nextGameOffset() const
     {
         return static_cast<std::uint32_t>(m_header.size());
     }
 
-    void Header::flush()
+    void IndexedGameHeaderStorage::flush()
     {
         m_header.flush();
         m_index.flush();
     }
 
-    void Header::clear()
+    void IndexedGameHeaderStorage::clear()
     {
         m_header.clear();
         m_index.clear();
     }
 
-    void Header::replicateTo(const std::filesystem::path& path) const
+    void IndexedGameHeaderStorage::replicateTo(const std::filesystem::path& path) const
     {
         std::filesystem::path newHeaderPath = path / headerPath;
         newHeaderPath += m_name;
@@ -381,7 +381,7 @@ namespace persistence
         std::filesystem::copy_file(m_indexPath, newIndexPath, std::filesystem::copy_options::overwrite_existing);
     }
 
-    [[nodiscard]] std::vector<PackedGameHeader> Header::queryByOffsets(std::vector<std::uint64_t> offsets)
+    [[nodiscard]] std::vector<PackedGameHeader> IndexedGameHeaderStorage::queryByOffsets(std::vector<std::uint64_t> offsets)
     {
         const std::size_t numKeys = offsets.size();
 
@@ -399,7 +399,7 @@ namespace persistence
         return headers;
     }
 
-    [[nodiscard]] std::vector<PackedGameHeader> Header::queryByIndices(std::vector<std::uint32_t> keys)
+    [[nodiscard]] std::vector<PackedGameHeader> IndexedGameHeaderStorage::queryByIndices(std::vector<std::uint32_t> keys)
     {
         const std::size_t numKeys = keys.size();
 
@@ -417,32 +417,32 @@ namespace persistence
         return queryByOffsets(offsets);
     }
 
-    [[nodiscard]] std::uint32_t Header::numGames() const
+    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::numGames() const
     {
         return static_cast<std::uint32_t>(m_index.size());
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addHeader(const pgn::UnparsedGame& game)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const pgn::UnparsedGame& game)
     {
         return addHeader(PackedGameHeader(game, nextId()));
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
         return addHeader(PackedGameHeader(game, nextId(), plyCount));
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addHeader(const bcgn::UnparsedBcgnGame& game)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const bcgn::UnparsedBcgnGame& game)
     {
         return addHeader(PackedGameHeader(game, nextId()));
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
     {
         return addHeader(PackedGameHeader(game, nextId(), plyCount));
     }
 
-    [[nodiscard]] HeaderEntryLocation Header::addHeader(const PackedGameHeader& entry)
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const PackedGameHeader& entry)
     {
         const std::uint32_t gameIdx = entry.gameIdx();
         const std::uint64_t headerSizeBytes = m_header.size();
@@ -451,7 +451,7 @@ namespace persistence
         return { headerSizeBytes, gameIdx };
     }
 
-    [[nodiscard]] std::uint32_t Header::nextId() const
+    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::nextId() const
     {
         return numGames();
     }

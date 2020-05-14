@@ -1,6 +1,6 @@
 #pragma once
 
-#include "StorageHeader.h"
+#include "GameHeader.h"
 
 #include "chess/GameClassification.h"
 #include "chess/Position.h"
