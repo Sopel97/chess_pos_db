@@ -128,7 +128,8 @@ namespace persistence
 
         template <
             typename KeyT,
-            typename EntryT
+            typename EntryT,
+            typename TraitsT
         >
         struct Database final : persistence::Database
         {
@@ -148,6 +149,8 @@ namespace persistence
             static constexpr bool hasLastGame = hasLastGameIndex || hasLastGameOffset;
 
             static constexpr bool hasGameHeaders = usesGameIndex || usesGameOffset;
+
+            static constexpr const char* name = TraitsT::name;
 
             static_assert(!(usesGameIndex && usesGameOffset), "Only one type of game reference can be used.");
 
@@ -1152,7 +1155,7 @@ namespace persistence
 
             static inline const std::filesystem::path partitionDirectory = "data";
 
-            static inline const DatabaseManifest m_manifest = { "db_delta", true };
+            static inline const DatabaseManifest m_manifest = { name, true };
 
             static constexpr std::size_t m_totalNumDirectories = 1;
 
@@ -1162,7 +1165,7 @@ namespace persistence
                 "_server"
             };
 
-            static const MemoryAmount m_pgnParserMemory = cfg::g_config["persistence"]["db_delta"]["pgn_parser_memory"].get<MemoryAmount>();
+            static const MemoryAmount m_pgnParserMemory = cfg::g_config["persistence"][name]["pgn_parser_memory"].get<MemoryAmount>();
 
         public:
             Database(std::filesystem::path path) :
@@ -1191,7 +1194,10 @@ namespace persistence
             [[nodiscard]] static const DatabaseSupportManifest& supportManifest()
             {
                 static const DatabaseSupportManifest manifest = {
-                    { ImportableFileType::Pgn }
+                    { 
+                        ImportableFileType::Pgn, 
+                        ImportableFileType::Bcgn 
+                    }
                 };
 
                 return manifest;
@@ -1204,7 +1210,7 @@ namespace persistence
 
             void clear() override
             {
-                for (auto& header : m_headers)
+                for (auto& header : *m_headers)
                 {
                     header.clear();
                 }
@@ -1364,7 +1370,7 @@ namespace persistence
 
             void flush() override
             {
-                for (auto& header : m_headers)
+                for (auto& header : *m_headers)
                 {
                     header.flush();
                 }
@@ -1373,40 +1379,51 @@ namespace persistence
         private:
             std::filesystem::path m_path;
 
-            EnumArray<GameLevel, Header> m_headers;
+            // TODO: don't include them when !hasGameHeaders
+            std::optional<EnumArray<GameLevel, Header>> m_headers;
             std::atomic<std::uint32_t> m_nextGameIdx;
 
             // We only have one partition for this format
-            detail::Partition m_partition;
+            Partition m_partition;
 
-            [[nodiscard]] EnumArray<GameLevel, Header> makeHeaders(const std::filesystem::path& path)
+            [[nodiscard]] std::optional<EnumArray<GameLevel, Header>> makeHeaders(const std::filesystem::path& path)
             {
-                return {
-                    Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[0]]),
-                    Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[1]]),
-                    Header(path, Header::defaultMemory, m_headerNames[values<GameLevel>()[2]])
-                };
+                return makeHeaders(Header::defaultMemory);
             }
 
-            [[nodiscard]] EnumArray<GameLevel, Header> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
+            [[nodiscard]] std::optional<EnumArray<GameLevel, Header>> makeHeaders(const std::filesystem::path& path, std::size_t headerBufferMemory)
             {
-                return {
-                    Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
-                    Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
-                    Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
-                };
+                if constexpr (hasGameHeaders)
+                {
+                    return {
+                        Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
+                        Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
+                        Header(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
+                    };
+                }
+                else
+                {
+                    return std::nullopt;
+                }
             }
 
             [[nodiscard]] std::uint32_t numGamesInHeaders() const
             {
-                std::uint32_t total = 0;
-
-                for (auto& header : m_headers)
+                if constexpr (hasGameHeaders)
                 {
-                    total += header.numGames();
-                }
+                    std::uint32_t total = 0;
 
-                return total;
+                    for (auto& header : *m_headers)
+                    {
+                        total += header.numGames();
+                    }
+
+                    return total;
+                }
+                else
+                {
+                    return 0;
+                }
             }
 
             void collectFutureFiles()
@@ -1416,7 +1433,7 @@ namespace persistence
 
             [[nodiscard]] std::vector<PackedGameHeader> Database::queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, GameLevel level)
             {
-                return m_headers[level].queryByOffsets(offsets);
+                return (*m_headers)[level].queryByOffsets(offsets);
             }
 
             [[nodiscard]] std::vector<GameHeader> Database::queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestination>& destinations)
@@ -1483,7 +1500,7 @@ namespace persistence
 
             [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, GameLevel level)
             {
-                return m_headers[level].queryByIndices(indices);
+                return (*m_headers)[level].queryByIndices(indices);
             }
 
             [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestination>& destinations)
@@ -1658,10 +1675,7 @@ namespace persistence
             [[nodiscard]] query::RetractionsQueryResults
                 segregateRetractions(
                     const query::Request& query,
-                    std::map<
-                    ReverseMove,
-                    EnumArray2<GameLevel, GameResult, detail::Entry>,
-                    ReverseMoveCompareLess>&& unsegregated
+                    RetractionsStats&& unsegregated
                 )
             {
                 const auto& fetching = *query.retractionsFetchingOptions;
@@ -1754,9 +1768,9 @@ namespace persistence
                 return segregated;
             }
 
-            [[nodiscard]] std::vector<detail::Key> getKeys(const query::PositionQueries& queries)
+            [[nodiscard]] std::vector<KeyT> getKeys(const query::PositionQueries& queries)
             {
-                std::vector<detail::Key> keys;
+                std::vector<KeyT> keys;
                 keys.reserve(queries.size());
                 for (auto&& q : queries)
                 {
@@ -1771,7 +1785,6 @@ namespace persistence
                 std::function<void(const std::filesystem::path& file)> completionCallback
             )
             {
-
                 // create buffers
                 std::vector<EntryT> bucket = pipeline.getEmptyBuffer();
 
@@ -1853,8 +1866,8 @@ namespace persistence
                             }();
 
                             const auto gameIndexOrOffset = [level]() {
-                                if constexpr (usesGameIndex) return m_headers[level].nextGameId();
-                                if constexpr (usesGameOffset) return m_headers[level].nextGameOffset();
+                                if constexpr (usesGameIndex) return (*m_headers)[level].nextGameId();
+                                if constexpr (usesGameOffset) return (*m_headers)[level].nextGameOffset();
                                 return 0;
                             }();
 
@@ -1920,8 +1933,8 @@ namespace persistence
                             }();
 
                             const auto gameIndexOrOffset = [level]() {
-                                if constexpr (usesGameIndex) return m_headers[level].nextGameId();
-                                if constexpr (usesGameOffset) return m_headers[level].nextGameOffset();
+                                if constexpr (usesGameIndex) return (*m_headers)[level].nextGameId();
+                                if constexpr (usesGameOffset) return (*m_headers)[level].nextGameOffset();
                                 return 0;
                             }();
 
