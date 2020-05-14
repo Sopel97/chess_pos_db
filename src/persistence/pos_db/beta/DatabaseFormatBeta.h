@@ -77,6 +77,14 @@ namespace persistence
                 return fromOrdinal<GameResult>((m_hash[3] >> resultShift) & resultMask);
             }
 
+            [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
+            {
+                const Color sideThatMoved = !pos.sideToMove();
+                std::uint32_t packedInt = (m_hash[3] >> reverseMoveShift) & PackedReverseMove::mask;
+                PackedReverseMove packedReverseMove(packedInt);
+                return packedReverseMove.unpack(sideThatMoved);
+            }
+
             struct CompareLessWithReverseMove
             {
                 [[nodiscard]] bool operator()(const Key& lhs, const Key& rhs) const noexcept
@@ -561,6 +569,11 @@ namespace persistence
             void combine(const Entry& rhs)
             {
                 m_countAndGameOffset.combine(rhs.m_countAndGameOffset);
+            }
+
+            [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
+            {
+                return m_key.reverseMove(pos);
             }
 
         private:
