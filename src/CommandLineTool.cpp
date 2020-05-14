@@ -25,9 +25,9 @@
 
 #include "enum/EnumArray.h"
 
-#include "persistence/pos_db/beta/DatabaseFormatBetaV2.h"
-#include "persistence/pos_db/delta/DatabaseFormatDeltaV2.h"
-#include "persistence/pos_db/epsilon/DatabaseFormatEpsilonV2.h"
+#include "persistence/pos_db/beta/DatabaseFormatBeta.h"
+#include "persistence/pos_db/delta/DatabaseFormatDelta.h"
+#include "persistence/pos_db/epsilon/DatabaseFormatEpsilon.h"
 #include "persistence/pos_db/Database.h"
 #include "persistence/pos_db/DatabaseFactory.h"
 #include "persistence/pos_db/Query.h"
@@ -119,9 +119,9 @@ namespace command_line_app
     static const persistence::DatabaseFactory g_factory = []() {
         persistence::DatabaseFactory g_factory;
 
-        g_factory.registerDatabaseType<persistence::db_beta_v2::Database>();
-        g_factory.registerDatabaseType<persistence::db_delta_v2::Database>();
-        g_factory.registerDatabaseType<persistence::db_epsilon_v2::Database>();
+        g_factory.registerDatabaseType<persistence::db_beta::Database>();
+        g_factory.registerDatabaseType<persistence::db_delta::Database>();
+        g_factory.registerDatabaseType<persistence::db_epsilon::Database>();
 
         return g_factory;
     }();

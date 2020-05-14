@@ -31,7 +31,7 @@
 
 namespace persistence
 {
-    namespace db
+    namespace pos_db
     {
         namespace detail
         {
