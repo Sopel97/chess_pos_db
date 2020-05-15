@@ -1520,6 +1520,25 @@ namespace persistence
 
             void disableUnsupportedQueryFeatures(query::Request& query) const
             {
+                for (auto& [k, f] : query.fetchingOptions)
+                {
+                    if constexpr (!hasFirstGame)
+                    {
+                        f.fetchFirstGame = false;
+                        f.fetchFirstGameForEachChild = false;
+                    }
+
+                    if constexpr (!hasLastGame)
+                    {
+                        f.fetchLastGame = false;
+                        f.fetchLastGameForEachChild = false;
+                    }
+                }
+
+                if constexpr (!hasReverseMove)
+                {
+                    query.retractionsFetchingOptions = std::nullopt;
+                }
             }
 
             template <typename SegregatedT, typename DestinationT>
