@@ -66,6 +66,13 @@ namespace persistence
     [[nodiscard]] const std::string& importableFileTypeExtension(ImportableFileType type);
     [[nodiscard]] ImportableFileType importableFileTypeFromPath(const std::filesystem::path path);
 
+    enum struct MergeMode
+    {
+        None,
+        Consecutive,
+        Any
+    };
+
     using ImportableFilePath = std::filesystem::path;
     using ImportableFilePaths = std::vector<std::filesystem::path>;
 
@@ -92,6 +99,7 @@ namespace persistence
     struct DatabaseSupportManifest
     {
         std::vector<ImportableFileType> importableFileTypes;
+        MergeMode mergeMode;
     };
 
     struct DatabaseManifest

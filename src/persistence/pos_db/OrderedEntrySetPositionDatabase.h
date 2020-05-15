@@ -1268,7 +1268,8 @@ namespace persistence
                     { 
                         ImportableFileType::Pgn, 
                         ImportableFileType::Bcgn 
-                    }
+                    },
+                    MergeMode::Any
                 };
 
                 return manifest;
