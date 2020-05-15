@@ -642,29 +642,57 @@ namespace command_line_app
         }
     }
 
-    static void handleTcpCommandMergeImpl(
-        std::unique_ptr<persistence::Database>& db,
-        const TcpConnection::Ptr& session,
-        bool doReportProgress
-    )
-    {
-        assertDatabaseOpen(db);
-
-        auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-        db->mergeAll({}, std::nullopt, callback);
-
-        // We have to always sent some info that we finished
-        sendProgressFinished(session, "merge");
-    }
-
     static void handleTcpCommandMerge(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
         const nlohmann::json& json
     )
     {
+        assertDatabaseOpen(db);
+
         const bool doReportProgress = json["report_progress"].get<bool>();
-        handleTcpCommandMergeImpl(db, session, doReportProgress);
+
+        const auto temporaryPathsStr =
+            json.contains("temporary_paths")
+            ? json["temporary_paths"].get<std::vector<std::string>>()
+            : std::vector<std::string>{};
+
+        std::vector<std::filesystem::path> temporaryPaths;
+        temporaryPaths.reserve(temporaryPathsStr.size());
+        for (auto& s : temporaryPathsStr)
+        {
+            temporaryPaths.emplace_back(s);
+        }
+
+        std::optional<MemoryAmount> temporarySpace = std::nullopt;
+        if (json.contains("temporary_space"))
+        {
+            temporarySpace = json["temporary_space"].get<MemoryAmount>();
+        }
+
+        auto callback = makeMergeProgressReportHandler(session, doReportProgress);
+
+        if (json.contains("partition"))
+        {
+            const auto partition = json["partition"].get<std::string>();
+
+            if (json.contains("files"))
+            {
+                const auto files = json["partition"]["files"].get<std::vector<std::string>>();
+                db->merge(temporaryPaths, temporarySpace, partition, files, callback);
+            }
+            else
+            {
+                throw std::runtime_error("partition specified but no files.");
+            }
+        }
+        else
+        {
+            db->mergeAll(temporaryPaths, temporarySpace, callback);
+        }
+
+        // We have to always sent some info that we finished
+        sendProgressFinished(session, "merge");
     }
 
     static void handleTcpCommandOpen(
