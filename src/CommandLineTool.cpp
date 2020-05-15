@@ -535,60 +535,17 @@ namespace command_line_app
         const std::string& key,
         const std::filesystem::path& destination,
         const persistence::ImportableFiles& pgns,
-        const std::filesystem::path& temp,
+        const std::vector<std::filesystem::path>& temporaryPaths,
         std::optional<MemoryAmount> temporarySpace,
         bool doMerge,
         bool doReportProgress
     )
     {
         assertDirectoryEmpty(destination);
-        assertDirectoryEmpty(temp);
-
-        if (doMerge)
+        for (auto& temp : temporaryPaths)
         {
-            {
-                auto db = instantiateDatabase(key, destination);
-
-                {
-                    auto callback = makeImportProgressReportHandler(session, doReportProgress);
-                    auto stats = db->import(pgns, importMemory.bytes(), callback);
-                    sendProgressFinished(session, "import", statsToJson(stats));
-                }
-
-                {
-                    auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                    db->mergeAll({ temp }, temporarySpace, callback);
-                }
-            }
-
-            std::filesystem::remove_all(temp);
-            std::filesystem::create_directory(temp);
+            assertDirectoryEmpty(temp);
         }
-        else
-        {
-            auto db = instantiateDatabase(key, destination);
-
-            auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            auto stats = db->import(pgns, importMemory.bytes(), callback);
-            sendProgressFinished(session, "import", statsToJson(stats));
-        }
-
-        // We have to always sent some info that we finished
-        sendProgressFinished(session, "create");
-    }
-
-    static void handleTcpCommandCreateImpl(
-        std::unique_ptr<persistence::Database>&,
-        const TcpConnection::Ptr& session,
-        const std::string& key,
-        const std::filesystem::path& destination,
-        const persistence::ImportableFiles& pgns,
-        std::optional<MemoryAmount> temporarySpace,
-        bool doMerge,
-        bool doReportProgress
-    )
-    {
-        assertDirectoryEmpty(destination);
 
         {
             auto db = instantiateDatabase(key, destination);
@@ -600,7 +557,7 @@ namespace command_line_app
             if (doMerge)
             {
                 auto callback = makeMergeProgressReportHandler(session, doReportProgress);
-                db->mergeAll({}, temporarySpace, callback);
+                db->mergeAll(temporaryPaths, temporarySpace, callback);
             }
         }
 
@@ -625,21 +582,30 @@ namespace command_line_app
 
         const std::string databaseFormat = json["database_format"].get<std::string>();
 
+        const auto temporaryPathsStr =
+            json.contains("temporary_paths")
+            ? json["temporary_paths"].get<std::vector<std::string>>()
+            : std::vector<std::string>{};
+
+        std::vector<std::filesystem::path> temporaryPaths;
+        temporaryPaths.reserve(temporaryPathsStr.size());
+        for (auto& s : temporaryPathsStr)
+        {
+            temporaryPaths.emplace_back(s);
+        }
+
+        if (json.contains("temporary_path"))
+        {
+            temporaryPaths.emplace_back(json["temporary_path"].get<std::string>());
+        }
+
         std::optional<MemoryAmount> temporarySpace = std::nullopt;
         if (json.contains("temporary_space"))
         {
             temporarySpace = json["temporary_space"].get<MemoryAmount>();
         }
 
-        if (json.contains("temporary_path"))
-        {
-            const std::string temp = json["temporary_path"].get<std::string>();
-            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temp, temporarySpace, doMerge, doReportProgress);
-        }
-        else
-        {
-            handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temporarySpace, doMerge, doReportProgress);
-        }
+        handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temporaryPaths, temporarySpace, doMerge, doReportProgress);
     }
 
     static void handleTcpCommandMerge(
