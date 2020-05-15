@@ -156,6 +156,14 @@ namespace persistence
             MergeProgressCallback progressCallback = {}
         ) = 0;
 
+        virtual void merge(
+            const std::vector<std::filesystem::path>& temporaryDirs,
+            std::optional<MemoryAmount> temporarySpace,
+            const std::string& partitionName,
+            const std::vector<std::string>& filenames,
+            MergeProgressCallback progressCallback = {}
+        ) = 0;
+
         virtual ImportStats import(
             const ImportableFiles& pgns, 
             std::size_t memory,

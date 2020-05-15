@@ -726,6 +726,24 @@ namespace persistence
                     }
                 }
 
+                void mergeFiles(
+                    const std::vector<std::filesystem::path>& temporaryDirs,
+                    std::optional<MemoryAmount> temporarySpace,
+                    const std::vector<std::string>& filenames,
+                    std::function<void(const ext::Progress&)> progressCallback
+                )
+                {
+                    auto files = getFilesByNames(filenames);
+                    if (temporarySpace.has_value())
+                    {
+                        mergeFiles(files, temporaryDirs, progressCallback, *temporarySpace);
+                    }
+                    else
+                    {
+                        mergeFiles(files, temporaryDirs, progressCallback);
+                    }
+                }
+
                 [[nodiscard]] std::vector<std::string> mergableFiles() const
                 {
                     std::vector<std::string> files;
@@ -1134,7 +1152,7 @@ namespace persistence
 
                     for (auto&& file : m_files)
                     {
-                        auto it = namesSet.find(file->path().filename().string());
+                        auto it = namesSet.find(file->name());
                         if (it == namesSet.end())
                         {
                             continue;
@@ -1350,6 +1368,42 @@ namespace persistence
                 };
 
                 m_partition.mergeAll(temporaryDirs, temporarySpace, progressReport);
+
+                Logger::instance().logInfo(": Finalizing...");
+                Logger::instance().logInfo(": Completed.");
+            }
+
+            void merge(
+                const std::vector<std::filesystem::path>& temporaryDirs,
+                std::optional<MemoryAmount> temporarySpace,
+                const std::string& partitionName,
+                const std::vector<std::string>& filenames,
+                MergeProgressCallback progressCallback = {}
+            ) override
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                if (m_partition.name() != partitionName)
+                {
+                    throw std::runtime_error("Parititon with name '" + partitionName + "' not found.");
+                }
+
+                Logger::instance().logInfo(": Merging files...");
+
+                auto progressReport = [&progressCallback](const ext::Progress& report) {
+                    Logger::instance().logInfo(":     ", static_cast<int>(report.ratio() * 100), "%.");
+
+                    if (progressCallback)
+                    {
+                        MergeProgressReport r{
+                            report.workDone,
+                            report.workTotal
+                        };
+                        progressCallback(r);
+                    }
+                };
+
+                m_partition.mergeFiles(temporaryDirs, temporarySpace, filenames, progressReport);
 
                 Logger::instance().logInfo(": Finalizing...");
                 Logger::instance().logInfo(": Completed.");
