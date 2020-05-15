@@ -1258,7 +1258,7 @@ namespace persistence
 
                 m_partition.executeQuery(query, keys, posQueries, stats);
 
-                auto results = commitStatsAsResults(query, posQueries, stats);
+                auto results = segregatePositionStats(query, posQueries, stats);
 
                 // We have to either unsort both results and posQueries, or none.
                 // unflatten only needs relative order of results and posQueries to match
@@ -1276,7 +1276,7 @@ namespace persistence
                                 *resultForRoot.position.tryGet()
                             );
 
-                            auto segregated = segregateRetractions(
+                            auto segregated = segregateRetractionsStats(
                                 query,
                                 std::move(queried)
                             );
@@ -1517,19 +1517,54 @@ namespace persistence
             {
             }
 
-            [[nodiscard]] query::PositionQueryResults commitStatsAsResults(
+            template <typename SegregatedT, typename DestinationT>
+            void assignGameHeaders(
+                SegregatedT& segregated,
+                const std::vector<std::uint32_t>& firstGameIndices,
+                const std::vector<std::uint32_t>& lastGameIndices,
+                const std::vector<std::uint64_t>& firstGameOffsets,
+                const std::vector<std::uint64_t>& lastGameOffsets,
+                const std::vector<DestinationT>& firstGameDestinations,
+                const std::vector<DestinationT>& lastGameDestinations
+            )
+            {
+                if constexpr (hasFirstGameIndex)
+                {
+                    query::assignGameHeaders(segregated, firstGameDestinations, queryHeadersByIndices(firstGameIndices, firstGameDestinations));
+                }
+
+                if constexpr (hasFirstGameOffset)
+                {
+                    query::assignGameHeaders(segregated, firstGameDestinations, queryHeadersByOffsets(firstGameOffsets, firstGameDestinations));
+                }
+
+                if constexpr (hasLastGameIndex)
+                {
+                    query::assignGameHeaders(segregated, lastGameDestinations, queryHeadersByIndices(lastGameIndices, lastGameDestinations));
+                }
+
+                if constexpr (hasLastGameOffset)
+                {
+                    query::assignGameHeaders(segregated, lastGameDestinations, queryHeadersByOffsets(lastGameOffsets, lastGameDestinations));
+                }
+            }
+
+            [[nodiscard]] query::PositionQueryResults segregatePositionStats(
                 const query::Request& query,
                 const query::PositionQueries& posQueries,
-                std::vector<PositionStats>& stats)
+                std::vector<PositionStats>& stats
+            )
             {
-                query::PositionQueryResults results(posQueries.size());
+                const query::FetchLookups lookup = query::buildGameHeaderFetchLookup(query);
+
+                query::PositionQueryResults segregated(posQueries.size());
+
                 std::vector<std::uint32_t> firstGameIndices;
                 std::vector<std::uint32_t> lastGameIndices;
                 std::vector<std::uint64_t> firstGameOffsets;
                 std::vector<std::uint64_t> lastGameOffsets;
                 std::vector<query::GameHeaderDestination> firstGameDestinations;
                 std::vector<query::GameHeaderDestination> lastGameDestinations;
-                query::FetchLookups lookup = query::buildGameHeaderFetchLookup(query);
 
                 for (std::size_t i = 0; i < posQueries.size(); ++i)
                 {
@@ -1548,7 +1583,7 @@ namespace persistence
                             for (GameResult result : query.results)
                             {
                                 auto& entry = stat[select][level][result];
-                                auto& segregatedEntry = results[i][select].emplace(level, result, entry.count());
+                                auto& segregatedEntry = segregated[i][select].emplace(level, result, entry.count());
                                 if constexpr (hasEloDiff)
                                 {
                                     segregatedEntry.second.eloDiff = entry.eloDiff();
@@ -1597,31 +1632,21 @@ namespace persistence
                     }
                 }
 
-                if constexpr (hasFirstGameIndex)
-                {
-                    query::assignGameHeaders(results, firstGameDestinations, queryHeadersByIndices(firstGameIndices, firstGameDestinations));
-                }
+                assignGameHeaders(
+                    segregated,
+                    firstGameIndices,
+                    lastGameIndices,
+                    firstGameOffsets,
+                    lastGameOffsets,
+                    firstGameDestinations,
+                    lastGameDestinations
+                );
 
-                if constexpr (hasFirstGameOffset)
-                {
-                    query::assignGameHeaders(results, firstGameDestinations, queryHeadersByOffsets(firstGameOffsets, firstGameDestinations));
-                }
-
-                if constexpr (hasLastGameIndex)
-                {
-                    query::assignGameHeaders(results, lastGameDestinations, queryHeadersByIndices(lastGameIndices, lastGameDestinations));
-                }
-
-                if constexpr (hasLastGameOffset)
-                {
-                    query::assignGameHeaders(results, lastGameDestinations, queryHeadersByOffsets(lastGameOffsets, lastGameDestinations));
-                }
-
-                return results;
+                return segregated;
             }
 
             [[nodiscard]] query::RetractionsQueryResults
-                segregateRetractions(
+                segregateRetractionsStats(
                     const query::Request& query,
                     RetractionsStats&& unsegregated
                 )
@@ -1695,25 +1720,15 @@ namespace persistence
                     segregated[reverseMove] = segregatedEntries;
                 }
 
-                if constexpr (hasFirstGameIndex)
-                {
-                    query::assignGameHeaders(segregated, firstGameDestinations, queryHeadersByIndices(firstGameIndices, firstGameDestinations));
-                }
-
-                if constexpr (hasFirstGameOffset)
-                {
-                    query::assignGameHeaders(segregated, firstGameDestinations, queryHeadersByOffsets(firstGameOffsets, firstGameDestinations));
-                }
-
-                if constexpr (hasLastGameIndex)
-                {
-                    query::assignGameHeaders(segregated, lastGameDestinations, queryHeadersByIndices(lastGameIndices, lastGameDestinations));
-                }
-
-                if constexpr (hasLastGameOffset)
-                {
-                    query::assignGameHeaders(segregated, lastGameDestinations, queryHeadersByOffsets(lastGameOffsets, lastGameDestinations));
-                }
+                assignGameHeaders(
+                    segregated,
+                    firstGameIndices,
+                    lastGameIndices,
+                    firstGameOffsets,
+                    lastGameOffsets,
+                    firstGameDestinations,
+                    lastGameDestinations
+                );
 
                 return segregated;
             }
