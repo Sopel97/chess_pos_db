@@ -1444,38 +1444,8 @@ namespace persistence
                 return m_headers[level]->queryByOffsets(offsets);
             }
 
-            [[nodiscard]] std::vector<GameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestination>& destinations)
-            {
-                EnumArray<GameLevel, std::vector<std::uint64_t>> offsetsByLevel;
-                EnumArray<GameLevel, std::vector<std::size_t>> indices;
-
-                for (std::size_t i = 0; i < offsets.size(); ++i)
-                {
-                    offsetsByLevel[destinations[i].level].emplace_back(offsets[i]);
-                    indices[destinations[i].level].emplace_back(i);
-                }
-
-                EnumArray<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
-                for (GameLevel level : values<GameLevel>())
-                {
-                    packedHeadersByLevel[level] = queryHeadersByOffsets(offsetsByLevel[level], level);
-                }
-
-                std::vector<GameHeader> headers(offsets.size());
-
-                for (GameLevel level : values<GameLevel>())
-                {
-                    const auto size = offsetsByLevel[level].size();
-                    for (std::size_t i = 0; i < size; ++i)
-                    {
-                        headers[indices[level][i]] = packedHeadersByLevel[level][i];
-                    }
-                }
-
-                return headers;
-            }
-
-            [[nodiscard]] std::vector<GameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<query::GameHeaderDestinationForRetraction>& destinations)
+            template <typename DestinationT>
+            [[nodiscard]] std::vector<GameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, const std::vector<DestinationT>& destinations)
             {
                 EnumArray<GameLevel, std::vector<std::uint64_t>> offsetsByLevel;
                 EnumArray<GameLevel, std::vector<std::size_t>> indices;
@@ -1511,38 +1481,8 @@ namespace persistence
                 return m_headers[level]->queryByIndices(indices);
             }
 
-            [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestination>& destinations)
-            {
-                EnumArray<GameLevel, std::vector<std::uint32_t>> indicesByLevel;
-                EnumArray<GameLevel, std::vector<std::size_t>> localIndices;
-
-                for (std::size_t i = 0; i < indices.size(); ++i)
-                {
-                    indicesByLevel[destinations[i].level].emplace_back(indices[i]);
-                    localIndices[destinations[i].level].emplace_back(i);
-                }
-
-                EnumArray<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
-                for (GameLevel level : values<GameLevel>())
-                {
-                    packedHeadersByLevel[level] = queryHeadersByIndices(indicesByLevel[level], level);
-                }
-
-                std::vector<GameHeader> headers(indices.size());
-
-                for (GameLevel level : values<GameLevel>())
-                {
-                    const auto size = indicesByLevel[level].size();
-                    for (std::size_t i = 0; i < size; ++i)
-                    {
-                        headers[localIndices[level][i]] = packedHeadersByLevel[level][i];
-                    }
-                }
-
-                return headers;
-            }
-
-            [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<query::GameHeaderDestinationForRetraction>& destinations)
+            template <typename DestinationT>
+            [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<DestinationT>& destinations)
             {
                 EnumArray<GameLevel, std::vector<std::uint32_t>> indicesByLevel;
                 EnumArray<GameLevel, std::vector<std::size_t>> localIndices;
