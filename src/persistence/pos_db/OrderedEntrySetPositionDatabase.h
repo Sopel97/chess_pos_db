@@ -185,23 +185,38 @@ namespace persistence
 
             using Index = ext::RangeIndex<KeyT, typename EntryT::CompareLessWithoutReverseMove>;
 
-            [[nodiscard]] static std::filesystem::path pathForIndex(const std::filesystem::path& path)
+            [[nodiscard]] static std::filesystem::path dataFilePathToIndexPath(const std::filesystem::path& dataFilePath)
             {
-                auto cpy = path;
+                auto cpy = dataFilePath;
                 cpy += "_index";
                 return cpy;
             }
 
-            [[nodiscard]] static auto readIndexFor(const std::filesystem::path& path)
+            [[nodiscard]] static auto readIndexOfDataFile(const std::filesystem::path& dataFilePath)
             {
-                auto indexPath = pathForIndex(path);
+                auto indexPath = dataFilePathToIndexPath(dataFilePath);
                 return Index(ext::readFile<typename Index::EntryType>(indexPath));
             }
 
-            static void writeIndexFor(const std::filesystem::path& path, const Index& index)
+            static void writeIndexOfDataFile(const std::filesystem::path& dataFilePath, const Index& index)
             {
-                auto indexPath = pathForIndex(path);
+                auto indexPath = dataFilePathToIndexPath(dataFilePath);
                 (void)ext::writeFile<typename Index::EntryType>(indexPath, index.data(), index.size());
+            }
+
+            [[nodiscard]] static std::filesystem::path pathOfDataFileWithId(const std::filesystem::path& directory, std::uint32_t id)
+            {
+                return directory / std::to_string(id);
+            }
+
+            [[nodiscard]] static std::uint32_t dataFilePathToId(const std::filesystem::path& dataFilePath)
+            {
+                return std::stoi(dataFilePath.filename().string());
+            }
+
+            [[nodiscard]] static bool isPathOfIndex(const std::filesystem::path& path)
+            {
+                return path.filename().string().find("index") != std::string::npos;
             }
 
             template <typename T>
@@ -223,11 +238,6 @@ namespace persistence
 
             struct File
             {
-                static std::filesystem::path pathForId(const std::filesystem::path& path, std::uint32_t id)
-                {
-                    return path / std::to_string(id);
-                }
-
                 File(const File&) = delete;
                 File(File&&) noexcept = default;
 
@@ -236,29 +246,29 @@ namespace persistence
 
                 File(std::filesystem::path path) :
                     m_entries({ ext::Pooled{}, std::move(path) }),
-                    m_index(readIndexFor(m_entries.path())),
-                    m_id(std::stoi(m_entries.path().filename().string()))
+                    m_index(readIndexOfDataFile(m_entries.path())),
+                    m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(ext::ImmutableSpan<EntryT>&& entries) :
                     m_entries(std::move(entries)),
-                    m_index(readIndexFor(m_entries.path())),
-                    m_id(std::stoi(m_entries.path().filename().string()))
+                    m_index(readIndexOfDataFile(m_entries.path())),
+                    m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(std::filesystem::path path, Index&& index) :
                     m_entries({ ext::Pooled{}, std::move(path) }),
                     m_index(std::move(index)),
-                    m_id(std::stoi(m_entries.path().filename().string()))
+                    m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(ext::ImmutableSpan<EntryT>&& entries, Index&& index) :
                     m_entries(std::move(entries)),
                     m_index(std::move(index)),
-                    m_id(std::stoi(m_entries.path().filename().string()))
+                    m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
@@ -405,7 +415,7 @@ namespace persistence
                 FutureFile(std::future<Index>&& future, std::filesystem::path path) :
                     m_future(std::move(future)),
                     m_path(std::move(path)),
-                    m_id(std::stoi(m_path.filename().string()))
+                    m_id(dataFilePathToId(m_path))
                 {
                 }
 
@@ -589,7 +599,7 @@ namespace persistence
                         Index index = ext::makeIndex(job.buffer, m_indexGranularity, CompareLessWithoutReverseMove{}, [](const EntryT& entry) {
                             return entry.key();
                             });
-                        writeIndexFor(job.path, index);
+                        writeIndexOfDataFile(job.path, index);
                         job.promise.set_value(std::move(index));
 
                         (void)ext::writeFile(job.path, job.buffer.data(), job.buffer.size());
@@ -735,7 +745,7 @@ namespace persistence
 
                         std::filesystem::remove(path);
 
-                        auto indexPath = pathForIndex(path);
+                        auto indexPath = dataFilePathToIndexPath(path);
                         std::filesystem::remove(indexPath);
                     }
                 }
@@ -766,11 +776,6 @@ namespace persistence
                     std::filesystem::create_directories(m_path);
 
                     discoverFiles();
-                }
-
-                [[nodiscard]] std::filesystem::path pathForId(std::uint32_t id) const
-                {
-                    return File::pathForId(m_path, id);
                 }
 
                 [[nodiscard]] ext::MergePlan makeMergePlan(
@@ -963,7 +968,7 @@ namespace persistence
                     }
 
                     Index index = ib.end();
-                    writeIndexFor(outFilePath, index);
+                    writeIndexOfDataFile(outFilePath, index);
 
                     return index;
                 }
@@ -1050,7 +1055,7 @@ namespace persistence
                     auto newFilePath = outFilePath;
                     newFilePath.replace_filename(std::to_string(id));
                     std::filesystem::rename(outFilePath, newFilePath);
-                    std::filesystem::rename(pathForIndex(outFilePath), pathForIndex(newFilePath));
+                    std::filesystem::rename(dataFilePathToIndexPath(outFilePath), dataFilePathToIndexPath(newFilePath));
 
                     addFile(std::make_unique<File>(newFilePath, std::move(index)));
                 }
@@ -1071,7 +1076,7 @@ namespace persistence
                         if (it == m_files.end()) continue;
 
                         auto path = (*it)->path();
-                        auto indexPath = pathForIndex(path);
+                        auto indexPath = dataFilePathToIndexPath(path);
 
                         m_files.erase(it);
 
@@ -1138,7 +1143,7 @@ namespace persistence
                             continue;
                         }
 
-                        if (entry.path().filename().string().find("index") != std::string::npos)
+                        if (isPathOfIndex(entry.path()))
                         {
                             continue;
                         }
@@ -1168,7 +1173,7 @@ namespace persistence
                 void addFutureFile(AsyncStorePipeline& pipeline, std::vector<EntryT>&& entries)
                 {
                     const std::uint32_t id = nextId();
-                    auto path = pathForId(id);
+                    auto path = pathOfDataFileWithId(m_path, id);
                     m_lastId = std::max(m_lastId, id);
                     m_futureFiles.emplace_back(pipeline.scheduleUnordered(path, std::move(entries)), path);
                 }
