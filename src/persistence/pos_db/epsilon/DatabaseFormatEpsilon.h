@@ -18,7 +18,7 @@ namespace persistence
 
         namespace detail
         {
-            inline uint32_t encodePawnNonPromotionUnmove(Square from, Square to, Square epSquare, Color sideToUnmove)
+            inline uint32_t encodePawnNonPromotionUnmove(Square from, Square to, Color sideToUnmove)
             {
                 unsigned idx;
                 if (sideToUnmove == Color::White)
@@ -39,28 +39,31 @@ namespace persistence
 
             inline Move decodePawnNonPromotionUnmove(uint32_t index, Square to, Square epSquare, Color sideToUnmove)
             {
-                Piece promotedPiece = Piece::none();
-                MoveType type;
-
                 int offset = index + 7;
                 if (sideToUnmove == Color::White) offset = -offset;
                 const Square from = fromOrdinal<Square>(ordinal(to) + offset);
 
-                type =
+                const MoveType type =
                     to == epSquare
                     ? MoveType::EnPassant
                     : MoveType::Normal;
 
-                return Move{ from, to, type, promotedPiece };
+                return Move{ from, to, type, Piece::none() };
             }
 
             inline uint32_t packReverseMove(const Position& pos, const ReverseMove& rm)
             {
-                const Color sideToUnmove = pos.sideToMove();
+                const Color sideToUnmove = !pos.sideToMove();
 
                 uint32_t toSquareIndex;
                 uint32_t destinationIndex;
-                if (rm.move.type == MoveType::Castle)
+                if (rm.isNull())
+                {
+                    return 
+                        (1 << (20 - 4))
+                        | (31 << (20 - 4 - 5));
+                }
+                else if (rm.move.type == MoveType::Castle)
                 {
                     toSquareIndex = 0; // we can set this to zero because destinationIndex is unique
 
@@ -78,11 +81,11 @@ namespace persistence
                     const PieceType pt = pos.pieceAt(rm.move.to).type();
                     if (pt == PieceType::Pawn)
                     {
-                        destinationIndex = encodePawnNonPromotionUnmove(rm.move.from, rm.move.to, rm.oldEpSquare, sideToUnmove);
+                        destinationIndex = encodePawnNonPromotionUnmove(rm.move.from, rm.move.to, sideToUnmove);
                     }
                     else
                     {
-                        destinationIndex = move_index::destinationIndex(pt, rm.move.from, rm.move.to);
+                        destinationIndex = move_index::destinationIndex(pt, rm.move.to, rm.move.from);
                     }
                 }
 
@@ -102,7 +105,7 @@ namespace persistence
 
             inline ReverseMove unpackReverseMove(const Position& pos, std::uint32_t packed)
             {
-                const Color sideToUnmove = pos.sideToMove();
+                const Color sideToUnmove = !pos.sideToMove();
 
                 constexpr std::uint32_t toSquareIndexMask = 0b1111;
                 constexpr std::uint32_t destinationIndexMask = 0b11111;
@@ -113,6 +116,11 @@ namespace persistence
 
                 const uint32_t toSquareIndex = (packed >> (20 - 4)) & toSquareIndexMask;
                 const uint32_t destinationIndex = (packed >> (20 - 4 - 5)) & destinationIndexMask;
+                if (toSquareIndex == 1 && destinationIndex == 31)
+                {
+                    return ReverseMove{};
+                }
+
                 const PieceType capturedPieceType = fromOrdinal<PieceType>((packed >> (20 - 4 - 5 - 3)) & capturedPieceTypeMask);
                 const CastlingRights oldCastlingRights = fromOrdinal<CastlingRights>((packed >> (20 - 4 - 5 - 3 - 4)) & oldCastlingRightsMask);
                 const bool hadEpSquare = (packed >> (20 - 4 - 5 - 3 - 4 - 1)) & hadEpSquareMask;
@@ -144,7 +152,7 @@ namespace persistence
                     rm.oldEpSquare = Square::none();
                 }
 
-                if (toSquareIndex == 0 && destinationIndex >= 30)
+                if (destinationIndex >= 30)
                 {
                     // castling
                     const CastleType type =
@@ -250,6 +258,12 @@ namespace persistence
             [[nodiscard]] GameResult result() const
             {
                 return fromOrdinal<GameResult>(m_hash[2] & resultMask);
+            }
+
+            [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
+            {
+                const std::uint32_t packedInt = (m_hash[2] & reverseMoveMask) >> reverseMoveShift;
+                return detail::unpackReverseMove(pos, packedInt);
             }
 
             struct CompareLessWithReverseMove
@@ -515,6 +529,11 @@ namespace persistence
             void combine(const Entry& rhs)
             {
                 m_count += rhs.m_count;
+            }
+
+            [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
+            {
+                return m_key.reverseMove(pos);
             }
 
         private:
