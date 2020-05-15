@@ -16,50 +16,184 @@ namespace persistence
     {
         static constexpr std::uint64_t invalidGameOffset = std::numeric_limits<std::uint64_t>::max();
 
-        inline uint32_t packReverseMove(const Position& pos, const ReverseMove& rm)
+        namespace detail
         {
-            const Color sideToUnmove = pos.sideToMove();
-
-            uint32_t toSquareIndex;
-            uint32_t destinationIndex;
-            if (rm.move.type == MoveType::Castle)
+            inline uint32_t encodePawnNonPromotionUnmove(Square from, Square to, Square epSquare, Color sideToUnmove)
             {
-                toSquareIndex = 0; // we can set this to zero because destinationIndex is unique
-
-                const bool isKingSide = rm.move.to.file() == fileH;
-                destinationIndex = isKingSide ? 30 : 31;
-            }
-            else if (rm.move.type == MoveType::Promotion)
-            {
-                toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
-                destinationIndex = std::abs(ordinal(rm.move.to) - ordinal(rm.move.from)) - 7 + 27; // verify
-            }
-            else
-            {
-                toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
-                const PieceType pt = pos.pieceAt(rm.move.to).type();
-                if (pt == PieceType::Pawn)
+                unsigned idx;
+                if (sideToUnmove == Color::White)
                 {
-                    destinationIndex = move_index::pawnDestinationIndex(rm.move.from, rm.move.to, sideToUnmove, PieceType::None);
+                    // capture left - 7 - 7 = 0
+                    // single straight - 8 - 7 = 1
+                    // capture right - 9 - 7 = 2
+                    // double move - 16 - 7 = 9 // this is fine, we don't have to normalize it to 3
+                    idx = ordinal(to) - ordinal(from) - 7;
                 }
                 else
                 {
-                    destinationIndex = move_index::destinationIndex(pt, rm.move.from, rm.move.to);
+                    idx = ordinal(from) - ordinal(to) - 7;
                 }
+
+                return idx;
             }
 
-            const uint32_t capturedPieceType = ordinal(rm.capturedPiece.type());
-            const uint32_t oldCastlingRights = ordinal(rm.oldCastlingRights);
-            const uint32_t hadEpSquare = rm.oldEpSquare != Square::none();
-            const uint32_t oldEpSquareFile = ordinal(rm.oldEpSquare.file());
+            inline Move decodePawnNonPromotionUnmove(uint32_t index, Square to, Square epSquare, Color sideToUnmove)
+            {
+                Piece promotedPiece = Piece::none();
+                MoveType type;
 
-            return
-                (toSquareIndex << (20 - 4))
-                | (destinationIndex << (20 - 4 - 5))
-                | (capturedPieceType << (20 - 4 - 5 - 3))
-                | (oldCastlingRights << (20 - 4 - 5 - 3 - 4))
-                | (hadEpSquare << (20 - 4 - 5 - 3 - 4 - 1))
-                | oldEpSquareFile;
+                int offset = index + 7;
+                if (sideToUnmove == Color::White) offset = -offset;
+                const Square from = fromOrdinal<Square>(ordinal(to) + offset);
+
+                type =
+                    to == epSquare
+                    ? MoveType::EnPassant
+                    : MoveType::Normal;
+
+                return Move{ from, to, type, promotedPiece };
+            }
+
+            inline uint32_t packReverseMove(const Position& pos, const ReverseMove& rm)
+            {
+                const Color sideToUnmove = pos.sideToMove();
+
+                uint32_t toSquareIndex;
+                uint32_t destinationIndex;
+                if (rm.move.type == MoveType::Castle)
+                {
+                    toSquareIndex = 0; // we can set this to zero because destinationIndex is unique
+
+                    const bool isKingSide = rm.move.to.file() == fileH;
+                    destinationIndex = isKingSide ? 30 : 31;
+                }
+                else if (rm.move.type == MoveType::Promotion)
+                {
+                    toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
+                    destinationIndex = std::abs(ordinal(rm.move.to) - ordinal(rm.move.from)) - 7 + 27;
+                }
+                else
+                {
+                    toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
+                    const PieceType pt = pos.pieceAt(rm.move.to).type();
+                    if (pt == PieceType::Pawn)
+                    {
+                        destinationIndex = encodePawnNonPromotionUnmove(rm.move.from, rm.move.to, rm.oldEpSquare, sideToUnmove);
+                    }
+                    else
+                    {
+                        destinationIndex = move_index::destinationIndex(pt, rm.move.from, rm.move.to);
+                    }
+                }
+
+                const uint32_t capturedPieceType = ordinal(rm.capturedPiece.type());
+                const uint32_t oldCastlingRights = ordinal(rm.oldCastlingRights);
+                const uint32_t hadEpSquare = rm.oldEpSquare != Square::none();
+                const uint32_t oldEpSquareFile = ordinal(rm.oldEpSquare.file());
+
+                return
+                    (toSquareIndex << (20 - 4))
+                    | (destinationIndex << (20 - 4 - 5))
+                    | (capturedPieceType << (20 - 4 - 5 - 3))
+                    | (oldCastlingRights << (20 - 4 - 5 - 3 - 4))
+                    | (hadEpSquare << (20 - 4 - 5 - 3 - 4 - 1))
+                    | oldEpSquareFile;
+            }
+
+            inline ReverseMove unpackReverseMove(const Position& pos, std::uint32_t packed)
+            {
+                const Color sideToUnmove = pos.sideToMove();
+
+                constexpr std::uint32_t toSquareIndexMask = 0b1111;
+                constexpr std::uint32_t destinationIndexMask = 0b11111;
+                constexpr std::uint32_t capturedPieceTypeMask = 0b111;
+                constexpr std::uint32_t oldCastlingRightsMask = 0b1111;
+                constexpr std::uint32_t hadEpSquareMask = 0b1;
+                constexpr std::uint32_t oldEpSquareFileMask = 0b111;
+
+                const uint32_t toSquareIndex = (packed >> (20 - 4)) & toSquareIndexMask;
+                const uint32_t destinationIndex = (packed >> (20 - 4 - 5)) & destinationIndexMask;
+                const PieceType capturedPieceType = fromOrdinal<PieceType>((packed >> (20 - 4 - 5 - 3)) & capturedPieceTypeMask);
+                const CastlingRights oldCastlingRights = fromOrdinal<CastlingRights>((packed >> (20 - 4 - 5 - 3 - 4)) & oldCastlingRightsMask);
+                const bool hadEpSquare = (packed >> (20 - 4 - 5 - 3 - 4 - 1)) & hadEpSquareMask;
+                const File oldEpSquareFile = fromOrdinal<File>(packed & oldEpSquareFileMask);
+
+                ReverseMove rm{};
+                if (capturedPieceType != PieceType::None)
+                {
+                    rm.capturedPiece = Piece(capturedPieceType, pos.sideToMove());
+                }
+                else
+                {
+                    rm.capturedPiece = Piece::none();
+                }
+
+                rm.oldCastlingRights = oldCastlingRights;
+
+                if (hadEpSquare)
+                {
+                    const Rank epSquareRank =
+                        pos.sideToMove() == Color::White
+                        ? rank3
+                        : rank6;
+
+                    rm.oldEpSquare = Square(oldEpSquareFile, epSquareRank);
+                }
+                else
+                {
+                    rm.oldEpSquare = Square::none();
+                }
+
+                if (toSquareIndex == 0 && destinationIndex >= 30)
+                {
+                    // castling
+                    const CastleType type =
+                        destinationIndex == 30
+                        ? CastleType::Short
+                        : CastleType::Long;
+
+                    rm.move = Move::castle(type, sideToUnmove);
+                }
+                else
+                {
+                    const Square toSquare = pos.piecesBB(sideToUnmove).nth(toSquareIndex);
+                    if (destinationIndex >= 27)
+                    {
+                        // pawn promotion
+                        rm.move.promotedPiece = pos.pieceAt(toSquare);
+                        rm.move.type = MoveType::Promotion;
+                        rm.move.to = toSquare;
+
+                        uint32_t offset = destinationIndex - 27 + 7;
+                        // The offset applies in the direction the pawn unmoves.
+                        // So we have to negate it for the side that unmoves backwards, so white
+                        if (sideToUnmove == Color::White)
+                        {
+                            offset *= -1;
+                        }
+
+                        rm.move.from = fromOrdinal<Square>(ordinal(toSquare) + offset);
+                    }
+                    else
+                    {
+                        // normal move
+                        const PieceType movedPieceType = pos.pieceAt(toSquare).type();
+                        if (movedPieceType == PieceType::Pawn)
+                        {
+                            rm.move = decodePawnNonPromotionUnmove(destinationIndex, toSquare, rm.oldEpSquare, sideToUnmove);
+                        }
+                        else
+                        {
+                            rm.move.promotedPiece = Piece::none();
+                            rm.move.type = MoveType::Normal;
+                            rm.move.to = toSquare;
+                            rm.move.from = move_index::destinationSquareByIndex(movedPieceType, toSquare, destinationIndex);
+                        }
+                    }
+                }
+
+                return rm;
+            }
         }
 
         struct Key
@@ -87,7 +221,7 @@ namespace persistence
                 m_hash[0] = zobrist.high >> 32;
                 m_hash[1] = zobrist.high & 0xFFFFFFFFull;
                 m_hash[2] = zobrist.low & lastHashPartMask;
-                m_hash[2] |= packReverseMove(pos, reverseMove) << reverseMoveShift;
+                m_hash[2] |= detail::packReverseMove(pos, reverseMove) << reverseMoveShift;
             }
 
             Key(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :

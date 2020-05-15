@@ -486,6 +486,15 @@ public:
         return fromOrdinal<Square>(intrin::lsb(m_squares));
     }
 
+    [[nodiscard]] INTRIN_CONSTEXPR Square nth(int n) const
+    {
+        ASSERT(count() > n);
+
+        Bitboard cpy = *this;
+        while (n--) cpy.popFirst();
+        return cpy.first();
+    }
+
     [[nodiscard]] INTRIN_CONSTEXPR Square last() const
     {
         ASSERT(m_squares != 0);

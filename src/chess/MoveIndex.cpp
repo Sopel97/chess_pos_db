@@ -126,7 +126,7 @@ namespace move_index
         return idx;
     }
 
-    [[nodiscard]] Move destinationIndexToPawnMove(const Position& pos, std::uint8_t index, Square from, Color sideToMove)
+    [[nodiscard]] Move destinationIndexToPawnMove(const Square& epSquare, std::uint8_t index, Square from, Color sideToMove)
     {
         static_assert(ordinal(PieceType::Bishop) == ordinal(PieceType::Knight) + 1);
         static_assert(ordinal(PieceType::Rook) == ordinal(PieceType::Knight) + 2);
@@ -154,12 +154,17 @@ namespace move_index
         if (fromRank != rank7)
         {
             type =
-                to == pos.epSquare()
+                to == epSquare
                 ? MoveType::EnPassant
                 : MoveType::Normal;
         }
 
-        return Move{ from, to, type, promotedPiece};
+        return Move{ from, to, type, promotedPiece };
+    }
+
+    [[nodiscard]] Move destinationIndexToPawnMove(const Position& pos, std::uint8_t index, Square from, Color sideToMove)
+    {
+        return destinationIndexToPawnMove(pos.epSquare(), index, from, sideToMove);
     }
 
     [[nodiscard]] Bitboard destinationsBB(PieceType pt, Square from)
