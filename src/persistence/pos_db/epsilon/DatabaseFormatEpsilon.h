@@ -18,6 +18,8 @@ namespace persistence
 
         inline uint32_t packReverseMove(const Position& pos, const ReverseMove& rm)
         {
+            const Color sideToUnmove = pos.sideToMove();
+
             uint32_t toSquareIndex;
             uint32_t destinationIndex;
             if (rm.move.type == MoveType::Castle)
@@ -29,16 +31,16 @@ namespace persistence
             }
             else if (rm.move.type == MoveType::Promotion)
             {
-                toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(pos.sideToMove())).count();
+                toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
                 destinationIndex = std::abs(ordinal(rm.move.to) - ordinal(rm.move.from)) - 7 + 27; // verify
             }
             else
             {
-                toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(pos.sideToMove())).count();
+                toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
                 const PieceType pt = pos.pieceAt(rm.move.to).type();
                 if (pt == PieceType::Pawn)
                 {
-                    destinationIndex = move_index::pawnDestinationIndex(rm.move.from, rm.move.to, pos.sideToMove(), PieceType::None);
+                    destinationIndex = move_index::pawnDestinationIndex(rm.move.from, rm.move.to, sideToUnmove, PieceType::None);
                 }
                 else
                 {
@@ -48,8 +50,8 @@ namespace persistence
 
             const uint32_t capturedPieceType = ordinal(rm.capturedPiece.type());
             const uint32_t oldCastlingRights = ordinal(rm.oldCastlingRights);
-            const uint32_t hadEpSquare = pos.epSquare() != Square::none();
-            const uint32_t oldEpSquareFile = ordinal(pos.epSquare().file());
+            const uint32_t hadEpSquare = rm.oldEpSquare != Square::none();
+            const uint32_t oldEpSquareFile = ordinal(rm.oldEpSquare.file());
 
             return
                 (toSquareIndex << (20 - 4))
