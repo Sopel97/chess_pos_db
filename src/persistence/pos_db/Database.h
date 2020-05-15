@@ -9,6 +9,7 @@
 #include <execution>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -160,6 +161,8 @@ namespace persistence
             std::size_t memory,
             ImportProgressCallback progressCallback = {}
         ) = 0;
+
+        [[nodiscard]] virtual std::map<std::string, std::vector<std::string>> mergableFiles() const = 0;
 
         virtual void flush() = 0;
 

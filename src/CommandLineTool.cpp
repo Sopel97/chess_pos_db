@@ -1203,7 +1203,6 @@ namespace command_line_app
         const nlohmann::json& json
     )
     {
-
         auto manifests = g_factory.supportManifests();
         auto manifestsJson = nlohmann::json::object();
         for (auto&& [name, manifest] : manifests)
@@ -1227,6 +1226,25 @@ namespace command_line_app
         sendMessage(session, responseStr);
     }
 
+    static void handleTcpCommandMergableFiles(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        assertDatabaseOpen(db);
+
+        auto mergableFiles = db->mergableFiles();
+        auto mergableFilesJson = nlohmann::json(mergableFiles);
+
+        auto response = nlohmann::json{
+            { "mergable_files", std::move(mergableFiles) }
+        };
+
+        auto responseStr = nlohmann::json(response).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        sendMessage(session, responseStr);
+    }
+
     static bool handleTcpCommand(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
@@ -1242,7 +1260,8 @@ namespace command_line_app
             { "query", handleTcpCommandQuery },
             { "stats", handleTcpCommandStats },
             { "dump", handleTcpCommandDump },
-            { "support", handleTcpCommandSupport }
+            { "support", handleTcpCommandSupport },
+            { "mergable_files", handleTcpCommandMergableFiles }
         };
 
         auto datastr = std::string(data, len);

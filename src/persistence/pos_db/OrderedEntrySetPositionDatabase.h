@@ -204,14 +204,24 @@ namespace persistence
                 (void)ext::writeFile<typename Index::EntryType>(indexPath, index.data(), index.size());
             }
 
+            [[nodiscard]] static std::string fileIdToName(std::uint32_t id)
+            {
+                return std::to_string(id);
+            }
+
             [[nodiscard]] static std::filesystem::path pathOfDataFileWithId(const std::filesystem::path& directory, std::uint32_t id)
             {
-                return directory / std::to_string(id);
+                return directory / fileIdToName(id);
+            }
+
+            [[nodiscard]] static std::uint32_t fileNameToId(const std::string& s)
+            {
+                return std::stoi(s);
             }
 
             [[nodiscard]] static std::uint32_t dataFilePathToId(const std::filesystem::path& dataFilePath)
             {
-                return std::stoi(dataFilePath.filename().string());
+                return fileNameToId(dataFilePath.filename().string());
             }
 
             [[nodiscard]] static bool isPathOfIndex(const std::filesystem::path& path)
@@ -280,6 +290,11 @@ namespace persistence
                 [[nodiscard]] std::uint32_t id() const
                 {
                     return m_id;
+                }
+
+                [[nodiscard]] std::string name() const
+                {
+                    return fileIdToName(m_id);
                 }
 
                 [[nodiscard]] const std::filesystem::path& path() const
@@ -709,6 +724,23 @@ namespace persistence
                     {
                         mergeFiles(files, temporaryDirs, progressCallback);
                     }
+                }
+
+                [[nodiscard]] std::vector<std::string> mergableFiles() const
+                {
+                    std::vector<std::string> files;
+
+                    for (auto& file : m_files)
+                    {
+                        files.emplace_back(file->name());
+                    }
+
+                    return files;
+                }
+
+                [[nodiscard]] std::string name() const
+                {
+                    return m_path.filename().string();
                 }
 
                 // Uses the passed id.
@@ -1397,6 +1429,15 @@ namespace persistence
                 BaseType::addStats(statsTotal);
 
                 return statsTotal;
+            }
+
+            [[nodiscard]] std::map<std::string, std::vector<std::string>> mergableFiles() const override
+            {
+                std::map<std::string, std::vector<std::string>> files;
+
+                files[m_partition.name()] = m_partition.mergableFiles();
+
+                return files;
             }
 
             void flush() override
