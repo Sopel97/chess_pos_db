@@ -1070,7 +1070,7 @@ namespace persistence
 
                         if (newProgress.workDone == newProgress.workTotal)
                         {
-                            totalWorkDone = newProgress.workTotal;
+                            totalWorkDone += newProgress.workTotal;
                         }
                     };
 
