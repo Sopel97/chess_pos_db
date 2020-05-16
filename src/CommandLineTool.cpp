@@ -1236,6 +1236,25 @@ namespace command_line_app
         sendMessage(session, responseStr);
     }
 
+    static void handleTcpCommandManifest(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        assertDatabaseOpen(db);
+
+        auto manifest = db->manifest();
+        auto manifestJson = nlohmann::json(manifest);
+
+        auto response = nlohmann::json{
+            { "manifest", manifestJson }
+        };
+
+        auto responseStr = nlohmann::json(response).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        sendMessage(session, responseStr);
+    }
+
     static void handleTcpCommandMergableFiles(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
@@ -1271,6 +1290,7 @@ namespace command_line_app
             { "stats", handleTcpCommandStats },
             { "dump", handleTcpCommandDump },
             { "support", handleTcpCommandSupport },
+            { "manifest", handleTcpCommandManifest },
             { "mergable_files", handleTcpCommandMergableFiles }
         };
 

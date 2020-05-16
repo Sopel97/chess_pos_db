@@ -120,6 +120,12 @@ namespace persistence
         j["size"] = file.sizeBytes;
     }
 
+    void to_json(nlohmann::json& j, const DatabaseManifest& manifest)
+    {
+        j["name"] = manifest.key;
+        j["requires_matching_endianness"] = manifest.requiresMatchingEndianness;
+    }
+
     ImportableFile::ImportableFile(std::filesystem::path path, GameLevel level) :
         m_path(std::move(path)),
         m_level(level),

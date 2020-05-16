@@ -117,6 +117,8 @@ namespace persistence
     {
         std::string key;
         bool requiresMatchingEndianness;
+
+        friend void to_json(nlohmann::json& j, const DatabaseManifest& manifest);
     };
 
     enum struct ManifestValidationResult
