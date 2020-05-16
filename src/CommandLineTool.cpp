@@ -644,7 +644,7 @@ namespace command_line_app
 
             if (json.contains("files"))
             {
-                const auto files = json["partition"]["files"].get<std::vector<std::string>>();
+                const auto files = json["files"].get<std::vector<std::string>>();
                 db->merge(temporaryPaths, temporarySpace, partition, files, callback);
             }
             else
