@@ -114,6 +114,12 @@ namespace persistence
         return ImportableFileType::Unknown;
     }
 
+    void to_json(nlohmann::json& j, const MergableFile& file)
+    {
+        j["name"] = file.name;
+        j["size"] = file.sizeBytes;
+    }
+
     ImportableFile::ImportableFile(std::filesystem::path path, GameLevel level) :
         m_path(std::move(path)),
         m_level(level),

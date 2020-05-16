@@ -6,6 +6,9 @@
 
 #include "enum/EnumArray.h"
 
+#include "json/json.hpp"
+
+#include <cstdint>
 #include <execution>
 #include <filesystem>
 #include <functional>
@@ -71,6 +74,14 @@ namespace persistence
         None,
         Consecutive,
         Any
+    };
+
+    struct MergableFile
+    {
+        std::string name;
+        std::size_t sizeBytes;
+
+        friend void to_json(nlohmann::json& j, const MergableFile& file);
     };
 
     using ImportableFilePath = std::filesystem::path;
@@ -178,7 +189,7 @@ namespace persistence
             ImportProgressCallback progressCallback = {}
         ) = 0;
 
-        [[nodiscard]] virtual std::map<std::string, std::vector<std::string>> mergableFiles() const = 0;
+        [[nodiscard]] virtual std::map<std::string, std::vector<MergableFile>> mergableFiles() const = 0;
 
         virtual void flush() = 0;
 

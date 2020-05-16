@@ -297,6 +297,11 @@ namespace persistence
                     return fileIdToName(m_id);
                 }
 
+                [[nodiscard]] MergableFile mergableInfo() const
+                {
+                    return { name(), m_entries.size_bytes() };
+                }
+
                 [[nodiscard]] const std::filesystem::path& path() const
                 {
                     return m_entries.path();
@@ -744,13 +749,13 @@ namespace persistence
                     }
                 }
 
-                [[nodiscard]] std::vector<std::string> mergableFiles() const
+                [[nodiscard]] std::vector<MergableFile> mergableFiles() const
                 {
-                    std::vector<std::string> files;
+                    std::vector<MergableFile> files;
 
                     for (auto& file : m_files)
                     {
-                        files.emplace_back(file->name());
+                        files.emplace_back(file->mergableInfo());
                     }
 
                     return files;
@@ -1486,9 +1491,9 @@ namespace persistence
                 return statsTotal;
             }
 
-            [[nodiscard]] std::map<std::string, std::vector<std::string>> mergableFiles() const override
+            [[nodiscard]] std::map<std::string, std::vector<MergableFile>> mergableFiles() const override
             {
-                std::map<std::string, std::vector<std::string>> files;
+                std::map<std::string, std::vector<MergableFile>> files;
 
                 files[m_partition.name()] = m_partition.mergableFiles();
 
