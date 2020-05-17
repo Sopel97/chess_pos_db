@@ -608,6 +608,162 @@ namespace command_line_app
         handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temporaryPaths, temporarySpace, doMerge, doReportProgress);
     }
 
+    enum struct AppendMergeType
+    {
+        None,
+        All,
+        New
+    };
+
+    // Calculates lhs - rhs
+    static std::map<std::string, std::vector<persistence::MergableFile>> mergableFilesDifference(
+        std::map<std::string, std::vector<persistence::MergableFile>> lhs,
+        std::map<std::string, std::vector<persistence::MergableFile>> rhs
+    )
+    {
+        std::map<std::string, std::vector<persistence::MergableFile>> result;
+
+        for (auto& [partition, lhsFiles] : lhs)
+        {
+            auto& resultFiles = result[partition];
+
+            auto& rhsFiles = rhs[partition];
+            for (auto& lhsFile : lhsFiles)
+            {
+                if (std::find_if(
+                    rhsFiles.begin(),
+                    rhsFiles.end(),
+                    [&lhsFile](const persistence::MergableFile& mf)
+                    {
+                        return mf.name == lhsFile.name;
+                    }
+                ) == rhsFiles.end())
+                {
+                    // not found in rhs, therefore not subtracted
+                    resultFiles.emplace_back(lhsFile);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    static void handleTcpCommandAppendImpl(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const persistence::ImportableFiles& pgns,
+        const std::vector<std::filesystem::path>& temporaryPaths,
+        std::optional<MemoryAmount> temporarySpace,
+        AppendMergeType merge,
+        bool doReportProgress
+    )
+    {
+        assertDatabaseOpen(db);
+        for (auto& temp : temporaryPaths)
+        {
+            assertDirectoryEmpty(temp);
+        }
+
+        // If we only want to merge the appended files we need
+        // to remember the old ones.
+        std::map<std::string, std::vector<persistence::MergableFile>> oldMergableFiles;
+        if (merge == AppendMergeType::New)
+        {
+            oldMergableFiles = db->mergableFiles();
+        }
+
+        {
+            auto callback = makeImportProgressReportHandler(session, doReportProgress);
+            auto stats = db->import(pgns, importMemory.bytes(), callback);
+            sendProgressFinished(session, "import", statsToJson(stats));
+
+            if (merge == AppendMergeType::All)
+            {
+                auto callback = makeMergeProgressReportHandler(session, doReportProgress);
+                db->mergeAll(temporaryPaths, temporarySpace, callback);
+            }
+            else if (merge == AppendMergeType::New)
+            {
+                auto allMergebaleFilesNow = db->mergableFiles();
+                auto newMergableFiles = mergableFilesDifference(allMergebaleFilesNow, oldMergableFiles);
+
+                auto callback = makeMergeProgressReportHandler(session, doReportProgress);
+                // TODO: proper progress report if multiple partitions.
+                for (auto& [partition, files] : newMergableFiles)
+                {
+                    if (files.empty())
+                    {
+                        continue;
+                    }
+
+                    std::vector<std::string> names;
+                    names.reserve(files.size());
+                    for (auto& file : files)
+                    {
+                        names.emplace_back(file.name);
+                    }
+
+                    db->merge(temporaryPaths, temporarySpace, partition, names, callback);
+                }
+            }
+        }
+
+        // We have to always sent some info that we finished
+        sendProgressFinished(session, "append");
+    }
+
+    static void handleTcpCommandAppend(
+        std::unique_ptr<persistence::Database>& db,
+        const TcpConnection::Ptr& session,
+        const nlohmann::json& json
+    )
+    {
+        AppendMergeType merge = AppendMergeType::None;
+        if (json.contains("merge"))
+        {
+            if (json["merge"] == "all")
+            {
+                merge = AppendMergeType::All;
+            }
+            else if (json["merge"] == "new")
+            {
+                merge = AppendMergeType::New;
+            }
+        }
+
+        const bool doReportProgress = json["report_progress"].get<bool>();
+
+        persistence::ImportableFiles pgns;
+        for (auto& v : json["human_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Human);
+        for (auto& v : json["engine_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Engine);
+        for (auto& v : json["server_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Server);
+
+        const auto temporaryPathsStr =
+            json.contains("temporary_paths")
+            ? json["temporary_paths"].get<std::vector<std::string>>()
+            : std::vector<std::string>{};
+
+        std::vector<std::filesystem::path> temporaryPaths;
+        temporaryPaths.reserve(temporaryPathsStr.size());
+        for (auto& s : temporaryPathsStr)
+        {
+            temporaryPaths.emplace_back(s);
+        }
+
+        if (json.contains("temporary_path"))
+        {
+            temporaryPaths.emplace_back(json["temporary_path"].get<std::string>());
+        }
+
+        std::optional<MemoryAmount> temporarySpace = std::nullopt;
+        if (json.contains("temporary_space"))
+        {
+            temporarySpace = json["temporary_space"].get<MemoryAmount>();
+        }
+
+        handleTcpCommandAppendImpl(db, session, pgns, temporaryPaths, temporarySpace, merge, doReportProgress);
+    }
+
     static void handleTcpCommandMerge(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
@@ -1283,6 +1439,7 @@ namespace command_line_app
     {
         static std::map<std::string, TcpCommandHandler> s_handlers{
             { "create", handleTcpCommandCreate },
+            { "append", handleTcpCommandAppend },
             { "merge", handleTcpCommandMerge },
             { "open", handleTcpCommandOpen },
             { "close", handleTcpCommandClose },
@@ -1556,6 +1713,10 @@ namespace command_line_app
 
                 case 1:
                     header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
+                    break;
+
+                case 2:
+                    header.compressionLevel = bcgn::BcgnCompressionLevel::Level_2;
                     break;
                 }
             }
