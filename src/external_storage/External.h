@@ -1168,7 +1168,7 @@ namespace ext
             m_file(std::move(file)),
             m_buffer(std::move(buffer)),
             m_nextEmpty(m_buffer.data()),
-            m_size(m_file.size()),
+            m_size(m_file.size() / sizeof(T)),
             m_numObjectsToWrite(0)
         {
         }
