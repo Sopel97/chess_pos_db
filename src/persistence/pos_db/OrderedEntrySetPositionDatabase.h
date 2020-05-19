@@ -244,7 +244,7 @@ namespace persistence
             }
 
             static inline std::size_t m_indexGranularity = cfg::g_config["persistence"][name]["index_granularity"].get<std::size_t>();
-            static inline MemoryAmount m_indexWriterBufferSize = cfg::g_config["persistence"][name]["index_writer_buffer_size"].get<MemoryAmount>();
+            static inline MemoryAmount m_mergeWriterBufferSize = cfg::g_config["persistence"][name]["merge_writer_buffer_size"].get<MemoryAmount>();
 
             struct File
             {
@@ -894,7 +894,7 @@ namespace persistence
                         }
 
                         {
-                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_indexWriterBufferSize.bytes(), 2);
+                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_mergeWriterBufferSize.bytes(), 2);
                             ext::BackInserter<EntryT> out(outFile, util::DoubleBuffer<EntryT>(outBufferSize));
 
                             auto cmp = CompareEqualFull{};

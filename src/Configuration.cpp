@@ -145,27 +145,23 @@ namespace cfg
 "persistence" : {
     "header_writer_memory" : "16MiB",
 
-    "db_alpha" : {
-        "index_granularity" : 1024,
-        "max_merge_buffer_size" : "1GiB",
-        "pgn_parser_memory" : "4MiB"
-    },
-
     "db_beta" : {
         "index_granularity" : 1024,
-        "max_merge_buffer_size" : "1GiB",
-        "pgn_parser_memory" : "4MiB"
+        "merge_writer_buffer_size" : "4MiB",
+        "pgn_parser_memory" : "4MiB",
+        "bcgn_parser_memory" : "4MiB"
     },
 
     "db_delta" : {
         "index_granularity" : 1024,
-        "max_merge_buffer_size" : "1GiB",
-        "pgn_parser_memory" : "4MiB"
+        "merge_writer_buffer_size" : "4MiB",
+        "pgn_parser_memory" : "4MiB",
+        "bcgn_parser_memory" : "4MiB"
     },
 
     "db_epsilon" : {
         "index_granularity" : 1024,
-        "max_merge_buffer_size" : "1GiB",
+        "merge_writer_buffer_size" : "4MiB",
         "pgn_parser_memory" : "4MiB",
         "bcgn_parser_memory" : "4MiB"
     }
@@ -178,8 +174,7 @@ namespace cfg
     "dump" : {
         "import_memory" : "2GiB",
         "pgn_parser_memory" : "4MiB",
-        "bcgn_parser_memory" : "4MiB",
-        "max_merge_buffer_size" : "1GiB"
+        "bcgn_parser_memory" : "4MiB"
     }
 },
 

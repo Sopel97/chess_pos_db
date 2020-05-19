@@ -1171,7 +1171,6 @@ namespace command_line_app
     {
         static const MemoryAmount pgnParserMemory = cfg::g_config["command_line_app"]["dump"]["pgn_parser_memory"].get<MemoryAmount>();
         static const MemoryAmount importMemory = cfg::g_config["command_line_app"]["dump"]["import_memory"].get<MemoryAmount>();
-        static const MemoryAmount mergeMemory = cfg::g_config["command_line_app"]["dump"]["max_merge_buffer_size"].get<MemoryAmount>();
 
         assertDirectoryEmpty(temp);
 
