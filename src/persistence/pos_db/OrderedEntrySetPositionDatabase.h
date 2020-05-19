@@ -15,6 +15,8 @@
 
 #include "external_storage/External.h"
 
+#include "util/LazyCached.h"
+
 #include "Configuration.h"
 #include "Logger.h"
 
@@ -256,28 +258,28 @@ namespace persistence
 
                 File(std::filesystem::path path) :
                     m_entries({ ext::Pooled{}, std::move(path) }),
-                    m_index{},
+                    m_index{makeIndexGetter()},
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(ext::ImmutableSpan<EntryT>&& entries) :
                     m_entries(std::move(entries)),
-                    m_index{},
+                    m_index{makeIndexGetter()},
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(std::filesystem::path path, Index&& index) :
                     m_entries({ ext::Pooled{}, std::move(path) }),
-                    m_index(std::make_unique<Index>(std::move(index))),
+                    m_index(std::move(index)),
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(ext::ImmutableSpan<EntryT>&& entries, Index&& index) :
                     m_entries(std::move(entries)),
-                    m_index(std::make_unique<Index>(std::move(index))),
+                    m_index(std::move(index)),
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
@@ -327,8 +329,6 @@ namespace persistence
                     ASSERT(queries.size() == stats.size());
                     ASSERT(queries.size() == keys.size());
 
-                    ensureIndexLoaded();
-
                     std::vector<EntryT> buffer;
                     for (std::size_t i = 0; i < queries.size(); ++i)
                     {
@@ -350,8 +350,6 @@ namespace persistence
                     RetractionsStats& retractionsStats
                 )
                 {
-                    ensureIndexLoaded();
-
                     const auto key = KeyT(PositionWithZobrist(pos));
                     auto [a, b] = m_index->equal_range(key);
 
@@ -365,15 +363,14 @@ namespace persistence
 
             private:
                 ext::ImmutableSpan<EntryT> m_entries;
-                std::unique_ptr<Index> m_index; // lazily loaded
+                util::LazyCached<Index> m_index;
                 std::uint32_t m_id;
 
-                void ensureIndexLoaded()
+                auto makeIndexGetter() const
                 {
-                    if (m_index == nullptr)
-                    {
-                        m_index = std::make_unique<Index>(readIndexOfDataFile(m_entries.path()));
-                    }
+                    return [path = m_entries.path()]() -> Index{
+                        return readIndexOfDataFile(path);
+                    };
                 }
 
                 void accumulateStatsFromEntries(

@@ -246,6 +246,9 @@
     <ClInclude Include="src\persistence\pos_db\GameHeader.h">
       <Filter>Header Files\src\persistence\pos_db</Filter>
     </ClInclude>
+    <ClInclude Include="src\util\LazyCached.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">

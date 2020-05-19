@@ -85,6 +85,7 @@
     <ClInclude Include="src\util\Assert.h" />
     <ClInclude Include="src\util\Buffer.h" />
     <ClInclude Include="src\util\Endian.h" />
+    <ClInclude Include="src\util\LazyCached.h" />
     <ClInclude Include="src\util\MemoryAmount.h" />
     <ClInclude Include="src\util\TypeUtility.h" />
     <ClInclude Include="src\util\UnsignedCharBufferView.h" />
