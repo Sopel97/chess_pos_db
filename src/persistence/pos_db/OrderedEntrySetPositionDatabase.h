@@ -256,28 +256,28 @@ namespace persistence
 
                 File(std::filesystem::path path) :
                     m_entries({ ext::Pooled{}, std::move(path) }),
-                    m_index(readIndexOfDataFile(m_entries.path())),
+                    m_index{},
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(ext::ImmutableSpan<EntryT>&& entries) :
                     m_entries(std::move(entries)),
-                    m_index(readIndexOfDataFile(m_entries.path())),
+                    m_index{},
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(std::filesystem::path path, Index&& index) :
                     m_entries({ ext::Pooled{}, std::move(path) }),
-                    m_index(std::move(index)),
+                    m_index(std::make_unique<Index>(std::move(index))),
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
 
                 File(ext::ImmutableSpan<EntryT>&& entries, Index&& index) :
                     m_entries(std::move(entries)),
-                    m_index(std::move(index)),
+                    m_index(std::make_unique<Index>(std::move(index))),
                     m_id(dataFilePathToId(m_entries.path()))
                 {
                 }
@@ -327,11 +327,13 @@ namespace persistence
                     ASSERT(queries.size() == stats.size());
                     ASSERT(queries.size() == keys.size());
 
+                    ensureIndexLoaded();
+
                     std::vector<EntryT> buffer;
                     for (std::size_t i = 0; i < queries.size(); ++i)
                     {
                         auto& key = keys[i];
-                        auto [a, b] = m_index.equal_range(key);
+                        auto [a, b] = m_index->equal_range(key);
 
                         const std::size_t count = b.it - a.it;
                         if (count == 0) continue; // the range is empty, the value certainly does not exist
@@ -348,8 +350,10 @@ namespace persistence
                     RetractionsStats& retractionsStats
                 )
                 {
+                    ensureIndexLoaded();
+
                     const auto key = KeyT(PositionWithZobrist(pos));
-                    auto [a, b] = m_index.equal_range(key);
+                    auto [a, b] = m_index->equal_range(key);
 
                     const std::size_t count = b.it - a.it;
                     if (count == 0) return; // the range is empty, the value certainly does not exist
@@ -361,8 +365,16 @@ namespace persistence
 
             private:
                 ext::ImmutableSpan<EntryT> m_entries;
-                Index m_index;
+                std::unique_ptr<Index> m_index; // lazily loaded
                 std::uint32_t m_id;
+
+                void ensureIndexLoaded()
+                {
+                    if (m_index == nullptr)
+                    {
+                        m_index = std::make_unique<Index>(readIndexOfDataFile(m_entries.path()));
+                    }
+                }
 
                 void accumulateStatsFromEntries(
                     const std::vector<EntryT>& entries,
