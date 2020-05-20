@@ -904,7 +904,6 @@ namespace persistence
                         const std::size_t totalFileSize = ext::bytesInSpans(spans);
 
                         ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
-                        outFile.reserve(totalFileSize);
 
                         {
                             const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_mergeWriterBufferSize.bytes(), 2);
@@ -966,6 +965,10 @@ namespace persistence
                                     spans.emplace_back(ext::ImmutableBinaryFile(ext::Pooled{}, path));
                                 }
 
+                                // preallocate space for the resulting file
+                                // it's guaranteed that we haven't written anything to the output yet
+                                outFile.reserve(totalFileSize);
+
                                 auto internalProgressCallback = [&progressCallback, &internalProgress, totalFileSize](const ext::Progress& progress)
                                 {
                                     internalProgress.workDone = totalFileSize + progress.workDone;
@@ -1003,7 +1006,7 @@ namespace persistence
                             {
                                 ext::MergeCallbacks callbacks{
                                     progressCallback,
-                                    [deleteOld, &spans, &files, this](int passId) {
+                                    [deleteOld, &spans, &files, &outFile, totalFileSize, this](int passId) {
                                         if (passId == 0)
                                         {
                                             if (deleteOld)
@@ -1011,6 +1014,12 @@ namespace persistence
                                                 spans.clear();
                                                 removeFiles(files);
                                             }
+
+                                            // preallocate space for the resulting file
+                                            // it's guaranteed that we haven't written anything to the output yet
+                                            // if the first pass was to write directly to `out`
+                                            // we take the other branch that copies files first
+                                            outFile.reserve(totalFileSize);
                                         }
                                     }
                                 };
