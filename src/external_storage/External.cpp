@@ -48,6 +48,11 @@ namespace ext
                 + " with openmode + " + openmode
             );
         }
+
+        [[noreturn]] void throwOpenException(const std::filesystem::path& path, FileOpenmode openmode)
+        {
+            throwOpenException(path, openmodeToPosix(openmode));
+        }
     }
 
     [[nodiscard]] std::filesystem::path uniquePath()
@@ -95,6 +100,11 @@ namespace ext
             return h;
         }
 
+        [[nodiscard]] auto openFile(const std::filesystem::path& path, FileOpenmode openmode)
+        {
+            return openFile(path, openmodeToPosix(openmode));
+        }
+
         [[nodiscard]] auto fileTell(NativeFileHandle fh)
         {
             return _ftelli64_nolock(fh);
@@ -126,6 +136,13 @@ namespace ext
 
         void PooledFile::FilePool::closeNoLock(PooledFile& file)
         {
+            // truncation is required in case the file had reserved space.
+            // We cannot hold a lock here, so we have to do truncation manually
+
+            const std::size_t size = file.size();
+            const bool requiresTruncation = file.size() != file.capacity();
+            const auto path = file.path();
+
             if (file.m_poolEntry != noneEntry())
             {
                 std::unique_lock<std::mutex> lock(file.m_mutex);
@@ -133,26 +150,32 @@ namespace ext
                 m_files.erase(file.m_poolEntry);
                 file.m_poolEntry = noneEntry();
             }
+
+            if (requiresTruncation)
+            {
+                std::filesystem::resize_file(path, size);
+            }
         }
 
         [[nodiscard]] FileHandle PooledFile::FilePool::reopen(const PooledFile& file)
         {
             ASSERT(file.m_timesOpened > 0u);
 
-            // in particular change 'w' to 'a' so we don't truncate the file
-            std::string openmode = file.m_openmode;
-            for (auto& c : openmode)
-            {
-                if (c == 'w') c = 'a';
-            }
-            return openFile(file.m_path, openmode);
+            return openFile(file.m_path, file.m_openmode - FileOpenmode::Create);
         }
 
         [[nodiscard]] FileHandle PooledFile::FilePool::open(const PooledFile& file)
         {
             ASSERT(file.m_timesOpened == 0u);
 
-            return openFile(file.m_path, file.m_openmode);
+            auto h = openFile(file.m_path, file.m_openmode);
+            if (contains(file.m_openmode, FileOpenmode::Create))
+            {
+                h.reset();
+                h = reopen(file); // without create (i.e. no append)
+            }
+
+            return h;
         }
 
         void PooledFile::FilePool::closeLastFile()
@@ -218,12 +241,15 @@ namespace ext
             return s_pool;
         }
 
-        PooledFile::PooledFile(std::filesystem::path path, std::string openmode) :
+        PooledFile::PooledFile(std::filesystem::path path, FileOpenmode openmode) :
             m_path(std::move(path)),
-            m_openmode(std::move(openmode)),
+            m_openmode(openmode),
+            m_capacity(0),
+            m_size(0),
             m_poolEntry(pool().noneEntry()),
             m_timesOpened(0)
         {
+            m_size = actualSize();
         }
 
         PooledFile::~PooledFile()
@@ -241,7 +267,7 @@ namespace ext
             return m_path;
         }
 
-        [[nodiscard]] const std::string& PooledFile::openmode() const
+        [[nodiscard]] FileOpenmode PooledFile::openmode() const
         {
             return m_openmode;
         }
@@ -251,7 +277,7 @@ namespace ext
             return m_poolEntry != pool().noneEntry();
         }
 
-        [[nodiscard]] std::size_t PooledFile::size() const
+        [[nodiscard]] std::size_t PooledFile::actualSize() const
         {
             return withHandle([&](NativeFileHandle handle) {
                 const auto originalPos = fileTell(handle);
@@ -260,6 +286,16 @@ namespace ext
                 fileSeek(handle, originalPos, SEEK_SET);
                 return s;
                 });
+        }
+
+        [[nodiscard]] std::size_t PooledFile::size() const
+        {
+            return m_size;
+        }
+
+        [[nodiscard]] std::size_t PooledFile::capacity() const
+        {
+            return std::max(m_capacity, m_size);
         }
 
         [[nodiscard]] std::size_t PooledFile::read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
@@ -273,8 +309,10 @@ namespace ext
         [[nodiscard]] std::size_t PooledFile::append(const std::byte* source, std::size_t elementSize, std::size_t count)
         {
             return withHandle([&](NativeFileHandle handle) {
-                fileSeek(handle, 0, SEEK_END);
-                return std::fwrite(static_cast<const void*>(source), elementSize, count, handle);
+                fileSeek(handle, m_size, SEEK_SET);
+                const auto appended = std::fwrite(static_cast<const void*>(source), elementSize, count, handle);
+                m_size += appended * elementSize;
+                return appended;
                 });
         }
 
@@ -290,31 +328,42 @@ namespace ext
             return true;
         }
 
-        void PooledFile::truncate()
+        void PooledFile::truncate(std::size_t bytes)
         {
-            std::unique_lock<std::mutex> lock(m_mutex);
+            withHandle([&](NativeFileHandle handle) {
+                if (bytes >= capacity())
+                {
+                    return;
+                }
 
-            // We have to close the file but we cannot use pool's method
-            // because it would try to lock the file again.
-            // This is pretty much the only way we can ensure atomicity here.
-            if (m_poolEntry != pool().noneEntry())
-            {
-                std::fclose(m_poolEntry->first.get());
-                std::filesystem::resize_file(m_path, 0);
-                // We don't care about openmode here because we truncate anyway
-                m_poolEntry->first = detail::openFile(m_path, m_openmode);
-            }
-            else
-            {
-                std::filesystem::resize_file(m_path, 0);
-            }
+                std::fflush(handle);
+                std::filesystem::resize_file(m_path, bytes);
+
+                m_size = m_capacity = bytes;
+                });
+        }
+
+        void PooledFile::reserve(std::size_t bytes)
+        {
+            withHandle([&](NativeFileHandle handle) {
+                if (bytes <= capacity())
+                {
+                    return;
+                }
+
+                std::fflush(handle);
+                std::filesystem::resize_file(m_path, bytes);
+
+                m_capacity = bytes;
+                });
         }
 
         inline const std::size_t File::maxUnpooledOpenFiles = cfg::g_config["ext"]["max_concurrent_open_unpooled_files"].get<std::size_t>();
 
-        File::File(std::filesystem::path path, std::string openmode) :
+        File::File(std::filesystem::path path, FileOpenmode openmode) :
             m_path(std::move(path)),
-            m_openmode(std::move(openmode))
+            m_openmode(openmode),
+            m_size(0)
         {
             open();
         }
@@ -334,13 +383,14 @@ namespace ext
             return m_path;
         }
 
-        [[nodiscard]] const std::string& File::openmode() const
+        [[nodiscard]] FileOpenmode File::openmode() const
         {
             return m_openmode;
         }
 
         void File::close()
         {
+            truncate(size()); // required in case there was reserved space
             m_handle.reset();
             m_numOpenFiles -= 1;
         }
@@ -358,6 +408,32 @@ namespace ext
             }
 
             m_handle = openFile(m_path, m_openmode);
+            m_size = m_capacity = actualSize();
+            m_numOpenFiles += 1;
+
+            if (contains(m_openmode, FileOpenmode::Create))
+            {
+                m_handle.reset();
+                m_handle = openFile(m_path, m_openmode - FileOpenmode::Create); // without create (i.e. no append)
+            }
+        }
+
+        void File::reopen()
+        {
+            const auto openmode = m_openmode - FileOpenmode::Create;
+
+            // This is not designed to be a hard limits.
+            // It it prone to data races.
+            // We only want to reasonably restrict the number of
+            // unpooled files open at once so that
+            // we don't fail to open a PooledFile
+            if (m_numOpenFiles.load() >= maxUnpooledOpenFiles)
+            {
+                except::throwOpenException(m_path, openmode);
+            }
+
+            m_handle = openFile(m_path, openmode);
+            m_size = m_capacity = actualSize();
             m_numOpenFiles += 1;
         }
 
@@ -366,7 +442,7 @@ namespace ext
             return m_handle != nullptr;
         }
 
-        [[nodiscard]] std::size_t File::size() const
+        [[nodiscard]] std::size_t File::actualSize() const
         {
             std::unique_lock<std::mutex> lock(m_mutex);
 
@@ -376,6 +452,16 @@ namespace ext
             const auto s = fileTell(m_handle.get());
             fileSeek(m_handle.get(), originalPos, SEEK_SET);
             return s;
+        }
+
+        [[nodiscard]] std::size_t File::size() const
+        {
+            return m_size;
+        }
+
+        [[nodiscard]] std::size_t File::capacity() const
+        {
+            return std::max(m_size, m_capacity);
         }
 
         [[nodiscard]] std::size_t File::read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const
@@ -392,8 +478,10 @@ namespace ext
             std::unique_lock<std::mutex> lock(m_mutex);
 
             ASSERT(m_handle.get() != nullptr);
-            fileSeek(m_handle.get(), 0, SEEK_END);
-            return std::fwrite(static_cast<const void*>(source), elementSize, count, m_handle.get());
+            fileSeek(m_handle.get(), m_size, SEEK_SET);
+            const auto appended = std::fwrite(static_cast<const void*>(source), elementSize, count, m_handle.get());
+            m_size += appended * elementSize;
+            return appended;
         }
 
         void File::flush()
@@ -409,14 +497,37 @@ namespace ext
             return false;
         }
 
-        void File::truncate()
+        void File::truncate(std::size_t bytes)
         {
             std::unique_lock<std::mutex> lock(m_mutex);
 
             ASSERT(m_handle.get() != nullptr);
-            close();
-            std::filesystem::resize_file(m_path, 0);
-            open();
+
+            if (bytes >= capacity())
+            {
+                return;
+            }
+
+            std::fflush(m_handle.get());
+            std::filesystem::resize_file(m_path, bytes);
+            m_size = m_capacity = bytes;
+        }
+
+        void File::reserve(std::size_t bytes)
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+
+            ASSERT(m_handle.get() != nullptr);
+
+            if (bytes <= capacity())
+            {
+                return;
+            }
+
+            std::fflush(m_handle.get());
+            std::filesystem::resize_file(m_path, bytes);
+
+            m_capacity = bytes;
         }
 
         const std::vector<ThreadPool::ThreadPoolSpec>& ThreadPool::specs()
@@ -638,7 +749,7 @@ namespace ext
         return m_file->path();
     }
 
-    [[nodiscard]] std::string ImmutableBinaryFile::openmode() const
+    [[nodiscard]] FileOpenmode ImmutableBinaryFile::openmode() const
     {
         return m_openmode;
     }
@@ -685,7 +796,7 @@ namespace ext
         return m_file->path();
     }
 
-    [[nodiscard]] std::string BinaryOutputFile::openmode() const
+    [[nodiscard]] FileOpenmode BinaryOutputFile::openmode() const
     {
         return m_file->openmode();
     }
@@ -698,6 +809,16 @@ namespace ext
     [[nodiscard]] std::future<std::size_t> BinaryOutputFile::append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const
     {
         return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
+    }
+
+    void BinaryOutputFile::reserve(std::size_t bytes)
+    {
+        m_file->reserve(bytes);
+    }
+
+    void BinaryOutputFile::truncate(std::size_t bytes)
+    {
+        m_file->truncate(bytes);
     }
 
     // reopens the file in readonly mode
@@ -775,7 +896,7 @@ namespace ext
         return m_file->path();
     }
 
-    [[nodiscard]] std::string BinaryInputOutputFile::openmode() const
+    [[nodiscard]] FileOpenmode BinaryInputOutputFile::openmode() const
     {
         return m_file->openmode();
     }
@@ -805,9 +926,14 @@ namespace ext
         return m_threadPool->scheduleAppend(m_file, destination, elementSize, count);
     }
 
-    void BinaryInputOutputFile::truncate()
+    void BinaryInputOutputFile::truncate(std::size_t bytes)
     {
-        m_file->truncate();
+        m_file->truncate(bytes);
+    }
+
+    void BinaryInputOutputFile::reserve(std::size_t bytes)
+    {
+        m_file->reserve(bytes);
     }
 
     // reopens the file in readonly mode

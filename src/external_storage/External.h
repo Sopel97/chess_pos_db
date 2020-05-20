@@ -22,6 +22,119 @@ namespace ext
     // TODO: we need to use non-portable functions to allow >32bit file offsets
     //       so consider moving to std::fstream
 
+    // If "Create" is not set then the file never is opened in append mode
+    enum struct FileOpenmode
+    {
+        Create = 1 << 0,
+        Read = 1 << 1,
+        Write = 1 << 2,
+        Binary = 1 << 3,
+        Truncate = 1 << 4
+    };
+
+    [[nodiscard]] constexpr FileOpenmode operator|(FileOpenmode lhs, FileOpenmode rhs)
+    {
+        return static_cast<FileOpenmode>(static_cast<unsigned>(lhs) | static_cast<unsigned>(rhs));
+    }
+
+    [[nodiscard]] constexpr FileOpenmode& operator|=(FileOpenmode& lhs, FileOpenmode rhs)
+    {
+        lhs = lhs | rhs;
+        return lhs;
+    }
+
+    [[nodiscard]] constexpr bool contains(FileOpenmode lhs, FileOpenmode rhs)
+    {
+        return (static_cast<unsigned>(lhs) & static_cast<unsigned>(rhs)) == static_cast<unsigned>(rhs);
+    }
+
+    [[nodiscard]] constexpr FileOpenmode operator-(FileOpenmode lhs, FileOpenmode rhs)
+    {
+        return static_cast<FileOpenmode>(static_cast<unsigned>(lhs) & ~static_cast<unsigned>(rhs));
+    }
+
+    [[nodiscard]] inline const char* openmodeToPosixNoCreate(FileOpenmode openmode)
+    {
+        static std::array<const char*, 32> mapping = {
+            /* TBWRC */
+            /* 00000 */ "r",
+            /* 00001 */ "r",
+            /* 00010 */ "r",
+            /* 00011 */ "r",
+            /* 00100 */ "r+",
+            /* 00101 */ "r+",
+            /* 00110 */ "r+",
+            /* 00111 */ "r+",
+            /* 01000 */ "rb",
+            /* 01001 */ "rb",
+            /* 01010 */ "rb",
+            /* 01011 */ "rb",
+            /* 01100 */ "rb+",
+            /* 01101 */ "rb+",
+            /* 01110 */ "rb+",
+            /* 01111 */ "rb+",
+            /* 10000 */ "w+",
+            /* 10001 */ "w+",
+            /* 10010 */ "w+",
+            /* 10011 */ "w+",
+            /* 10100 */ "w+",
+            /* 10101 */ "w+",
+            /* 10110 */ "w+",
+            /* 10111 */ "w+",
+            /* 11000 */ "wb+",
+            /* 11001 */ "wb+",
+            /* 11010 */ "wb+",
+            /* 11011 */ "wb+",
+            /* 11100 */ "wb+",
+            /* 11101 */ "wb+",
+            /* 11110 */ "wb+",
+            /* 11111 */ "wb+"
+        };
+
+        return mapping[static_cast<unsigned>(openmode)];
+    }
+
+    [[nodiscard]] inline const char* openmodeToPosix(FileOpenmode openmode)
+    {
+        static std::array<const char*, 32> mapping = {
+            /* TBWRC */
+            /* 00000 */ "r",
+            /* 00001 */ "a+",
+            /* 00010 */ "r",
+            /* 00011 */ "a+",
+            /* 00100 */ "r+",
+            /* 00101 */ "a+",
+            /* 00110 */ "r+",
+            /* 00111 */ "a+",
+            /* 01000 */ "rb",
+            /* 01001 */ "ab+",
+            /* 01010 */ "rb",
+            /* 01011 */ "ab+",
+            /* 01100 */ "rb+",
+            /* 01101 */ "ab+",
+            /* 01110 */ "rb+",
+            /* 01111 */ "ab+",
+            /* 10000 */ "w+",
+            /* 10001 */ "w+",
+            /* 10010 */ "w+",
+            /* 10011 */ "w+",
+            /* 10100 */ "w+",
+            /* 10101 */ "w+",
+            /* 10110 */ "w+",
+            /* 10111 */ "w+",
+            /* 11000 */ "wb+",
+            /* 11001 */ "wb+",
+            /* 11010 */ "wb+",
+            /* 11011 */ "wb+",
+            /* 11100 */ "wb+",
+            /* 11101 */ "wb+",
+            /* 11110 */ "wb+",
+            /* 11111 */ "wb+"
+        };
+
+        return mapping[static_cast<unsigned>(openmode)];
+    }
+
     struct Exception : public std::runtime_error
     {
         using BaseType = std::runtime_error;
@@ -36,6 +149,8 @@ namespace ext
         [[noreturn]] void throwReadException(const std::filesystem::path& path, std::size_t offset, std::size_t requested, std::size_t read);
 
         [[noreturn]] void throwOpenException(const std::filesystem::path& path, const std::string& openmode);
+
+        [[noreturn]] void throwOpenException(const std::filesystem::path& path, FileOpenmode openmode);
     }
 
     [[nodiscard]] std::filesystem::path uniquePath();
@@ -82,6 +197,7 @@ namespace ext
         using FileHandle = std::unique_ptr<std::FILE, FileDeleter>;
 
         [[nodiscard]] auto openFile(const std::filesystem::path& path, const std::string& openmode);
+        [[nodiscard]] auto openFile(const std::filesystem::path& path, FileOpenmode openmode);
 
         [[nodiscard]] auto fileTell(NativeFileHandle fh);
 
@@ -95,11 +211,13 @@ namespace ext
 
             virtual const std::filesystem::path& path() const = 0;
 
-            virtual const std::string& openmode() const = 0;
+            virtual FileOpenmode openmode() const = 0;
 
             virtual bool isOpen() const = 0;
 
             virtual std::size_t size() const = 0;
+
+            virtual std::size_t capacity() const = 0;
 
             virtual std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const = 0;
 
@@ -109,7 +227,9 @@ namespace ext
 
             virtual bool isPooled() const = 0;
 
-            virtual void truncate() = 0;
+            virtual void truncate(std::size_t bytes) = 0;
+
+            virtual void reserve(std::size_t bytes) = 0;
         };
 
         // NOTE: Files are pooled - they are closed and reopened when needed -
@@ -180,7 +300,7 @@ namespace ext
 
         public:
 
-            PooledFile(std::filesystem::path path, std::string openmode);
+            PooledFile(std::filesystem::path path, FileOpenmode openmode);
 
             PooledFile(const PooledFile&) = delete;
             PooledFile(PooledFile&&) = delete;
@@ -193,11 +313,13 @@ namespace ext
 
             [[nodiscard]] const std::filesystem::path& path() const override;
 
-            [[nodiscard]] const std::string& openmode() const override;
+            [[nodiscard]] FileOpenmode openmode() const override;
 
             [[nodiscard]] bool isOpen() const override;
 
             [[nodiscard]] std::size_t size() const override;
+
+            [[nodiscard]] std::size_t capacity() const override;
 
             [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override;
 
@@ -207,17 +329,24 @@ namespace ext
 
             [[nodiscard]] bool isPooled() const override;
 
-            void truncate() override;
+            void truncate(std::size_t bytes) override;
+
+            // reserved space is not preserved when file is closed due to lack of file handles in the pool
+            void reserve(std::size_t bytes) override;
 
         private:
             std::filesystem::path m_path;
-            std::string m_openmode;
+            FileOpenmode m_openmode;
+            std::size_t m_capacity;
+            std::size_t m_size;
 
             // used by the pool
             mutable FilePoolEntryIter m_poolEntry;
             // times opened is NOT concurrent opens but sequential opens
             mutable std::size_t m_timesOpened;
             mutable std::mutex m_mutex;
+
+            [[nodiscard]] std::size_t actualSize() const;
         };
 
 
@@ -228,7 +357,7 @@ namespace ext
         public:
             static const std::size_t maxUnpooledOpenFiles;
 
-            File(std::filesystem::path path, std::string openmode);
+            File(std::filesystem::path path, FileOpenmode openmode);
 
             File(const File&) = delete;
             File(File&&) = delete;
@@ -241,7 +370,7 @@ namespace ext
 
             [[nodiscard]] const std::filesystem::path& path() const override;
 
-            [[nodiscard]] const std::string& openmode() const override;
+            [[nodiscard]] FileOpenmode openmode() const override;
 
             void close();
 
@@ -251,6 +380,8 @@ namespace ext
 
             [[nodiscard]] std::size_t size() const override;
 
+            [[nodiscard]] std::size_t capacity() const override;
+
             [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const override;
 
             [[nodiscard]] std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) override;
@@ -259,16 +390,24 @@ namespace ext
 
             [[nodiscard]] bool isPooled() const override;
 
-            void truncate() override;
+            void truncate(std::size_t bytes) override;
+
+            void reserve(std::size_t bytes) override;
 
         private:
             std::filesystem::path m_path;
-            std::string m_openmode;
+            FileOpenmode m_openmode;
             FileHandle m_handle;
+            std::size_t m_capacity;
+            std::size_t m_size;
 
             mutable std::mutex m_mutex;
 
             static inline std::atomic<std::size_t> m_numOpenFiles = 0;
+
+            void reopen();
+
+            [[nodiscard]] std::size_t actualSize() const;
         };
 
         struct ThreadPool
@@ -355,7 +494,7 @@ namespace ext
 
         [[nodiscard]] const std::filesystem::path& path() const;
 
-        [[nodiscard]] std::string openmode() const;
+        [[nodiscard]] FileOpenmode openmode() const;
 
         [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
@@ -363,7 +502,7 @@ namespace ext
 
         [[nodiscard]] std::size_t size() const;
     private:
-        static inline const std::string m_openmode = "rb";
+        static inline const FileOpenmode m_openmode = FileOpenmode::Read | FileOpenmode::Binary;
 
         std::shared_ptr<detail::FileBase> m_file;
         detail::ThreadPool* m_threadPool;
@@ -393,11 +532,14 @@ namespace ext
 
         [[nodiscard]] const std::filesystem::path& path() const;
 
-        [[nodiscard]] std::string openmode() const;
+        [[nodiscard]] FileOpenmode openmode() const;
 
         [[nodiscard]] virtual std::size_t append(const std::byte* source, std::size_t elementSize, std::size_t count) const;
 
         [[nodiscard]] virtual std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const;
+
+        virtual void reserve(std::size_t bytes);
+        virtual void truncate(std::size_t bytes);
 
         // reopens the file in readonly mode
         [[nodiscard]] ImmutableBinaryFile seal();
@@ -405,8 +547,8 @@ namespace ext
         void flush();
 
     private:
-        static inline const std::string m_openmodeTruncate = "wb";
-        static inline const std::string m_openmodeAppend = "ab";
+        static inline const FileOpenmode m_openmodeTruncate = FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Truncate;
+        static inline const FileOpenmode m_openmodeAppend = FileOpenmode::Write | FileOpenmode::Binary;
 
         std::shared_ptr<detail::FileBase> m_file;
         detail::ThreadPool* m_threadPool;
@@ -450,7 +592,7 @@ namespace ext
 
         [[nodiscard]] const std::filesystem::path& path() const;
 
-        [[nodiscard]] std::string openmode() const;
+        [[nodiscard]] FileOpenmode openmode() const;
 
         [[nodiscard]] std::size_t read(std::byte* destination, std::size_t offset, std::size_t elementSize, std::size_t count) const;
 
@@ -462,7 +604,8 @@ namespace ext
 
         [[nodiscard]] std::future<std::size_t> append(Async, const std::byte* destination, std::size_t elementSize, std::size_t count) const;
 
-        void truncate();
+        void reserve(std::size_t bytes);
+        void truncate(std::size_t bytes);
 
         // reopens the file in readonly mode
         [[nodiscard]] ImmutableBinaryFile seal();
@@ -470,8 +613,8 @@ namespace ext
         void flush();
 
     private:
-        static inline const std::string m_openmodeTruncate = "wb+";
-        static inline const std::string m_openmodeAppend = "ab+";
+        static inline const FileOpenmode m_openmodeTruncate = FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Read | FileOpenmode::Truncate;
+        static inline const FileOpenmode m_openmodeAppend = FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Read;
 
         std::shared_ptr<detail::FileBase> m_file;
         detail::ThreadPool* m_threadPool;
@@ -1214,7 +1357,7 @@ namespace ext
         void clear()
         {
             flush();
-            m_file.truncate();
+            m_file.truncate(0);
             m_size = 0;
         }
 
@@ -1668,6 +1811,19 @@ namespace ext
         }
     };
 
+    template <typename ContT>
+    [[nodiscard]] std::size_t bytesInSpans(const ContT& spans)
+    {
+        std::size_t total = 0;
+
+        for (auto& span : spans)
+        {
+            total += span.size_bytes();
+        }
+
+        return total;
+    }
+
     using MergePassFinishedCallback = std::function<void(int)>;
 
     struct MergeCallbacks
@@ -1964,13 +2120,16 @@ namespace ext
                     std::size_t offset = 0;
                     for (; offset + maxBatchSize < numInputs; offset += maxBatchSize)
                     {
+                        auto spans = ContainerIterRange<std::vector<ImmutableSpan<T>>>{
+                            std::next(std::begin(in), offset),
+                            std::next(std::begin(in), offset + maxBatchSize)
+                        };
                         BinaryOutputFile partOut(temporaryFilesWrite.next());
+                        partOut.reserve(bytesInSpans(spans));
+
                         merge_no_recurse<T>(
                             partOut,
-                            {
-                                std::next(std::begin(in), offset),
-                                std::next(std::begin(in), offset + maxBatchSize)
-                            },
+                            spans,
                             cmp,
                             progress
                             );
@@ -1983,7 +2142,13 @@ namespace ext
                     {
                         // Sometimes this will be just one files but we want to copy it anyway.
                         // Maybe it's worth special-casing this.
+                        auto spans = ContainerIterRange<std::vector<ImmutableSpan<T>>>{
+                            std::next(std::begin(in), offset),
+                            std::end(in)
+                        };
                         BinaryOutputFile partOut(temporaryFilesWrite.next());
+                        partOut.reserve(bytesInSpans(spans));
+
                         merge_no_recurse<T>(
                             partOut,
                             {
@@ -2047,7 +2212,10 @@ namespace ext
 
             const std::size_t outputBufferElements = outputBufferSize.elements<T>() / 2 + 1;
 
+            const std::size_t sizeAfterMerge = bytesInSpans(in);
+
             BinaryOutputFile outFile(outPath);
+            outFile.reserve(sizeAfterMerge);
             BackInserter<T> out(outFile, util::DoubleBuffer<T>(outputBufferElements));
             auto outFunc = [&out](const T& value) {
                 out.emplace(value);

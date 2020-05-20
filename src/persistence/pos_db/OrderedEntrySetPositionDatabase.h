@@ -894,13 +894,17 @@ namespace persistence
                             ib.append(reinterpret_cast<const EntryT*>(data), count);
                         };
 
-                        ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
                         std::vector<ext::ImmutableSpan<EntryT>> spans;
                         spans.reserve(files.size());
                         for (auto&& file : files)
                         {
                             spans.emplace_back(file->entries());
                         }
+
+                        const std::size_t totalFileSize = ext::bytesInSpans(spans);
+
+                        ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
+                        outFile.reserve(totalFileSize);
 
                         {
                             const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_mergeWriterBufferSize.bytes(), 2);
@@ -933,11 +937,6 @@ namespace persistence
                             if (requiresCopyFirst)
                             {
                                 // We have to include the copying progress.
-                                std::size_t totalFileSize = 0;
-                                for (auto&& file : files)
-                                {
-                                    totalFileSize += file->entries().size_bytes();
-                                }
                                 ext::Progress internalProgress{ 0, totalFileSize };
 
                                 const std::filesystem::path copyDestinationDir = plan.passes[0].readDir;
