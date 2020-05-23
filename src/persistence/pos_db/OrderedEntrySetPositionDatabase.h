@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Database.h"
+#include "IndexedGameHeaderStorage.h"
 #include "Query.h"
 
 #include "algorithm/Unsort.h"

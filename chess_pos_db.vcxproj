@@ -78,7 +78,9 @@
     <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h" />
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h" />
+    <ClInclude Include="src\persistence\pos_db\IndexedGameHeaderStorage.h" />
     <ClInclude Include="src\persistence\pos_db\OrderedEntrySetPositionDatabase.h" />
+    <ClInclude Include="src\persistence\pos_db\PackedGameHeader.h" />
     <ClInclude Include="src\persistence\pos_db\Query.h" />
     <ClInclude Include="src\persistence\pos_db\GameHeader.h" />
     <ClInclude Include="src\util\ArithmeticUtility.h" />
@@ -114,6 +116,8 @@
     <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp" />
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp" />
+    <ClCompile Include="src\persistence\pos_db\IndexedGameHeaderStorage.cpp" />
+    <ClCompile Include="src\persistence\pos_db\PackedGameHeader.cpp" />
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
     <ClCompile Include="src\persistence\pos_db\GameHeader.cpp" />
     <ClCompile Include="src\util\MemoryAmount.cpp" />

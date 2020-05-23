@@ -20,6 +20,7 @@
 #include "persistence/pos_db/delta/DatabaseFormatDelta.h"
 #include "persistence/pos_db/epsilon/DatabaseFormatEpsilon.h"
 
+#include "persistence/pos_db/PackedGameHeader.h"
 #include "persistence/pos_db/Query.h"
 
 #include "Configuration.h"

@@ -249,6 +249,12 @@
     <ClInclude Include="src\util\LazyCached.h">
       <Filter>Header Files\src\util</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\PackedGameHeader.h">
+      <Filter>Header Files\src\persistence\pos_db</Filter>
+    </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\IndexedGameHeaderStorage.h">
+      <Filter>Header Files\src\persistence\pos_db</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">
@@ -342,6 +348,12 @@
       <Filter>Source Files\src\persistence\pos_db\epsilon</Filter>
     </ClCompile>
     <ClCompile Include="src\persistence\pos_db\GameHeader.cpp">
+      <Filter>Source Files\src\persistence\pos_db</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\PackedGameHeader.cpp">
+      <Filter>Source Files\src\persistence\pos_db</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\IndexedGameHeaderStorage.cpp">
       <Filter>Source Files\src\persistence\pos_db</Filter>
     </ClCompile>
   </ItemGroup>
