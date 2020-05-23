@@ -19,7 +19,8 @@
 
 namespace persistence
 {
-    PackedGameHeader::PackedGameHeader(ext::Vector<char>& headers, std::size_t offset) :
+    template <typename GameIndexT>
+    PackedGameHeader<GameIndexT>::PackedGameHeader(ext::Vector<char>& headers, std::size_t offset) :
         m_gameIdx{},
         m_size{},
         m_result{},
@@ -35,7 +36,8 @@ namespace persistence
         (void)read;
     }
 
-    PackedGameHeader::PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx, std::uint16_t plyCount) :
+    template <typename GameIndexT>
+    PackedGameHeader<GameIndexT>::PackedGameHeader(const pgn::UnparsedGame& game, GameIndexT gameIdx, std::uint16_t plyCount) :
         m_gameIdx(gameIdx),
         m_plyCount(plyCount)
     {
@@ -48,7 +50,8 @@ namespace persistence
         fillPackedStrings(event, white, black);
     }
 
-    PackedGameHeader::PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx) :
+    template <typename GameIndexT>
+    PackedGameHeader<GameIndexT>::PackedGameHeader(const pgn::UnparsedGame& game, GameIndexT gameIdx) :
         m_gameIdx(gameIdx)
     {
         std::string_view event;
@@ -60,7 +63,8 @@ namespace persistence
         fillPackedStrings(event, white, black);
     }
 
-    PackedGameHeader::PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx, std::uint16_t plyCount) :
+    template <typename GameIndexT>
+    PackedGameHeader<GameIndexT>::PackedGameHeader(const bcgn::UnparsedBcgnGame& game, GameIndexT gameIdx, std::uint16_t plyCount) :
         m_gameIdx(gameIdx),
         m_plyCount(plyCount)
     {
@@ -74,7 +78,8 @@ namespace persistence
         fillPackedStrings(event, white, black);
     }
 
-    PackedGameHeader::PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx) :
+    template <typename GameIndexT>
+    PackedGameHeader<GameIndexT>::PackedGameHeader(const bcgn::UnparsedBcgnGame& game, GameIndexT gameIdx) :
         m_gameIdx(gameIdx)
     {
         auto header = game.gameHeader();
@@ -87,55 +92,65 @@ namespace persistence
         fillPackedStrings(event, white, black);
     }
 
-    [[nodiscard]] const char* PackedGameHeader::data() const
+    template <typename GameIndexT>
+    [[nodiscard]] const char* PackedGameHeader<GameIndexT>::data() const
     {
         return reinterpret_cast<const char*>(this);
     }
 
-    [[nodiscard]] std::size_t PackedGameHeader::size() const
+    template <typename GameIndexT>
+    [[nodiscard]] std::size_t PackedGameHeader<GameIndexT>::size() const
     {
         return m_size;
     }
 
-    [[nodiscard]] std::uint32_t PackedGameHeader::gameIdx() const
+    template <typename GameIndexT>
+    [[nodiscard]] GameIndexT PackedGameHeader<GameIndexT>::gameIdx() const
     {
         return m_gameIdx;
     }
 
-    [[nodiscard]] GameResult PackedGameHeader::result() const
+    template <typename GameIndexT>
+    [[nodiscard]] GameResult PackedGameHeader<GameIndexT>::result() const
     {
         return m_result;
     }
 
-    [[nodiscard]] Date PackedGameHeader::date() const
+    template <typename GameIndexT>
+    [[nodiscard]] Date PackedGameHeader<GameIndexT>::date() const
     {
         return m_date;
     }
 
-    [[nodiscard]] Eco PackedGameHeader::eco() const
+    template <typename GameIndexT>
+    [[nodiscard]] Eco PackedGameHeader<GameIndexT>::eco() const
     {
         return m_eco;
     }
 
-    [[nodiscard]] std::uint16_t PackedGameHeader::plyCount() const
+    template <typename GameIndexT>
+    [[nodiscard]] std::uint16_t PackedGameHeader<GameIndexT>::plyCount() const
     {
         return m_plyCount;
     }
 
-    [[nodiscard]] std::string_view PackedGameHeader::event() const
+    template <typename GameIndexT>
+    [[nodiscard]] std::string_view PackedGameHeader<GameIndexT>::event() const
     {
         const std::uint8_t length = m_packedStrings[0];
         return std::string_view(reinterpret_cast<const char*>(&m_packedStrings[1]), length);
     }
 
-    [[nodiscard]] std::string_view PackedGameHeader::white() const
+    template <typename GameIndexT>
+    [[nodiscard]] std::string_view PackedGameHeader<GameIndexT>::white() const
     {
         const std::uint8_t length0 = m_packedStrings[0];
         const std::uint8_t length = m_packedStrings[length0 + 1];
         return std::string_view(reinterpret_cast<const char*>(&m_packedStrings[length0 + 2]), length);
     }
 
-    [[nodiscard]] std::string_view PackedGameHeader::black() const
+    template <typename GameIndexT>
+    [[nodiscard]] std::string_view PackedGameHeader<GameIndexT>::black() const
     {
         const std::uint8_t length0 = m_packedStrings[0];
         const std::uint8_t length1 = m_packedStrings[length0 + 1];
@@ -143,7 +158,8 @@ namespace persistence
         return std::string_view(reinterpret_cast<const char*>(&m_packedStrings[length0 + length1 + 3]), length);
     }
 
-    void PackedGameHeader::fillPackedStrings(std::string_view event, std::string_view white, std::string_view black)
+    template <typename GameIndexT>
+    void PackedGameHeader<GameIndexT>::fillPackedStrings(std::string_view event, std::string_view white, std::string_view black)
     {
         using namespace std::literals;
 
@@ -167,8 +183,11 @@ namespace persistence
         m_size = sizeof(PackedGameHeader) - sizeof(m_packedStrings) + i;
     }
 
+    template struct PackedGameHeader<std::uint32_t>;
+    template struct PackedGameHeader<std::uint64_t>;
+
     GameHeader::GameHeader(
-        std::uint32_t gameIdx,
+        std::uint64_t gameIdx,
         GameResult result,
         Date date,
         Eco eco,
@@ -188,41 +207,7 @@ namespace persistence
     {
     }
 
-    GameHeader::GameHeader(const PackedGameHeader& header) :
-        m_gameIdx(header.gameIdx()),
-        m_result(header.result()),
-        m_date(header.date()),
-        m_eco(header.eco()),
-        m_plyCount(std::nullopt),
-        m_event(header.event()),
-        m_white(header.white()),
-        m_black(header.black())
-    {
-        if (header.plyCount() != PackedGameHeader::unknownPlyCount)
-        {
-            m_plyCount = header.plyCount();
-        }
-    }
-
-    GameHeader& GameHeader::operator=(const PackedGameHeader& header)
-    {
-        m_gameIdx = header.gameIdx();
-        m_result = header.result();
-        m_date = header.date();
-        m_eco = header.eco();
-        m_plyCount = header.plyCount();
-        if (m_plyCount == PackedGameHeader::unknownPlyCount)
-        {
-            m_plyCount.reset();
-        }
-        m_event = header.event();
-        m_white = header.white();
-        m_black = header.black();
-
-        return *this;
-    }
-
-    [[nodiscard]] std::uint32_t GameHeader::gameIdx() const
+    [[nodiscard]] std::uint64_t GameHeader::gameIdx() const
     {
         return m_gameIdx;
     }
@@ -317,7 +302,8 @@ namespace persistence
         j["black"].get_to(data.m_black);
     }
 
-    IndexedGameHeaderStorage::IndexedGameHeaderStorage(std::filesystem::path path, MemoryAmount memory, std::string name) :
+    template <typename PackedGameHeaderT>
+    IndexedGameHeaderStorage<PackedGameHeaderT>::IndexedGameHeaderStorage(std::filesystem::path path, MemoryAmount memory, std::string name) :
         // here we use operator, to create directories before we try to
         // create files there
         m_name(std::move(name)),
@@ -329,49 +315,58 @@ namespace persistence
     {
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const pgn::UnparsedGame& game)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const pgn::UnparsedGame& game)
     {
         return addHeader(game);
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
         return addHeader(game, plyCount);
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const bcgn::UnparsedBcgnGame& game)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const bcgn::UnparsedBcgnGame& game)
     {
         return addHeader(game);
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
     {
         return addHeader(game, plyCount);
     }
 
-    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::nextGameId() const
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] std::uint64_t IndexedGameHeaderStorage<PackedGameHeaderT>::nextGameId() const
     {
-        return static_cast<std::uint32_t>(m_index.size());
+        return static_cast<std::uint64_t>(m_index.size());
     }
 
-    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::nextGameOffset() const
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] std::uint64_t IndexedGameHeaderStorage<PackedGameHeaderT>::nextGameOffset() const
     {
-        return static_cast<std::uint32_t>(m_header.size());
+        return static_cast<std::uint64_t>(m_header.size());
     }
 
-    void IndexedGameHeaderStorage::flush()
+    template <typename PackedGameHeaderT>
+    void IndexedGameHeaderStorage<PackedGameHeaderT>::flush()
     {
         m_header.flush();
         m_index.flush();
     }
 
-    void IndexedGameHeaderStorage::clear()
+    template <typename PackedGameHeaderT>
+    void IndexedGameHeaderStorage<PackedGameHeaderT>::clear()
     {
         m_header.clear();
         m_index.clear();
     }
 
-    void IndexedGameHeaderStorage::replicateTo(const std::filesystem::path& path) const
+    template <typename PackedGameHeaderT>
+    void IndexedGameHeaderStorage<PackedGameHeaderT>::replicateTo(const std::filesystem::path& path) const
     {
         std::filesystem::path newHeaderPath = path / headerPath;
         newHeaderPath += m_name;
@@ -381,13 +376,14 @@ namespace persistence
         std::filesystem::copy_file(m_indexPath, newIndexPath, std::filesystem::copy_options::overwrite_existing);
     }
 
-    [[nodiscard]] std::vector<PackedGameHeader> IndexedGameHeaderStorage::queryByOffsets(std::vector<std::uint64_t> offsets)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] std::vector<PackedGameHeaderT> IndexedGameHeaderStorage<PackedGameHeaderT>::queryByOffsets(std::vector<std::uint64_t> offsets)
     {
         const std::size_t numKeys = offsets.size();
 
         auto unsort = reversibleSort(offsets);
 
-        std::vector<PackedGameHeader> headers;
+        std::vector<PackedGameHeaderT> headers;
         headers.reserve(numKeys);
         for (std::size_t i = 0; i < numKeys; ++i)
         {
@@ -399,7 +395,8 @@ namespace persistence
         return headers;
     }
 
-    [[nodiscard]] std::vector<PackedGameHeader> IndexedGameHeaderStorage::queryByIndices(std::vector<std::uint32_t> keys)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] std::vector<PackedGameHeaderT> IndexedGameHeaderStorage<PackedGameHeaderT>::queryByIndices(std::vector<std::uint64_t> keys)
     {
         const std::size_t numKeys = keys.size();
 
@@ -417,42 +414,52 @@ namespace persistence
         return queryByOffsets(offsets);
     }
 
-    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::numGames() const
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] std::uint64_t IndexedGameHeaderStorage<PackedGameHeaderT>::numGames() const
     {
         return static_cast<std::uint32_t>(m_index.size());
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const pgn::UnparsedGame& game)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const pgn::UnparsedGame& game)
     {
-        return addHeader(PackedGameHeader(game, nextId()));
+        return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId())));
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
-        return addHeader(PackedGameHeader(game, nextId(), plyCount));
+        return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId()), plyCount));
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const bcgn::UnparsedBcgnGame& game)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const bcgn::UnparsedBcgnGame& game)
     {
-        return addHeader(PackedGameHeader(game, nextId()));
+        return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId())));
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
     {
-        return addHeader(PackedGameHeader(game, nextId(), plyCount));
+        return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId()), plyCount));
     }
 
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage::addHeader(const PackedGameHeader& entry)
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const PackedGameHeaderT& entry)
     {
-        const std::uint32_t gameIdx = entry.gameIdx();
+        const std::uint64_t gameIdx = entry.gameIdx();
         const std::uint64_t headerSizeBytes = m_header.size();
         m_header.append(entry.data(), entry.size());
         m_index.emplace_back(headerSizeBytes);
         return { headerSizeBytes, gameIdx };
     }
 
-    [[nodiscard]] std::uint32_t IndexedGameHeaderStorage::nextId() const
+    template <typename PackedGameHeaderT>
+    [[nodiscard]] std::uint64_t IndexedGameHeaderStorage<PackedGameHeaderT>::nextId() const
     {
         return numGames();
     }
+
+    template struct IndexedGameHeaderStorage<PackedGameHeader32>;
+    template struct IndexedGameHeaderStorage<PackedGameHeader64>;
 }

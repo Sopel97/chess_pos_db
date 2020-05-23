@@ -298,7 +298,7 @@ namespace console_app
             std::size_t c = 0;
             for (auto&& game : reader)
             {
-                persistence::PackedGameHeader h(game, 0, 123);
+                persistence::PackedGameHeader32 h(game, 0, 123);
 
                 for (auto&& position : game.positions())
                 {

@@ -26,6 +26,8 @@ namespace persistence
 
             // Hash:96, 
 
+            using GameIndexType = std::uint32_t;
+
             static constexpr std::size_t additionalHashBits = 24;
 
             static constexpr std::size_t levelBits = 2;

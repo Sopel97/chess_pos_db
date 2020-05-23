@@ -61,7 +61,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(std::uint32_t{ std::declval<const C>().firstGameIndex() }, Yes{});
+                    -> decltype(std::declval<const C>().firstGameIndex(), Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -77,7 +77,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(std::uint32_t{ std::declval<const C>().lastGameIndex() }, Yes{});
+                    -> decltype(std::declval<const C>().lastGameIndex(), Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -161,6 +161,17 @@ namespace persistence
             static constexpr const char* name = TraitsT::name;
 
             static_assert(!(usesGameIndex && usesGameOffset), "Only one type of game reference can be used.");
+
+            using GameIndexType =
+                std::conditional_t<
+                    hasGameHeaders,
+                    typename EntryT::GameIndexType,
+                    std::uint32_t
+                >;
+
+            using PackedGameHeaderType = PackedGameHeader<GameIndexType>;
+
+            using IndexedGameHeaderStorageType = IndexedGameHeaderStorage<PackedGameHeaderType>;
 
             using CompareEqualWithReverseMove = typename EntryT::CompareEqualWithReverseMove;
             using CompareEqualWithoutReverseMove = typename EntryT::CompareEqualWithoutReverseMove;
@@ -1535,20 +1546,20 @@ namespace persistence
             std::filesystem::path m_path;
 
             // TODO: don't include them when !hasGameHeaders
-            EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> m_headers;
+            EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorageType>> m_headers;
 
             // We only have one partition for this format
             Partition m_partition;
 
             std::mutex m_mutex;
-            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorage>> makeHeaders(const std::filesystem::path& path, MemoryAmount headerBufferMemory)
+            [[nodiscard]] EnumArray<GameLevel, std::unique_ptr<IndexedGameHeaderStorageType>> makeHeaders(const std::filesystem::path& path, MemoryAmount headerBufferMemory)
             {
                 if constexpr (hasGameHeaders)
                 {
                     return {
-                        std::make_unique<IndexedGameHeaderStorage>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
-                        std::make_unique<IndexedGameHeaderStorage>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
-                        std::make_unique<IndexedGameHeaderStorage>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
+                        std::make_unique<IndexedGameHeaderStorageType>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[0]]),
+                        std::make_unique<IndexedGameHeaderStorageType>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[1]]),
+                        std::make_unique<IndexedGameHeaderStorageType>(path, headerBufferMemory, m_headerNames[values<GameLevel>()[2]])
                     };
                 }
                 else
@@ -1562,7 +1573,7 @@ namespace persistence
                 m_partition.collectFutureFiles();
             }
 
-            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, GameLevel level)
+            [[nodiscard]] std::vector<PackedGameHeaderType> queryHeadersByOffsets(const std::vector<std::uint64_t>& offsets, GameLevel level)
             {
                 return m_headers[level]->queryByOffsets(offsets);
             }
@@ -1579,7 +1590,7 @@ namespace persistence
                     indices[destinations[i].level].emplace_back(i);
                 }
 
-                EnumArray<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
+                EnumArray<GameLevel, std::vector<PackedGameHeaderType>> packedHeadersByLevel;
                 for (GameLevel level : values<GameLevel>())
                 {
                     packedHeadersByLevel[level] = queryHeadersByOffsets(offsetsByLevel[level], level);
@@ -1599,15 +1610,15 @@ namespace persistence
                 return headers;
             }
 
-            [[nodiscard]] std::vector<PackedGameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, GameLevel level)
+            [[nodiscard]] std::vector<PackedGameHeaderType> queryHeadersByIndices(const std::vector<std::uint64_t>& indices, GameLevel level)
             {
                 return m_headers[level]->queryByIndices(indices);
             }
 
             template <typename DestinationT>
-            [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint32_t>& indices, const std::vector<DestinationT>& destinations)
+            [[nodiscard]] std::vector<GameHeader> queryHeadersByIndices(const std::vector<std::uint64_t>& indices, const std::vector<DestinationT>& destinations)
             {
-                EnumArray<GameLevel, std::vector<std::uint32_t>> indicesByLevel;
+                EnumArray<GameLevel, std::vector<std::uint64_t>> indicesByLevel;
                 EnumArray<GameLevel, std::vector<std::size_t>> localIndices;
 
                 for (std::size_t i = 0; i < indices.size(); ++i)
@@ -1616,7 +1627,7 @@ namespace persistence
                     localIndices[destinations[i].level].emplace_back(i);
                 }
 
-                EnumArray<GameLevel, std::vector<PackedGameHeader>> packedHeadersByLevel;
+                EnumArray<GameLevel, std::vector<PackedGameHeaderType>> packedHeadersByLevel;
                 for (GameLevel level : values<GameLevel>())
                 {
                     packedHeadersByLevel[level] = queryHeadersByIndices(indicesByLevel[level], level);
@@ -1662,8 +1673,8 @@ namespace persistence
             template <typename SegregatedT, typename DestinationT>
             void assignGameHeaders(
                 SegregatedT& segregated,
-                const std::vector<std::uint32_t>& firstGameIndices,
-                const std::vector<std::uint32_t>& lastGameIndices,
+                const std::vector<std::uint64_t>& firstGameIndices,
+                const std::vector<std::uint64_t>& lastGameIndices,
                 const std::vector<std::uint64_t>& firstGameOffsets,
                 const std::vector<std::uint64_t>& lastGameOffsets,
                 const std::vector<DestinationT>& firstGameDestinations,
@@ -1701,8 +1712,8 @@ namespace persistence
 
                 query::PositionQueryResults segregated(posQueries.size());
 
-                std::vector<std::uint32_t> firstGameIndices;
-                std::vector<std::uint32_t> lastGameIndices;
+                std::vector<std::uint64_t> firstGameIndices;
+                std::vector<std::uint64_t> lastGameIndices;
                 std::vector<std::uint64_t> firstGameOffsets;
                 std::vector<std::uint64_t> lastGameOffsets;
                 std::vector<query::GameHeaderDestination> firstGameDestinations;
@@ -1797,8 +1808,8 @@ namespace persistence
 
                 query::RetractionsQueryResults segregated;
 
-                std::vector<std::uint32_t> firstGameIndices;
-                std::vector<std::uint32_t> lastGameIndices;
+                std::vector<std::uint64_t> firstGameIndices;
+                std::vector<std::uint64_t> lastGameIndices;
                 std::vector<std::uint64_t> firstGameOffsets;
                 std::vector<std::uint64_t> lastGameOffsets;
                 std::vector<query::GameHeaderDestinationForRetraction> firstGameDestinations;
@@ -1973,7 +1984,7 @@ namespace persistence
                             }();
 
                             const auto gameIndexOrOffset = [this, level]() {
-                                if constexpr (usesGameIndex) return m_headers[level]->nextGameId();
+                                if constexpr (usesGameIndex) return static_cast<GameIndexType>(m_headers[level]->nextGameId());
                                 else if constexpr (usesGameOffset) return m_headers[level]->nextGameOffset();
                                 else return 0;
                             }();
@@ -2037,7 +2048,7 @@ namespace persistence
                             }();
 
                             const auto gameIndexOrOffset = [this, level]() {
-                                if constexpr (usesGameIndex) return m_headers[level]->nextGameId();
+                                if constexpr (usesGameIndex) return static_cast<GameIndexType>(m_headers[level]->nextGameId());
                                 else if constexpr (usesGameOffset) return m_headers[level]->nextGameOffset();
                                 else return 0;
                             }();

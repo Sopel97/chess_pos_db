@@ -414,13 +414,43 @@ namespace query
         GameHeaderDestinationForRetraction(const ReverseMove& rmove, GameLevel level, GameResult result, HeaderMemberPtr headerPtr);
     };
 
-    void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, std::vector<persistence::GameHeader>&& headers);
+    template <typename GameHeaderT>
+    void assignGameHeaders(
+        PositionQueryResults& raw, 
+        const std::vector<GameHeaderDestination>& destinations, 
+        std::vector<GameHeaderT>&& headers
+    )
+    {
+        ASSERT(destinations.size() == headers.size());
 
-    void assignGameHeaders(PositionQueryResults& raw, const std::vector<GameHeaderDestination>& destinations, const std::vector<persistence::PackedGameHeader>& headers);
+        const std::size_t size = destinations.size();
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            auto&& [queryId, select, level, result, headerPtr] = destinations[i];
 
-    void assignGameHeaders(RetractionsQueryResults& raw, const std::vector<GameHeaderDestinationForRetraction>& destinations, std::vector<persistence::GameHeader>&& headers);
+            auto& entry = raw[queryId][select].at(level, result);
+            (entry.*headerPtr).emplace(std::move(headers[i]));
+        }
+    }
 
-    void assignGameHeaders(RetractionsQueryResults& raw, const std::vector<GameHeaderDestinationForRetraction>& destinations, const std::vector<persistence::PackedGameHeader>& headers);
+    template <typename GameHeaderT>
+    void assignGameHeaders(
+        RetractionsQueryResults& raw, 
+        const std::vector<GameHeaderDestinationForRetraction>& destinations, 
+        std::vector<GameHeaderT>&& headers
+    )
+    {
+        ASSERT(destinations.size() == headers.size());
+
+        const std::size_t size = destinations.size();
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            auto&& [rmove, level, result, headerPtr] = destinations[i];
+
+            auto& entry = raw[rmove].at(level, result);
+            (entry.*headerPtr).emplace(std::move(headers[i]));
+        }
+    }
 
     struct GameFetchSettings
     {

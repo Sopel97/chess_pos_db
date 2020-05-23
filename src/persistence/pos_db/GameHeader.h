@@ -19,27 +19,32 @@
 
 namespace persistence
 {
+    template <typename GameIndexT>
     struct PackedGameHeader
     {
+        static_assert(std::is_unsigned_v<GameIndexT>);
+
+        using GameIndexType = GameIndexT;
+
         static constexpr std::uint16_t unknownPlyCount = std::numeric_limits<std::uint16_t>::max();
 
         PackedGameHeader() = default;
 
         PackedGameHeader(ext::Vector<char>& headers, std::size_t offset);
 
-        PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx, std::uint16_t plyCount);
+        PackedGameHeader(const pgn::UnparsedGame& game, GameIndexType gameIdx, std::uint16_t plyCount);
 
-        PackedGameHeader(const pgn::UnparsedGame& game, std::uint32_t gameIdx);
+        PackedGameHeader(const pgn::UnparsedGame& game, GameIndexType gameIdx);
 
-        PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx, std::uint16_t plyCount);
+        PackedGameHeader(const bcgn::UnparsedBcgnGame& game, GameIndexType gameIdx, std::uint16_t plyCount);
 
-        PackedGameHeader(const bcgn::UnparsedBcgnGame& game, std::uint32_t gameIdx);
+        PackedGameHeader(const bcgn::UnparsedBcgnGame& game, GameIndexType gameIdx);
 
         [[nodiscard]] const char* data() const;
 
         [[nodiscard]] std::size_t size() const;
 
-        [[nodiscard]] std::uint32_t gameIdx() const;
+        [[nodiscard]] GameIndexType gameIdx() const;
 
         [[nodiscard]] GameResult result() const;
 
@@ -61,7 +66,7 @@ namespace persistence
 
         static_assert(maxStringLength < 256); // it's nice to require only one byte for length
 
-        std::uint32_t m_gameIdx;
+        GameIndexType m_gameIdx;
 
         // We just read sizeof(PackedGameHeader), we don't touch anything
         // in packed strings that would be considered 'garbage'
@@ -78,14 +83,25 @@ namespace persistence
 
         void fillPackedStrings(std::string_view event, std::string_view white, std::string_view black);
     };
-    static_assert(sizeof(PackedGameHeader) == 4 + 2 + 2 + 4 + 2 + 2 + 768);
+
+    using PackedGameHeader32 = PackedGameHeader<std::uint32_t>;
+    using PackedGameHeader64 = PackedGameHeader<std::uint64_t>;
+
+    static_assert(sizeof(PackedGameHeader32) == 4 + 2 + 2 + 4 + 2 + 2 + 768);
+    static_assert(sizeof(PackedGameHeader64) == 8 + 2 + 2 + 4 + 2 + 2 + 768 + 4 /* padding */);
+
+    static_assert(std::is_trivially_copyable_v<PackedGameHeader32>);
+    static_assert(std::is_trivially_copyable_v<PackedGameHeader64>);
+
+    extern template struct PackedGameHeader<std::uint32_t>;
+    extern template struct PackedGameHeader<std::uint64_t>;
 
     struct GameHeader
     {
         GameHeader() = default;
 
         GameHeader(
-            std::uint32_t gameIdx,
+            std::uint64_t gameIdx,
             GameResult result,
             Date date,
             Eco eco,
@@ -95,11 +111,49 @@ namespace persistence
             std::string black
         );
 
-        explicit GameHeader(const PackedGameHeader& header);
+        GameHeader(const GameHeader& other) = default;
+        GameHeader(GameHeader&& other) = default;
 
-        GameHeader& operator=(const PackedGameHeader& header);
+        GameHeader& operator=(const GameHeader& other) = default;
+        GameHeader& operator=(GameHeader&& other) = default;
 
-        [[nodiscard]] std::uint32_t gameIdx() const;
+        template <typename PackedGameHeaderT>
+        explicit GameHeader(const PackedGameHeaderT& header) :
+            m_gameIdx(header.gameIdx()),
+            m_result(header.result()),
+            m_date(header.date()),
+            m_eco(header.eco()),
+            m_plyCount(std::nullopt),
+            m_event(header.event()),
+            m_white(header.white()),
+            m_black(header.black())
+        {
+            if (header.plyCount() != PackedGameHeaderT::unknownPlyCount)
+            {
+                m_plyCount = header.plyCount();
+            }
+        }
+
+        template <typename PackedGameHeaderT>
+        GameHeader& operator=(const PackedGameHeaderT& header)
+        {
+            m_gameIdx = header.gameIdx();
+            m_result = header.result();
+            m_date = header.date();
+            m_eco = header.eco();
+            m_plyCount = header.plyCount();
+            if (m_plyCount == PackedGameHeaderT::unknownPlyCount)
+            {
+                m_plyCount.reset();
+            }
+            m_event = header.event();
+            m_white = header.white();
+            m_black = header.black();
+
+            return *this;
+        }
+
+        [[nodiscard]] std::uint64_t gameIdx() const;
 
         [[nodiscard]] GameResult result() const;
 
@@ -120,7 +174,7 @@ namespace persistence
         friend void from_json(const nlohmann::json& j, GameHeader& data);
 
     private:
-        std::uint32_t m_gameIdx;
+        std::uint64_t m_gameIdx;
         GameResult m_result;
         Date m_date;
         Eco m_eco;
@@ -133,11 +187,15 @@ namespace persistence
     struct HeaderEntryLocation
     {
         std::uint64_t offset;
-        std::uint32_t index;
+        std::uint64_t index;
     };
 
+    template <typename PackedGameHeaderT>
     struct IndexedGameHeaderStorage
     {
+        using GameIndexType = typename PackedGameHeaderT::GameIndexType;
+        using PackedGameHeaderType = PackedGameHeaderT;
+
         static inline const std::filesystem::path headerPath = "header";
         static inline const std::filesystem::path indexPath = "index";
 
@@ -157,9 +215,9 @@ namespace persistence
         [[nodiscard]] HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game);
         [[nodiscard]] HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
 
-        [[nodiscard]] std::uint32_t nextGameId() const;
+        [[nodiscard]] std::uint64_t nextGameId() const;
 
-        [[nodiscard]] std::uint32_t nextGameOffset() const;
+        [[nodiscard]] std::uint64_t nextGameOffset() const;
 
         void flush();
 
@@ -167,11 +225,11 @@ namespace persistence
 
         void replicateTo(const std::filesystem::path& path) const;
 
-        [[nodiscard]] std::vector<PackedGameHeader> queryByOffsets(std::vector<std::uint64_t> offsets);
+        [[nodiscard]] std::vector<PackedGameHeaderType> queryByOffsets(std::vector<std::uint64_t> offsets);
 
-        [[nodiscard]] std::vector<PackedGameHeader> queryByIndices(std::vector<std::uint32_t> keys);
+        [[nodiscard]] std::vector<PackedGameHeaderType> queryByIndices(std::vector<std::uint64_t> keys);
 
-        [[nodiscard]] std::uint32_t numGames() const;
+        [[nodiscard]] std::uint64_t numGames() const;
 
     private:
         std::string m_name;
@@ -186,8 +244,11 @@ namespace persistence
         [[nodiscard]] HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game);
         [[nodiscard]] HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
 
-        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeader& entry);
+        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeaderType& entry);
 
-        [[nodiscard]] std::uint32_t nextId() const;
+        [[nodiscard]] std::uint64_t nextId() const;
     };
+
+    extern template struct IndexedGameHeaderStorage<PackedGameHeader32>;
+    extern template struct IndexedGameHeaderStorage<PackedGameHeader64>;
 }
