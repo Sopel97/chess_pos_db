@@ -132,6 +132,45 @@ namespace persistence
 
             public:
                 static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
+            }; 
+            
+            template<typename T>
+            using void_t = void;
+
+            template<typename T, typename = void>
+            struct HasSmearedEntry
+            {
+                static constexpr bool value = false;
+            };
+
+            template<typename T>
+            struct HasSmearedEntry<T, void_t<typename T::SmearedEntryType>>
+            {
+                static constexpr bool value = true;
+            };
+
+            template<typename T, typename = void>
+            struct GetPersistedEntryType
+            {
+                using type = T;
+            };
+
+            template<typename T>
+            struct GetPersistedEntryType<T, void_t<typename T::SmearedEntryType>>
+            {
+                using type = typename T::SmearedEntryType;
+            };
+
+            template<typename T, bool HasHeadersV = false>
+            struct GetGameIndexType
+            {
+                using type = std::uint32_t;
+            };
+
+            template<typename T>
+            struct GetGameIndexType<T, true>
+            {
+                using type = typename T::GameIndexType;
             };
         }
 
@@ -144,12 +183,17 @@ namespace persistence
         {
             static_assert(std::is_trivially_copyable_v<EntryT>);
 
-            static constexpr bool hasEloDiff = detail::HasEloDiff<EntryT>::value;
-            static constexpr bool hasFirstGameIndex = detail::HasFirstGameIndex<EntryT>::value;
-            static constexpr bool hasLastGameIndex = detail::HasLastGameIndex<EntryT>::value;
-            static constexpr bool hasFirstGameOffset = detail::HasFirstGameOffset<EntryT>::value;
-            static constexpr bool hasLastGameOffset = detail::HasLastGameOffset<EntryT>::value;
-            static constexpr bool hasReverseMove = detail::HasReverseMove<EntryT>::value;
+            static constexpr bool hasSmearedEntry = detail::HasSmearedEntry<EntryT>::value;
+
+            using EntryType = EntryT;
+            using PersistedEntryType = typename detail::GetPersistedEntryType<EntryT>::type;
+
+            static constexpr bool hasEloDiff = detail::HasEloDiff<EntryType>::value;
+            static constexpr bool hasFirstGameIndex = detail::HasFirstGameIndex<EntryType>::value;
+            static constexpr bool hasLastGameIndex = detail::HasLastGameIndex<EntryType>::value;
+            static constexpr bool hasFirstGameOffset = detail::HasFirstGameOffset<EntryType>::value;
+            static constexpr bool hasLastGameOffset = detail::HasLastGameOffset<EntryType>::value;
+            static constexpr bool hasReverseMove = detail::HasReverseMove<EntryType>::value;
 
             static constexpr bool usesGameIndex = hasFirstGameIndex || hasLastGameIndex;
             static constexpr bool usesGameOffset = hasFirstGameOffset || hasLastGameOffset;
@@ -163,24 +207,19 @@ namespace persistence
 
             static_assert(!(usesGameIndex && usesGameOffset), "Only one type of game reference can be used.");
 
-            using GameIndexType =
-                std::conditional_t<
-                    hasGameHeaders,
-                    typename EntryT::GameIndexType,
-                    std::uint32_t
-                >;
+            using GameIndexType = typename detail::GetGameIndexType<EntryType>::type;
 
             using PackedGameHeaderType = PackedGameHeader<GameIndexType>;
 
             using IndexedGameHeaderStorageType = IndexedGameHeaderStorage<PackedGameHeaderType>;
 
-            using CompareEqualWithReverseMove = typename EntryT::CompareEqualWithReverseMove;
-            using CompareEqualWithoutReverseMove = typename EntryT::CompareEqualWithoutReverseMove;
-            using CompareEqualFull = typename EntryT::CompareEqualFull;
+            using CompareEqualWithReverseMove = typename PersistedEntryType::CompareEqualWithReverseMove;
+            using CompareEqualWithoutReverseMove = typename PersistedEntryType::CompareEqualWithoutReverseMove;
+            using CompareEqualFull = typename PersistedEntryType::CompareEqualFull;
 
-            using CompareLessWithReverseMove = typename EntryT::CompareLessWithReverseMove;
-            using CompareLessWithoutReverseMove = typename EntryT::CompareLessWithoutReverseMove;
-            using CompareLessFull = typename EntryT::CompareLessFull;
+            using CompareLessWithReverseMove = typename PersistedEntryType::CompareLessWithReverseMove;
+            using CompareLessWithoutReverseMove = typename PersistedEntryType::CompareLessWithoutReverseMove;
+            using CompareLessFull = typename PersistedEntryType::CompareLessFull;
 
             using KeyCompareEqualWithReverseMove = typename KeyT::CompareEqualWithReverseMove;
             using KeyCompareEqualWithoutReverseMove = typename KeyT::CompareEqualWithoutReverseMove;
@@ -190,14 +229,14 @@ namespace persistence
             using KeyCompareLessWithoutReverseMove = typename KeyT::CompareLessWithoutReverseMove;
             using KeyCompareLessFull = typename KeyT::CompareLessFull;
 
-            using PositionStats = EnumArray<query::Select, EnumArray2<GameLevel, GameResult, EntryT>>;
+            using PositionStats = EnumArray<query::Select, EnumArray2<GameLevel, GameResult, EntryType>>;
             using RetractionsStats = std::map<
                 ReverseMove,
-                EnumArray2<GameLevel, GameResult, EntryT>,
+                EnumArray2<GameLevel, GameResult, EntryType>,
                 ReverseMoveCompareLess
             >;
 
-            using Index = ext::RangeIndex<KeyT, typename EntryT::CompareLessWithoutReverseMove>;
+            using Index = ext::RangeIndex<KeyT, typename PersistedEntryType::CompareLessWithoutReverseMove>;
 
             [[nodiscard]] static std::filesystem::path dataFilePathToIndexPath(const std::filesystem::path& dataFilePath)
             {
@@ -275,7 +314,7 @@ namespace persistence
                 {
                 }
 
-                File(ext::ImmutableSpan<EntryT>&& entries) :
+                File(ext::ImmutableSpan<PersistedEntryType>&& entries) :
                     m_entries(std::move(entries)),
                     m_index{makeIndexGetter()},
                     m_id(dataFilePathToId(m_entries.path()))
@@ -289,7 +328,7 @@ namespace persistence
                 {
                 }
 
-                File(ext::ImmutableSpan<EntryT>&& entries, Index&& index) :
+                File(ext::ImmutableSpan<PersistedEntryType>&& entries, Index&& index) :
                     m_entries(std::move(entries)),
                     m_index(std::move(index)),
                     m_id(dataFilePathToId(m_entries.path()))
@@ -321,12 +360,12 @@ namespace persistence
                     return m_entries.path();
                 }
 
-                [[nodiscard]] EntryT at(std::size_t idx) const
+                [[nodiscard]] PersistedEntryType at(std::size_t idx) const
                 {
                     return m_entries[idx];
                 }
 
-                [[nodiscard]] const ext::ImmutableSpan<EntryT>& entries() const
+                [[nodiscard]] const ext::ImmutableSpan<PersistedEntryType>& entries() const
                 {
                     return m_entries;
                 }
@@ -341,7 +380,7 @@ namespace persistence
                     ASSERT(queries.size() == stats.size());
                     ASSERT(queries.size() == keys.size());
 
-                    std::vector<EntryT> buffer;
+                    std::vector<PersistedEntryType> buffer;
                     for (std::size_t i = 0; i < queries.size(); ++i)
                     {
                         auto& key = keys[i];
@@ -368,13 +407,13 @@ namespace persistence
                     const std::size_t count = b.it - a.it;
                     if (count == 0) return; // the range is empty, the value certainly does not exist
 
-                    std::vector<EntryT> buffer(count);
+                    std::vector<PersistedEntryType> buffer(count);
                     (void)m_entries.read(buffer.data(), a.it, count);
                     accumulateRetractionsStatsFromEntries(buffer, query, pos, key, retractionsStats);
                 }
 
             private:
-                ext::ImmutableSpan<EntryT> m_entries;
+                ext::ImmutableSpan<PersistedEntryType> m_entries;
                 util::LazyCached<Index> m_index;
                 std::uint32_t m_id;
 
@@ -386,7 +425,7 @@ namespace persistence
                 }
 
                 void accumulateStatsFromEntries(
-                    const std::vector<EntryT>& entries,
+                    const std::vector<PersistedEntryType>& entries,
                     const query::Request& query,
                     const KeyT& key,
                     query::PositionQueryOrigin origin,
@@ -420,7 +459,7 @@ namespace persistence
                 }
 
                 void accumulateRetractionsStatsFromEntries(
-                    const std::vector<EntryT>& entries,
+                    const std::vector<PersistedEntryType>& entries,
                     const query::Request& query,
                     const Position& pos,
                     const KeyT& key,
@@ -487,7 +526,7 @@ namespace persistence
             private:
                 struct Job
                 {
-                    Job(std::filesystem::path path, std::vector<EntryT>&& buffer, std::promise<Index>&& promise) :
+                    Job(std::filesystem::path path, std::vector<PersistedEntryType>&& buffer, std::promise<Index>&& promise) :
                         path(std::move(path)),
                         buffer(std::move(buffer)),
                         promise(std::move(promise))
@@ -495,12 +534,12 @@ namespace persistence
                     }
 
                     std::filesystem::path path;
-                    std::vector<EntryT> buffer;
+                    std::vector<PersistedEntryType> buffer;
                     std::promise<Index> promise;
                 };
 
             public:
-                AsyncStorePipeline(std::vector<std::vector<EntryT>>&& buffers, std::size_t numSortingThreads = 1) :
+                AsyncStorePipeline(std::vector<std::vector<PersistedEntryType>>&& buffers, std::size_t numSortingThreads = 1) :
                     m_sortingThreadFinished(false),
                     m_writingThreadFinished(false),
                     m_writingThread([this]() { runWritingThread(); })
@@ -527,7 +566,7 @@ namespace persistence
                     waitForCompletion();
                 }
 
-                [[nodiscard]] std::future<Index> scheduleUnordered(const std::filesystem::path& path, std::vector<EntryT>&& elements)
+                [[nodiscard]] std::future<Index> scheduleUnordered(const std::filesystem::path& path, std::vector<PersistedEntryType>&& elements)
                 {
                     std::unique_lock<std::mutex> lock(m_mutex);
 
@@ -541,7 +580,7 @@ namespace persistence
                     return future;
                 }
 
-                [[nodiscard]] std::vector<EntryT> getEmptyBuffer()
+                [[nodiscard]] std::vector<PersistedEntryType> getEmptyBuffer()
                 {
                     std::unique_lock<std::mutex> lock(m_mutex);
 
@@ -575,7 +614,7 @@ namespace persistence
             private:
                 std::queue<Job> m_sortQueue;
                 std::queue<Job> m_writeQueue;
-                std::queue<std::vector<EntryT>> m_bufferQueue;
+                std::queue<std::vector<PersistedEntryType>> m_bufferQueue;
 
                 std::condition_variable m_sortQueueNotEmpty;
                 std::condition_variable m_writeQueueNotEmpty;
@@ -637,7 +676,7 @@ namespace persistence
 
                         lock.unlock();
 
-                        Index index = ext::makeIndex(job.buffer, m_indexGranularity, CompareLessWithoutReverseMove{}, [](const EntryT& entry) {
+                        Index index = ext::makeIndex(job.buffer, m_indexGranularity, CompareLessWithoutReverseMove{}, [](const PersistedEntryType& entry) {
                             return entry.key();
                             });
                         writeIndexOfDataFile(job.path, index);
@@ -655,14 +694,14 @@ namespace persistence
                     }
                 }
 
-                void sort(std::vector<EntryT>& buffer)
+                void sort(std::vector<PersistedEntryType>& buffer)
                 {
                     auto cmp = CompareLessFull{};
                     std::sort(buffer.begin(), buffer.end(), cmp);
                 }
 
                 // works analogously to std::unique but also combines equal values
-                void combine(std::vector<EntryT>& buffer)
+                void combine(std::vector<PersistedEntryType>& buffer)
                 {
                     if (buffer.empty()) return;
 
@@ -686,7 +725,7 @@ namespace persistence
                     buffer.erase(std::next(write), buffer.end());
                 }
 
-                void prepareData(std::vector<EntryT>& buffer)
+                void prepareData(std::vector<PersistedEntryType>& buffer)
                 {
                     sort(buffer);
                     combine(buffer);
@@ -789,7 +828,7 @@ namespace persistence
 
                 // Uses the passed id.
                 // It is required that the file with this id doesn't exist already.
-                void storeUnordered(AsyncStorePipeline& pipeline, std::vector<EntryT>&& entries)
+                void storeUnordered(AsyncStorePipeline& pipeline, std::vector<PersistedEntryType>&& entries)
                 {
                     ASSERT(!m_path.empty());
 
@@ -855,7 +894,7 @@ namespace persistence
                 }
 
                 [[nodiscard]] ext::MergePlan makeMergePlan(
-                    const std::vector<ext::ImmutableSpan<EntryT>>& files,
+                    const std::vector<ext::ImmutableSpan<PersistedEntryType>>& files,
                     const std::filesystem::path& outFilePath,
                     const std::vector<std::filesystem::path>& temporaryDirs
                 ) const
@@ -897,16 +936,16 @@ namespace persistence
                 {
                     ASSERT(files.size() >= 2);
 
-                    auto extractKey = [](const EntryT& entry) {
+                    auto extractKey = [](const PersistedEntryType& entry) {
                         return entry.key();
                     };
-                    ext::IndexBuilder<EntryT, CompareLessWithoutReverseMove, decltype(extractKey)> ib(m_indexGranularity, {}, extractKey);
+                    ext::IndexBuilder<PersistedEntryType, CompareLessWithoutReverseMove, decltype(extractKey)> ib(m_indexGranularity, {}, extractKey);
                     {
                         auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
-                            ib.append(reinterpret_cast<const EntryT*>(data), count);
+                            ib.append(reinterpret_cast<const PersistedEntryType*>(data), count);
                         };
 
-                        std::vector<ext::ImmutableSpan<EntryT>> spans;
+                        std::vector<ext::ImmutableSpan<PersistedEntryType>> spans;
                         spans.reserve(files.size());
                         for (auto&& file : files)
                         {
@@ -918,13 +957,13 @@ namespace persistence
                         ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
 
                         {
-                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<EntryT>(m_mergeWriterBufferSize.bytes(), 2);
-                            ext::BackInserter<EntryT> out(outFile, util::DoubleBuffer<EntryT>(outBufferSize));
+                            const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<PersistedEntryType>(m_mergeWriterBufferSize.bytes(), 2);
+                            ext::BackInserter<PersistedEntryType> out(outFile, util::DoubleBuffer<PersistedEntryType>(outBufferSize));
 
                             auto cmp = CompareEqualFull{};
                             bool first = true;
-                            EntryT accumulator;
-                            auto append = [&](const EntryT& entry) {
+                            PersistedEntryType accumulator;
+                            auto append = [&](const PersistedEntryType& entry) {
                                 if (first)
                                 {
                                     first = false;
@@ -1080,7 +1119,7 @@ namespace persistence
                         }
                         else
                         {
-                            std::vector<ext::ImmutableSpan<EntryT>> spans;
+                            std::vector<ext::ImmutableSpan<PersistedEntryType>> spans;
                             spans.reserve(filesInGroup.size());
                             for (auto&& file : filesInGroup)
                             {
@@ -1254,7 +1293,7 @@ namespace persistence
                     m_files.emplace_back(std::move(file));
                 }
 
-                void addFutureFile(AsyncStorePipeline& pipeline, std::vector<EntryT>&& entries)
+                void addFutureFile(AsyncStorePipeline& pipeline, std::vector<PersistedEntryType>&& entries)
                 {
                     const std::uint32_t id = nextId();
                     auto path = pathOfDataFileWithId(m_path, id);
@@ -1471,13 +1510,13 @@ namespace persistence
                 const std::size_t numAdditionalBuffers = 1 + numSortingThreads;
 
                 const std::size_t bucketSize =
-                    ext::numObjectsPerBufferUnit<EntryT>(
+                    ext::numObjectsPerBufferUnit<PersistedEntryType>(
                         memory,
                         numBuffers + numAdditionalBuffers
                         );
 
                 AsyncStorePipeline pipeline(
-                    createBuffers<EntryT>(numBuffers + numAdditionalBuffers, bucketSize),
+                    createBuffers<PersistedEntryType>(numBuffers + numAdditionalBuffers, bucketSize),
                     numSortingThreads
                 );
 
@@ -1905,7 +1944,7 @@ namespace persistence
             )
             {
                 // create buffers
-                std::vector<EntryT> bucket = pipeline.getEmptyBuffer();
+                std::vector<PersistedEntryType> bucket = pipeline.getEmptyBuffer();
 
                 auto processPosition = [this, &bucket, &pipeline](
                     const PositionWithZobrist& position,
@@ -2093,7 +2132,7 @@ namespace persistence
 
             void store(
                 AsyncStorePipeline& pipeline,
-                std::vector<EntryT>& entries
+                std::vector<PersistedEntryType>& entries
             )
             {
                 if (entries.empty())
@@ -2108,7 +2147,7 @@ namespace persistence
 
             void store(
                 AsyncStorePipeline& pipeline,
-                std::vector<EntryT>&& entries
+                std::vector<PersistedEntryType>&& entries
             )
             {
                 if (entries.empty())

@@ -354,8 +354,6 @@ namespace persistence
 
         struct Entry
         {
-            using GameIndexType = std::uint32_t;
-
             Entry() = default;
 
             Entry(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result) :
