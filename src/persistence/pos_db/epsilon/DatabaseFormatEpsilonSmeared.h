@@ -1,0 +1,466 @@
+#pragma once
+
+#include "chess/Chess.h"
+#include "chess/Position.h"
+#include "chess/MoveIndex.h"
+
+#include "persistence/pos_db/OrderedEntrySetPositionDatabase.h"
+
+#include "util/ArithmeticUtility.h"
+
+#include <cstdint>
+
+namespace persistence
+{
+    namespace db_epsilon
+    {
+        static constexpr std::uint64_t invalidGameOffset = std::numeric_limits<std::uint64_t>::max();
+
+        namespace detail
+        {
+            inline uint32_t encodePawnNonPromotionUnmove(Square from, Square to, Color sideToUnmove)
+            {
+                unsigned idx;
+                if (sideToUnmove == Color::White)
+                {
+                    // capture left - 7 - 7 = 0
+                    // single straight - 8 - 7 = 1
+                    // capture right - 9 - 7 = 2
+                    // double move - 16 - 7 = 9 // this is fine, we don't have to normalize it to 3
+                    idx = ordinal(to) - ordinal(from) - 7;
+                }
+                else
+                {
+                    idx = ordinal(from) - ordinal(to) - 7;
+                }
+
+                return idx;
+            }
+
+            inline Move decodePawnNonPromotionUnmove(uint32_t index, Square to, Square epSquare, Color sideToUnmove)
+            {
+                int offset = index + 7;
+                if (sideToUnmove == Color::White) offset = -offset;
+                const Square from = fromOrdinal<Square>(ordinal(to) + offset);
+
+                const MoveType type =
+                    to == epSquare
+                    ? MoveType::EnPassant
+                    : MoveType::Normal;
+
+                return Move{ from, to, type, Piece::none() };
+            }
+
+            inline uint32_t packReverseMove(const Position& pos, const ReverseMove& rm)
+            {
+                const Color sideToUnmove = !pos.sideToMove();
+
+                uint32_t toSquareIndex;
+                uint32_t destinationIndex;
+                if (rm.isNull())
+                {
+                    return
+                        (1 << (20 - 4))
+                        | (31 << (20 - 4 - 5));
+                }
+                else if (rm.move.type == MoveType::Castle)
+                {
+                    toSquareIndex = 0; // we can set this to zero because destinationIndex is unique
+
+                    const bool isKingSide = rm.move.to.file() == fileH;
+                    destinationIndex = isKingSide ? 30 : 31;
+                }
+                else if (rm.move.type == MoveType::Promotion)
+                {
+                    toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
+                    destinationIndex = std::abs(ordinal(rm.move.to) - ordinal(rm.move.from)) - 7 + 27;
+                }
+                else
+                {
+                    toSquareIndex = (bb::before(rm.move.to) & pos.piecesBB(sideToUnmove)).count();
+                    const PieceType pt = pos.pieceAt(rm.move.to).type();
+                    if (pt == PieceType::Pawn)
+                    {
+                        destinationIndex = encodePawnNonPromotionUnmove(rm.move.from, rm.move.to, sideToUnmove);
+                    }
+                    else
+                    {
+                        destinationIndex = move_index::destinationIndex(pt, rm.move.to, rm.move.from);
+                    }
+                }
+
+                const uint32_t capturedPieceType = ordinal(rm.capturedPiece.type());
+                const uint32_t oldCastlingRights = ordinal(rm.oldCastlingRights);
+                const uint32_t hadEpSquare = rm.oldEpSquare != Square::none();
+                const uint32_t oldEpSquareFile = ordinal(rm.oldEpSquare.file());
+
+                return
+                    (toSquareIndex << (20 - 4))
+                    | (destinationIndex << (20 - 4 - 5))
+                    | (capturedPieceType << (20 - 4 - 5 - 3))
+                    | (oldCastlingRights << (20 - 4 - 5 - 3 - 4))
+                    | (hadEpSquare << (20 - 4 - 5 - 3 - 4 - 1))
+                    | oldEpSquareFile;
+            }
+
+            inline ReverseMove unpackReverseMove(const Position& pos, std::uint32_t packed)
+            {
+                const Color sideToUnmove = !pos.sideToMove();
+
+                constexpr std::uint32_t toSquareIndexMask = 0b1111;
+                constexpr std::uint32_t destinationIndexMask = 0b11111;
+                constexpr std::uint32_t capturedPieceTypeMask = 0b111;
+                constexpr std::uint32_t oldCastlingRightsMask = 0b1111;
+                constexpr std::uint32_t hadEpSquareMask = 0b1;
+                constexpr std::uint32_t oldEpSquareFileMask = 0b111;
+
+                const uint32_t toSquareIndex = (packed >> (20 - 4)) & toSquareIndexMask;
+                const uint32_t destinationIndex = (packed >> (20 - 4 - 5)) & destinationIndexMask;
+                if (toSquareIndex == 1 && destinationIndex == 31)
+                {
+                    return ReverseMove{};
+                }
+
+                const PieceType capturedPieceType = fromOrdinal<PieceType>((packed >> (20 - 4 - 5 - 3)) & capturedPieceTypeMask);
+                const CastlingRights oldCastlingRights = fromOrdinal<CastlingRights>((packed >> (20 - 4 - 5 - 3 - 4)) & oldCastlingRightsMask);
+                const bool hadEpSquare = (packed >> (20 - 4 - 5 - 3 - 4 - 1)) & hadEpSquareMask;
+                const File oldEpSquareFile = fromOrdinal<File>(packed & oldEpSquareFileMask);
+
+                ReverseMove rm{};
+                if (capturedPieceType != PieceType::None)
+                {
+                    rm.capturedPiece = Piece(capturedPieceType, pos.sideToMove());
+                }
+                else
+                {
+                    rm.capturedPiece = Piece::none();
+                }
+
+                rm.oldCastlingRights = oldCastlingRights;
+
+                if (hadEpSquare)
+                {
+                    const Rank epSquareRank =
+                        pos.sideToMove() == Color::White
+                        ? rank3
+                        : rank6;
+
+                    rm.oldEpSquare = Square(oldEpSquareFile, epSquareRank);
+                }
+                else
+                {
+                    rm.oldEpSquare = Square::none();
+                }
+
+                if (destinationIndex >= 30)
+                {
+                    // castling
+                    const CastleType type =
+                        destinationIndex == 30
+                        ? CastleType::Short
+                        : CastleType::Long;
+
+                    rm.move = Move::castle(type, sideToUnmove);
+                }
+                else
+                {
+                    const Square toSquare = pos.piecesBB(sideToUnmove).nth(toSquareIndex);
+                    if (destinationIndex >= 27)
+                    {
+                        // pawn promotion
+                        rm.move.promotedPiece = pos.pieceAt(toSquare);
+                        rm.move.type = MoveType::Promotion;
+                        rm.move.to = toSquare;
+
+                        uint32_t offset = destinationIndex - 27 + 7;
+                        // The offset applies in the direction the pawn unmoves.
+                        // So we have to negate it for the side that unmoves backwards, so white
+                        if (sideToUnmove == Color::White)
+                        {
+                            offset *= -1;
+                        }
+
+                        rm.move.from = fromOrdinal<Square>(ordinal(toSquare) + offset);
+                    }
+                    else
+                    {
+                        // normal move
+                        const PieceType movedPieceType = pos.pieceAt(toSquare).type();
+                        if (movedPieceType == PieceType::Pawn)
+                        {
+                            rm.move = decodePawnNonPromotionUnmove(destinationIndex, toSquare, rm.oldEpSquare, sideToUnmove);
+                        }
+                        else
+                        {
+                            rm.move.promotedPiece = Piece::none();
+                            rm.move.type = MoveType::Normal;
+                            rm.move.to = toSquare;
+                            rm.move.from = move_index::destinationSquareByIndex(movedPieceType, toSquare, destinationIndex);
+                        }
+                    }
+                }
+
+                return rm;
+            }
+        }
+
+        struct SmearedEntry
+        {
+            /*
+                - 32 bits hash
+
+                - 32 bits hash
+
+                - 24 bits hash
+                - 2 bit result
+                - 2 bit level
+                - 2 bit count
+                - 1 bit first
+                - 1 bit elo diff sign
+
+                - 20 bits reverse move
+                - 12 bits abs elo diff
+            */
+
+            static constexpr std::int64_t maxAbsEloDiff = 800;
+
+            static constexpr std::uint32_t lastHashPartMask = 0xFFFFFF00u;
+            static constexpr std::uint32_t resultMask = 0x0000000C0u;
+            static constexpr std::uint32_t levelMask = 0x000000030u;
+
+            static constexpr std::uint32_t lastHashPartShift = 8;
+            static constexpr std::uint32_t resultShift = 6;
+            static constexpr std::uint32_t levelShift = 4;
+
+            static constexpr std::uint32_t countMask = 0x0000000Cu;
+            static constexpr std::uint32_t isFirstMask = 0x00000002u;
+            static constexpr std::uint32_t eloDiffSignMask = 0x00000001u;
+
+            static constexpr std::uint32_t countShift = 2;
+            static constexpr std::uint32_t isFirstShift = 2;
+
+            static constexpr std::uint32_t reverseMoveMask = 0xFFFFF000u;
+
+            static constexpr std::uint32_t reverseMoveShift = 12;
+
+            static constexpr std::uint32_t absEloDiffMask = 0x00000FFFu;
+
+            SmearedEntry() :
+                m_hash0{},
+                m_hash1{},
+                m_hashLevelResultCountFlags{isFirstMask},
+                m_reverseMoveAndAbsEloDiff{}
+            {
+            }
+
+            SmearedEntry(const PositionWithZobrist& pos, const ReverseMove& reverseMove = ReverseMove{}) :
+                m_hashLevelResultCountFlags(isFirstMask | (1 << countShift))
+            {
+                const auto zobrist = pos.zobrist();
+                m_hash0 = zobrist.high >> 32;
+                m_hash1 = static_cast<std::uint32_t>(zobrist.high);
+                m_hashLevelResultCountFlags |= (zobrist.low & lastHashPartMask);
+
+                auto packedReverseMove = detail::packReverseMove(pos, reverseMove);
+                // m_hash[0] is the most significant quad, m_hash[3] is the least significant
+                // We want entries ordered with reverse move to also be ordered by just hash
+                // so we have to modify the lowest bits.
+                m_reverseMoveAndAbsEloDiff = packedReverseMove << reverseMoveShift;
+            }
+
+            SmearedEntry(
+                const PositionWithZobrist& pos,
+                const ReverseMove& reverseMove,
+                GameLevel level,
+                GameResult result,
+                std::int64_t eloDiff
+            ) :
+                m_hashLevelResultCountFlags(
+                    isFirstMask 
+                    | (1 << countShift)
+                    | (ordinal(level) << levelShift)
+                    | (ordinal(result) << resultShift)
+                )
+            {
+                const std::uint32_t eloDiffSign = eloDiff < 0;
+                const auto zobrist = pos.zobrist();
+                m_hash0 = zobrist.high >> 32;
+                m_hash1 = static_cast<std::uint32_t>(zobrist.high);
+                m_hashLevelResultCountFlags |= 
+                    (zobrist.low & lastHashPartMask)
+                    | eloDiffSign;
+
+                const std::uint32_t absEloDiff = std::min<std::uint32_t>(std::abs(eloDiff), maxAbsEloDiff);
+                auto packedReverseMove = detail::packReverseMove(pos, reverseMove);
+                // m_hash[0] is the most significant quad, m_hash[3] is the least significant
+                // We want entries ordered with reverse move to also be ordered by just hash
+                // so we have to modify the lowest bits.
+                m_reverseMoveAndAbsEloDiff = 
+                    (packedReverseMove << reverseMoveShift)
+                    | absEloDiff;
+            }
+
+            SmearedEntry(const SmearedEntry&) = default;
+            SmearedEntry(SmearedEntry&&) = default;
+            SmearedEntry& operator=(const SmearedEntry&) = default;
+            SmearedEntry& operator=(SmearedEntry&&) = default;
+
+            [[nodiscard]] GameLevel level() const
+            {
+                return fromOrdinal<GameLevel>((m_hashLevelResultCountFlags >> levelShift) & levelMask);
+            }
+
+            [[nodiscard]] GameResult result() const
+            {
+                return fromOrdinal<GameResult>((m_hashLevelResultCountFlags >> resultShift) & resultMask);
+            }
+
+            [[nodiscard]] std::int64_t eloDiff() const
+            {
+                const std::int64_t d = m_reverseMoveAndAbsEloDiff & absEloDiffMask;
+                return
+                    (m_hashLevelResultCountFlags & eloDiffSignMask)
+                    ? -d
+                    : d;
+            }
+
+            [[nodiscard]] std::array<std::uint64_t, 2> hash() const
+            {
+                return std::array<std::uint64_t, 2>{
+                    m_hash0 | (static_cast<std::uint64_t>(m_hash1) << 32), 
+                        static_cast<std::uint64_t>(additionalHash())
+                };
+            }
+
+            [[nodiscard]] SmearedEntry key() const
+            {
+                return *this;
+            }
+
+            [[nodiscard]] std::uint32_t count() const
+            {
+                return (m_hashLevelResultCountFlags & countMask) >> countShift;
+            }
+
+            [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
+            {
+                const std::uint32_t packedInt = (m_reverseMoveAndAbsEloDiff & reverseMoveMask) >> reverseMoveShift;
+                return detail::unpackReverseMove(pos, packedInt);
+            }
+
+            struct CompareLessWithReverseMove
+            {
+                [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
+                {
+                    if (lhs.m_hash0 < rhs.m_hash0) return true;
+                    else if (lhs.m_hash0 > rhs.m_hash0) return false;
+
+                    if (lhs.m_hash1 < rhs.m_hash1) return true;
+                    else if (lhs.m_hash1 > rhs.m_hash1) return false;
+
+                    const auto lhsAdditionalHash = lhs.additionalHash();
+                    const auto rhsAdditionalHash = rhs.additionalHash();
+                    if (lhsAdditionalHash < rhsAdditionalHash) return true;
+                    else if (lhsAdditionalHash > rhsAdditionalHash) return false;
+
+                    return ((lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask) < (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask));
+                }
+            };
+
+            struct CompareLessWithoutReverseMove
+            {
+                [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
+                {
+                    if (lhs.m_hash0 < rhs.m_hash0) return true;
+                    else if (lhs.m_hash0 > rhs.m_hash0) return false;
+
+                    if (lhs.m_hash1 < rhs.m_hash1) return true;
+                    else if (lhs.m_hash1 > rhs.m_hash1) return false;
+
+                    const auto lhsAdditionalHash = lhs.additionalHash();
+                    const auto rhsAdditionalHash = rhs.additionalHash();
+                    if (lhsAdditionalHash < rhsAdditionalHash) return true;
+                    else if (lhsAdditionalHash > rhsAdditionalHash) return false;
+                }
+            };
+
+            struct CompareLessFull
+            {
+                [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
+                {
+                    if (lhs.m_hash0 < rhs.m_hash0) return true;
+                    else if (lhs.m_hash0 > rhs.m_hash0) return false;
+
+                    if (lhs.m_hash1 < rhs.m_hash1) return true;
+                    else if (lhs.m_hash1 > rhs.m_hash1) return false;
+
+                    const auto lhsAdditionalHash = lhs.additionalHash();
+                    const auto rhsAdditionalHash = rhs.additionalHash();
+                    if (lhsAdditionalHash < rhsAdditionalHash) return true;
+                    else if (lhsAdditionalHash > rhsAdditionalHash) return false;
+
+                    const auto lhsRev = (lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask);
+                    const auto rhsRev = (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask);
+                    if (lhsRev < rhsRev) return true;
+                    else if (lhsRev > rhsRev) return false;
+
+                    const auto lhsRest = lhs.m_hashLevelResultCountFlags & (levelMask | resultMask);
+                    const auto rhsRest = rhs.m_hashLevelResultCountFlags & (levelMask | resultMask);
+                    return lhsRest < rhsRest;
+                }
+            };
+
+            struct CompareEqualWithReverseMove
+            {
+                [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
+                {
+                    return
+                        lhs.m_hash0 == rhs.m_hash0
+                        && lhs.m_hash1 == rhs.m_hash1
+                        && lhs.additionalHash() == rhs.additionalHash()
+                        && (lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask) == (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask);
+                }
+            };
+
+            struct CompareEqualWithoutReverseMove
+            {
+                [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
+                {
+                    return
+                        lhs.m_hash0 == rhs.m_hash0
+                        && lhs.m_hash1 == rhs.m_hash1
+                        && lhs.additionalHash() == rhs.additionalHash();
+                }
+            };
+
+            struct CompareEqualFull
+            {
+                [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
+                {
+                    return
+                        lhs.m_hash0 == rhs.m_hash0
+                        && lhs.m_hash1 == rhs.m_hash1
+                        && lhs.additionalHash() == rhs.additionalHash()
+                        && (lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask) == (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask)
+                        && (lhs.m_hashLevelResultCountFlags & (levelMask | resultMask)) == (rhs.m_hashLevelResultCountFlags & (levelMask | resultMask));
+                }
+            };
+
+        private:
+            std::uint32_t m_hash0;
+            std::uint32_t m_hash1;
+            std::uint32_t m_hashLevelResultCountFlags;
+            std::uint32_t m_reverseMoveAndAbsEloDiff;
+
+            [[nodiscard]] std::uint32_t additionalHash() const
+            {
+                return m_hashLevelResultCountFlags & lastHashPartMask;
+            }
+        };
+        static_assert(sizeof(SmearedEntry) == 16);
+
+        static_assert(std::is_trivially_copyable_v<SmearedEntry>);
+
+        using Key = SmearedEntry;
+    }
+}
