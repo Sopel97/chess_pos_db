@@ -78,6 +78,7 @@
     <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h" />
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h" />
+    <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonSmeared.h" />
     <ClInclude Include="src\persistence\pos_db\IndexedGameHeaderStorage.h" />
     <ClInclude Include="src\persistence\pos_db\OrderedEntrySetPositionDatabase.h" />
     <ClInclude Include="src\persistence\pos_db\PackedGameHeader.h" />

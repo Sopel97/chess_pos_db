@@ -255,6 +255,9 @@
     <ClInclude Include="src\persistence\pos_db\IndexedGameHeaderStorage.h">
       <Filter>Header Files\src\persistence\pos_db</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonSmeared.h">
+      <Filter>Header Files\src\persistence\pos_db\epsilon</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\chess_pos_db.cpp">

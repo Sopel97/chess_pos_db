@@ -555,7 +555,15 @@ namespace persistence
             void add(const SmearedEntry& smeared, std::uint32_t position)
             {
                 m_count += static_cast<std::uint64_t>(smeared.count()) << (position * 2);
-                m_eloDiff += static_cast<std::int64_t>(smeared.absEloDiff()) << (position * 12);
+                const auto absEloDiffChange = static_cast<std::int64_t>(smeared.absEloDiff()) << (position * 12);
+                if (m_eloDiff < 0)
+                {
+                    m_eloDiff -= absEloDiffChange;
+                }
+                else
+                {
+                    m_eloDiff += absEloDiffChange;
+                }
             }
 
             [[nodiscard]] GameLevel level() const
