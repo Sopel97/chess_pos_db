@@ -204,6 +204,8 @@ namespace persistence
             }
         }
 
+        struct UnsmearedEntry;
+
         struct SmearedEntry
         {
             /*
@@ -244,6 +246,8 @@ namespace persistence
             static constexpr std::uint32_t reverseMoveShift = 12;
 
             static constexpr std::uint32_t absEloDiffMask = 0x00000FFFu;
+
+            friend struct UnsmearedEntry;
 
             SmearedEntry() :
                 m_hash0{},
@@ -315,19 +319,15 @@ namespace persistence
                 return fromOrdinal<GameResult>((m_hashLevelResultCountFlags >> resultShift) & resultMask);
             }
 
-            [[nodiscard]] std::int64_t eloDiff() const
+            [[nodiscard]] std::uint32_t absEloDiff() const
             {
-                const std::int64_t d = m_reverseMoveAndAbsEloDiff & absEloDiffMask;
-                return
-                    (m_hashLevelResultCountFlags & eloDiffSignMask)
-                    ? -d
-                    : d;
+                return m_reverseMoveAndAbsEloDiff & absEloDiffMask;
             }
 
             [[nodiscard]] std::array<std::uint64_t, 2> hash() const
             {
                 return std::array<std::uint64_t, 2>{
-                    m_hash0 | (static_cast<std::uint64_t>(m_hash1) << 32), 
+                    (static_cast<std::uint64_t>(m_hash0) << 32) | m_hash0,
                         static_cast<std::uint64_t>(additionalHash())
                 };
             }
@@ -346,6 +346,16 @@ namespace persistence
             {
                 const std::uint32_t packedInt = (m_reverseMoveAndAbsEloDiff & reverseMoveMask) >> reverseMoveShift;
                 return detail::unpackReverseMove(pos, packedInt);
+            }
+
+            [[nodiscard]] bool isFirst() const
+            {
+                return m_hashLevelResultCountFlags & isFirstMask;
+            }
+
+            [[nodiscard]] bool isEloNegative() const
+            {
+                return m_hashLevelResultCountFlags & eloDiffSignMask;
             }
 
             struct CompareLessWithReverseMove
@@ -456,11 +466,135 @@ namespace persistence
             {
                 return m_hashLevelResultCountFlags & lastHashPartMask;
             }
+
+            SmearedEntry(
+                const ZobristKey& zobrist,
+                std::uint32_t packedReverseMove,
+                GameLevel level,
+                GameResult result,
+                std::uint32_t countPart,
+                std::uint32_t absEloDiffPart,
+                std::uint32_t eloSign,
+                std::uint32_t isFirst
+                ) :
+                m_hash0(zobrist.high >> 32),
+                m_hash1(zobrist.high),
+                m_hashLevelResultCountFlags(
+                    static_cast<std::uint32_t>(zobrist.low & lastHashPartMask)
+                    | (isFirst << isFirstShift)
+                    | (countPart << countShift)
+                    | (ordinal(level) << levelShift)
+                    | (ordinal(result) << resultShift)
+                    | eloSign
+                ),
+                m_reverseMoveAndAbsEloDiff(
+                    (packedReverseMove << reverseMoveShift)
+                    | absEloDiffPart
+                )
+            {
+
+            }
+
+            SmearedEntry(
+                const ZobristKey& zobrist,
+                std::uint32_t packedReverseMove,
+                GameLevel level,
+                GameResult result
+            ) :
+                m_hash0(zobrist.high >> 32),
+                m_hash1(zobrist.high),
+                m_hashLevelResultCountFlags(
+                    static_cast<std::uint32_t>(zobrist.low& lastHashPartMask)
+                    | (ordinal(level) << levelShift)
+                    | (ordinal(result) << resultShift)
+                ),
+                m_reverseMoveAndAbsEloDiff(packedReverseMove << reverseMoveShift)
+            {
+
+            }
         };
         static_assert(sizeof(SmearedEntry) == 16);
 
         static_assert(std::is_trivially_copyable_v<SmearedEntry>);
 
         using Key = SmearedEntry;
+
+        // First smeared entry stores the least significant bits of unsmeared
+
+        struct UnsmearedEntry
+        {
+            UnsmearedEntry() = default;
+
+            UnsmearedEntry(const SmearedEntry& smeared)
+            {
+                ASSERT(smeared.isFirst());
+
+                m_zobrist.high = (static_cast<std::uint64_t>(smeared.m_hash0) << 32) | smeared.m_hash1;
+                m_zobrist.low = smeared.m_hashLevelResultCountFlags & SmearedEntry::lastHashPartMask;
+
+                m_count = static_cast<std::uint64_t>(smeared.count()) + 1;
+
+                m_eloDiff = smeared.absEloDiff();
+                if (smeared.isEloNegative())
+                {
+                    m_eloDiff = -m_eloDiff;
+                }
+
+                m_packedReverseMove = smeared.m_reverseMoveAndAbsEloDiff >> SmearedEntry::reverseMoveShift;
+
+                m_level = smeared.level();
+                m_result = smeared.result();
+            }
+
+            void combine(const UnsmearedEntry& other)
+            {
+                m_count += other.m_count;
+                m_eloDiff += other.m_eloDiff;
+            }
+
+            void add(const SmearedEntry& smeared, std::uint32_t position)
+            {
+                m_count += static_cast<std::uint64_t>(smeared.count()) << (position * 2);
+                m_eloDiff += static_cast<std::int64_t>(smeared.absEloDiff()) << (position * 12);
+            }
+
+            [[nodiscard]] GameLevel level() const
+            {
+                return m_level;
+            }
+
+            [[nodiscard]] GameResult result() const
+            {
+                return m_result;
+            }
+
+            [[nodiscard]] std::int64_t eloDiff() const
+            {
+                return m_eloDiff;
+            }
+
+            [[nodiscard]] SmearedEntry key() const
+            {
+                return SmearedEntry(m_zobrist, m_packedReverseMove, m_level, m_result);
+            }
+
+            [[nodiscard]] std::uint64_t count() const
+            {
+                return m_count;
+            }
+
+            [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
+            {
+                return detail::unpackReverseMove(pos, m_packedReverseMove);
+            }
+
+        private:
+            ZobristKey m_zobrist;
+            std::uint64_t m_count;
+            std::int64_t m_eloDiff;
+            std::uint32_t m_packedReverseMove;
+            GameLevel m_level;
+            GameResult m_result;
+        };
     }
 }
