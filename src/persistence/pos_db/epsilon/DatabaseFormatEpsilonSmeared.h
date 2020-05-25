@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 #include "chess/Chess.h"
 #include "chess/Position.h"
 #include "chess/MoveIndex.h"
@@ -223,6 +226,12 @@ namespace persistence
                 - 20 bits reverse move
                 - 12 bits abs elo diff
             */
+
+            static constexpr std::uint32_t countBits = 2;
+            static constexpr std::uint32_t absEloDiffBits = 12;
+
+            static constexpr std::uint32_t countBitsMask = 0x3;
+            static constexpr std::uint32_t absEloDiffBitsMask = 0x3FF;
 
             static constexpr std::int64_t maxAbsEloDiff = 800;
 
@@ -523,6 +532,67 @@ namespace persistence
 
         struct UnsmearedEntry
         {
+            using SmearedEntryType = SmearedEntry;
+
+            struct Sentinel { };
+
+            struct Iterator
+            {
+                Iterator(const UnsmearedEntry& unsmeared) :
+                    m_zobrist(unsmeared.m_zobrist),
+                    m_count(unsmeared.m_count - 1),
+                    m_absEloDiff(std::abs(unsmeared.eloDiff)),
+                    m_packedReverseMove(unsmeared.m_packedReverseMove),
+                    m_level(unsmeared.m_level),
+                    m_result(unsmeared.m_result),
+                    m_eloDiffSign(unsmeared.m_eloDiff < 0),
+                    m_isFirst(true)
+                {
+                }
+
+                [[nodiscard]] SmearedEntry operator*() const
+                {
+                    return SmearedEntry(
+                        m_zobrist,
+                        m_packedReverseMove,
+                        m_level,
+                        m_result,
+                        m_count & SmearedEntry::countBitsMask,
+                        m_absEloDiff & SmearedEntry::absEloDiffBitsMask,
+                        m_eloDiffSign,
+                        m_isFirst
+                        );
+                }
+
+                Iterator& operator++()
+                {
+                    m_count >>= SmearedEntry::countBits;
+                    m_absEloDiff >>= SmearedEntry::absEloDiffBits;
+                    m_isFirst = false;
+                    m_eloDiffSign = 0;
+                }
+
+                [[nodiscard]] friend bool operator==(const Iterator& lhs, Sentinel rhs) noexcept
+                {
+                    return !lhs.m_isFirst && !lhs.m_count;
+                }
+
+                [[nodiscard]] friend bool operator!=(const Iterator& lhs, Sentinel rhs) noexcept
+                {
+                    return !(lhs == rhs);
+                }
+
+            private:
+                ZobristKey m_zobrist;
+                std::uint64_t m_count;
+                std::uint64_t m_absEloDiff;
+                std::uint32_t m_packedReverseMove;
+                GameLevel m_level;
+                GameResult m_result;
+                std::uint8_t m_eloDiffSign;
+                bool m_isFirst;
+            };
+
             UnsmearedEntry() = default;
 
             UnsmearedEntry(const SmearedEntry& smeared)
@@ -554,8 +624,8 @@ namespace persistence
 
             void add(const SmearedEntry& smeared, std::uint32_t position)
             {
-                m_count += static_cast<std::uint64_t>(smeared.count()) << (position * 2);
-                const auto absEloDiffChange = static_cast<std::int64_t>(smeared.absEloDiff()) << (position * 12);
+                m_count += static_cast<std::uint64_t>(smeared.count()) << (position * SmearedEntry::countBits);
+                const auto absEloDiffChange = static_cast<std::int64_t>(smeared.absEloDiff()) << (position * SmearedEntry::absEloDiffBits);
                 if (m_eloDiff < 0)
                 {
                     m_eloDiff -= absEloDiffChange;
@@ -594,6 +664,16 @@ namespace persistence
             [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
             {
                 return detail::unpackReverseMove(pos, m_packedReverseMove);
+            }
+
+            [[nodiscard]] Iterator begin() const
+            {
+                return Iterator(*this);
+            }
+
+            [[nodiscard]] Sentinel end() const
+            {
+                return {};
             }
 
         private:
