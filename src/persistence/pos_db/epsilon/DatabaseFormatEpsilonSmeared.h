@@ -595,7 +595,7 @@ namespace persistence
 
             UnsmearedEntry() = default;
 
-            UnsmearedEntry(const SmearedEntry& smeared)
+            explicit UnsmearedEntry(const SmearedEntry& smeared)
             {
                 ASSERT(smeared.isFirst());
 
