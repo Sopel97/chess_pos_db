@@ -825,7 +825,7 @@ namespace persistence
                                 break;
                             }
 
-                            const auto& nextSmeared = *read;
+                            const auto& nextSmeared = *read++;
                             if (cmp(nextSmeared, lastSmeared))
                             {
                                 // same
