@@ -570,6 +570,7 @@ namespace persistence
                     m_absEloDiff >>= SmearedEntry::absEloDiffBits;
                     m_isFirst = false;
                     m_eloDiffSign = 0;
+                    return *this;
                 }
 
                 [[nodiscard]] friend bool operator==(const Iterator& lhs, Sentinel rhs) noexcept
