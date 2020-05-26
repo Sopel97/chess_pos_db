@@ -455,7 +455,6 @@ namespace persistence
                                     || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
                                     )
                                 {
-                                    Logger::instance().logInfo("ASDASDA: ", entry.isFirst());
                                     if (entry.isFirst())
                                     {
                                         if (first)

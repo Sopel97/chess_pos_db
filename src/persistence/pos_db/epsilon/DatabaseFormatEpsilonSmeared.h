@@ -320,12 +320,12 @@ namespace persistence
 
             [[nodiscard]] GameLevel level() const
             {
-                return fromOrdinal<GameLevel>((m_hashLevelResultCountFlags >> levelShift) & levelMask);
+                return fromOrdinal<GameLevel>((m_hashLevelResultCountFlags & levelMask) >> levelShift);
             }
 
             [[nodiscard]] GameResult result() const
             {
-                return fromOrdinal<GameResult>((m_hashLevelResultCountFlags >> resultShift) & resultMask);
+                return fromOrdinal<GameResult>((m_hashLevelResultCountFlags & resultMask) >> resultShift);
             }
 
             [[nodiscard]] std::uint32_t absEloDiff() const
