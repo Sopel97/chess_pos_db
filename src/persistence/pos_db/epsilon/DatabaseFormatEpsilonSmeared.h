@@ -248,7 +248,7 @@ namespace persistence
             static constexpr std::uint32_t eloDiffSignMask = 0x00000001u;
 
             static constexpr std::uint32_t countShift = 2;
-            static constexpr std::uint32_t isFirstShift = 2;
+            static constexpr std::uint32_t isFirstShift = 1;
 
             static constexpr std::uint32_t reverseMoveMask = 0xFFFFF000u;
 
@@ -593,7 +593,16 @@ namespace persistence
                 bool m_isFirst;
             };
 
-            UnsmearedEntry() = default;
+            UnsmearedEntry() :
+                m_zobrist{},
+                m_count{},
+                m_eloDiff{},
+                m_packedReverseMove{},
+                m_level{},
+                m_result{}
+            {
+
+            }
 
             explicit UnsmearedEntry(const SmearedEntry& smeared)
             {
