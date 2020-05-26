@@ -168,9 +168,6 @@
     <ClInclude Include="src\util\MemoryAmount.h">
       <Filter>Header Files\src\util</Filter>
     </ClInclude>
-    <ClInclude Include="src\util\TypeUtility.h">
-      <Filter>Header Files\src\util</Filter>
-    </ClInclude>
     <ClInclude Include="src\persistence\pos_db\Database.h">
       <Filter>Header Files\src\persistence\pos_db</Filter>
     </ClInclude>
@@ -257,6 +254,12 @@
     </ClInclude>
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonSmeared.h">
       <Filter>Header Files\src\persistence\pos_db\epsilon</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\Meta.h">
+      <Filter>Header Files\src\util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\BitPacking.h">
+      <Filter>Header Files\src\util</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

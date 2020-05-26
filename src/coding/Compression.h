@@ -3,7 +3,7 @@
 #include "BitStream.h"
 
 #include "util/ArithmeticUtility.h"
-#include "util/TypeUtility.h"
+#include "util/Meta.h"
 
 #include <cstdint>
 
@@ -119,7 +119,7 @@ namespace bit
     [[nodiscard]] ValueT decompress(const Compressed<CodingT, ValueT, BitStreamT>& compressed)
     {
         const auto bs = compressed.bitStream();
-        return compressed.coding().decompress(BitStreamSequentialReader(bs), Type<ValueT>{});
+        return compressed.coding().decompress(BitStreamSequentialReader(bs), util::meta::Type<ValueT>{});
     }
 
     // this overload reuses storage allocated `bs`
@@ -127,6 +127,6 @@ namespace bit
     [[nodiscard]] ValueT decompress(const Compressed<CodingT, ValueT, BitStreamT>& compressed, OtherBitStreamT& bs)
     {
         compressed.copyTo(bs);
-        return compressed.coding().decompress(BitStreamSequentialReader(bs), Type<ValueT>{});
+        return compressed.coding().decompress(BitStreamSequentialReader(bs), util::meta::Type<ValueT>{});
     }
 }

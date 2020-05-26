@@ -60,29 +60,29 @@ namespace bit
         }
 
         template <typename ValueT, typename ReaderT, std::size_t SizeV>
-        [[nodiscard]] std::array<ValueT, SizeV> decompress(ReaderT&& reader, Type<std::array<ValueT, SizeV>>) const
+        [[nodiscard]] std::array<ValueT, SizeV> decompress(ReaderT&& reader, util::meta::Type<std::array<ValueT, SizeV>>) const
         {
             std::array<ValueT, SizeV> values;
 
             for (auto& v : values)
             {
-                v = static_cast<const CodingT&>(*this).decompress(std::forward<ReaderT>(reader), Type<ValueT>{});
+                v = static_cast<const CodingT&>(*this).decompress(std::forward<ReaderT>(reader), util::meta::Type<ValueT>{});
             }
 
             return values;
         }
 
         template <typename ValueT, typename ReaderT, typename AllocatorT>
-        [[nodiscard]] std::vector<ValueT, AllocatorT> decompress(ReaderT&& reader, Type<std::vector<ValueT, AllocatorT>>) const
+        [[nodiscard]] std::vector<ValueT, AllocatorT> decompress(ReaderT&& reader, util::meta::Type<std::vector<ValueT, AllocatorT>>) const
         {
             std::vector<ValueT, AllocatorT> values;
 
-            const std::size_t size = static_cast<const CodingT&>(*this).decompress(std::forward<ReaderT>(reader), Type<std::size_t>{});
+            const std::size_t size = static_cast<const CodingT&>(*this).decompress(std::forward<ReaderT>(reader), util::meta::Type<std::size_t>{});
             values.reserve(size);
 
             for (std::size_t i = 0; i < size; ++i)
             {
-                values.emplace_back(static_cast<const CodingT&>(*this).decompress(std::forward<ReaderT>(reader), Type<ValueT>{}));
+                values.emplace_back(static_cast<const CodingT&>(*this).decompress(std::forward<ReaderT>(reader), util::meta::Type<ValueT>{}));
             }
 
             return values;
@@ -133,7 +133,7 @@ namespace bit
         }
 
         template <typename IntT, typename ReaderT>
-        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, Type<IntT>) const
+        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, util::meta::Type<IntT>) const
         {
             const std::size_t L = reader.skipBitsWhileEqualTo(false);
             const std::size_t N = reader.readBits(L + 1u) - 1u;
@@ -245,7 +245,7 @@ namespace bit
         }
 
         template <typename IntT, typename ReaderT>
-        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, Type<IntT>) const
+        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, util::meta::Type<IntT>) const
         {
             IntT value = 0u;
 
@@ -314,7 +314,7 @@ namespace bit
         }
 
         template <typename IntT, typename ReaderT>
-        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, Type<IntT>) const
+        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, util::meta::Type<IntT>) const
         {
             const std::size_t N = reader.skipBitsWhileEqualTo(false);
             const std::uint64_t value = reader.readBits(N + 1u);
@@ -409,7 +409,7 @@ namespace bit
         }
 
         template <typename IntT, typename ReaderT>
-        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, Type<IntT>) const
+        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, util::meta::Type<IntT>) const
         {
             // use goto here because we need to clean up the peeked bit
             // and doing it 5 times inline is ugly
@@ -484,9 +484,9 @@ namespace bit
         }
 
         template <typename IntT, typename ReaderT>
-        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, Type<IntT>) const
+        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, util::meta::Type<IntT>) const
         {
-            std::uint64_t value = EliasGammaCoding{}.decompress(reader, Type<IntT>{});
+            std::uint64_t value = EliasGammaCoding{}.decompress(reader, util::meta::Type<IntT>{});
 
             if constexpr (OrderV > 0u)
             {
@@ -551,7 +551,7 @@ namespace bit
         }
 
         template <typename IntT, typename ReaderT>
-        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, Type<IntT>) const
+        [[nodiscard]] std::enable_if_t<std::is_unsigned_v<IntT>, IntT> decompress(ReaderT&& reader, util::meta::Type<IntT>) const
         {
             std::uint64_t value = 0;
 
