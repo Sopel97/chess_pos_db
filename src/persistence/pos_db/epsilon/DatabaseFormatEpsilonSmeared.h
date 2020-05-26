@@ -15,7 +15,7 @@
 
 namespace persistence
 {
-    namespace db_epsilon
+    namespace db_epsilon_smeared
     {
         static constexpr std::uint64_t invalidGameOffset = std::numeric_limits<std::uint64_t>::max();
 

@@ -28,6 +28,7 @@
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"
 #include "persistence/pos_db/delta/DatabaseFormatDelta.h"
 #include "persistence/pos_db/epsilon/DatabaseFormatEpsilon.h"
+#include "persistence/pos_db/epsilon/DatabaseFormatEpsilonSmeared.h"
 #include "persistence/pos_db/Database.h"
 #include "persistence/pos_db/DatabaseFactory.h"
 #include "persistence/pos_db/Query.h"
@@ -122,6 +123,7 @@ namespace command_line_app
         g_factory.registerDatabaseType<persistence::db_beta::Database>();
         g_factory.registerDatabaseType<persistence::db_delta::Database>();
         g_factory.registerDatabaseType<persistence::db_epsilon::Database>();
+        g_factory.registerDatabaseType<persistence::db_epsilon_smeared::Database>();
 
         return g_factory;
     }();
