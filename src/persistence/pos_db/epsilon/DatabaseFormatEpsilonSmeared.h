@@ -398,8 +398,7 @@ namespace persistence
 
                     const auto lhsAdditionalHash = lhs.additionalHash();
                     const auto rhsAdditionalHash = rhs.additionalHash();
-                    if (lhsAdditionalHash < rhsAdditionalHash) return true;
-                    else if (lhsAdditionalHash > rhsAdditionalHash) return false;
+                    return lhsAdditionalHash < rhsAdditionalHash;
                 }
             };
 
