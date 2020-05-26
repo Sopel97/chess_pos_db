@@ -636,7 +636,7 @@ namespace persistence
                 // for adding at position 0 use constructor
                 ASSERT(position != 0);
 
-                m_count += static_cast<std::uint64_t>(smeared.countMinusOne()) << (position * SmearedEntry::countBits);
+                m_count += static_cast<std::uint64_t>(smeared.countMinusOne() + smeared.isFirst()) << (position * SmearedEntry::countBits);
                 const auto absEloDiffChange = static_cast<std::int64_t>(smeared.absEloDiff()) << (position * SmearedEntry::absEloDiffBits);
                 if (m_eloDiff < 0)
                 {
