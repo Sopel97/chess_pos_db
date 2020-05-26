@@ -547,8 +547,8 @@ namespace ext
         void flush();
 
     private:
-        static inline const FileOpenmode m_openmodeTruncate = FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Truncate;
-        static inline const FileOpenmode m_openmodeAppend = FileOpenmode::Write | FileOpenmode::Binary;
+        static inline const FileOpenmode m_openmodeTruncate = FileOpenmode::Create | FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Truncate;
+        static inline const FileOpenmode m_openmodeAppend = FileOpenmode::Create | FileOpenmode::Write | FileOpenmode::Binary;
 
         std::shared_ptr<detail::FileBase> m_file;
         detail::ThreadPool* m_threadPool;
@@ -613,8 +613,8 @@ namespace ext
         void flush();
 
     private:
-        static inline const FileOpenmode m_openmodeTruncate = FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Read | FileOpenmode::Truncate;
-        static inline const FileOpenmode m_openmodeAppend = FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Read;
+        static inline const FileOpenmode m_openmodeTruncate = FileOpenmode::Create | FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Read | FileOpenmode::Truncate;
+        static inline const FileOpenmode m_openmodeAppend = FileOpenmode::Create | FileOpenmode::Write | FileOpenmode::Binary | FileOpenmode::Read;
 
         std::shared_ptr<detail::FileBase> m_file;
         detail::ThreadPool* m_threadPool;
