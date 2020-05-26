@@ -441,18 +441,66 @@ namespace persistence
                             continue;
                         }
 
-                        for (auto&& entry : entries)
+                        if constexpr (hasSmearedEntry)
                         {
-                            const GameLevel level = entry.level();
-                            const GameResult result = entry.result();
+                            EntryType unsmeared{};
+                            bool first = true;
+                            std::uint32_t nextPos = 0;
 
-                            if (
-                                (select == query::Select::Continuations && CompareEqualWithReverseMove{}(entry, key))
-                                || (select == query::Select::Transpositions && CompareEqualWithoutReverseMove{}(entry, key) && !CompareEqualWithReverseMove{}(entry, key))
-                                || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
-                                )
+                            for (auto&& entry : entries)
                             {
-                                statsForThisSelect[level][result].combine(entry);
+                                if (
+                                    (select == query::Select::Continuations && CompareEqualWithReverseMove{}(entry, key))
+                                    || (select == query::Select::Transpositions && CompareEqualWithoutReverseMove{}(entry, key) && !CompareEqualWithReverseMove{}(entry, key))
+                                    || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
+                                    )
+                                {
+                                    if (entry.isFirst())
+                                    {
+                                        if (first)
+                                        {
+                                            // nothing was read yet
+                                            first = false;
+                                        }
+                                        else
+                                        {
+                                            const auto level = unsmeared.level();
+                                            const auto result = unsmeared.result();
+                                            statsForThisSelect[level][result].combine(unsmeared);
+                                        }
+
+                                        unsmeared = EntryType(entry);
+                                        nextPos = 1;
+                                    }
+                                    else
+                                    {
+                                        unsmeared.add(entry, nextPos++);
+                                    }
+                                }
+                            }
+
+                            if (!first)
+                            {
+                                const auto level = unsmeared.level();
+                                const auto result = unsmeared.result();
+                                statsForThisSelect[level][result].combine(unsmeared);
+                            }
+                        }
+                        else
+                        {
+                            for (auto&& entry : entries)
+                            {
+                                const GameLevel level = entry.level();
+                                const GameResult result = entry.result();
+
+                                if (
+                                    (select == query::Select::Continuations && CompareEqualWithReverseMove{}(entry, key))
+                                    || (select == query::Select::Transpositions && CompareEqualWithoutReverseMove{}(entry, key) && !CompareEqualWithReverseMove{}(entry, key))
+                                    || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
+                                    )
+                                {
+                                    statsForThisSelect[level][result].combine(entry);
+                                }
                             }
                         }
                     }
@@ -468,23 +516,78 @@ namespace persistence
                 {
                     if constexpr (hasReverseMove)
                     {
-                        for (auto&& entry : entries)
+
+                        if constexpr (hasSmearedEntry)
                         {
-                            if (!CompareEqualWithoutReverseMove{}(entry, key))
+                            EntryType unsmeared{};
+                            bool first = true;
+                            std::uint32_t nextPos = 0;
+
+                            for (auto&& entry : entries)
                             {
-                                continue;
+                                if (!CompareEqualWithoutReverseMove{}(entry, key))
+                                {
+                                    continue;
+                                }
+
+                                const ReverseMove rmove = entry.reverseMove(pos);
+                                if (rmove.isNull())
+                                {
+                                    continue;
+                                }
+
+                                if (entry.isFirst())
+                                {
+                                    if (first)
+                                    {
+                                        // nothing was read yet
+                                        first = false;
+                                    }
+                                    else
+                                    {
+                                        const auto level = unsmeared.level();
+                                        const auto result = unsmeared.result();
+                                        const auto rmove = unsmeared.reverseMove(pos);
+                                        retractionsStats[rmove][level][result].combine(unsmeared);
+                                    }
+
+                                    unsmeared = EntryType(entry);
+                                    nextPos = 1;
+                                }
+                                else
+                                {
+                                    unsmeared.add(entry, nextPos++);
+                                }
                             }
 
-                            const GameLevel level = entry.level();
-                            const GameResult result = entry.result();
-                            const ReverseMove rmove = entry.reverseMove(pos);
-
-                            if (rmove.isNull())
+                            if (!first)
                             {
-                                continue;
+                                const auto level = unsmeared.level();
+                                const auto result = unsmeared.result();
+                                const auto rmove = unsmeared.reverseMove(pos);
+                                retractionsStats[rmove][level][result].combine(unsmeared);
                             }
+                        }
+                        else
+                        {
+                            for (auto&& entry : entries)
+                            {
+                                if (!CompareEqualWithoutReverseMove{}(entry, key))
+                                {
+                                    continue;
+                                }
 
-                            retractionsStats[rmove][level][result].combine(entry);
+                                const GameLevel level = entry.level();
+                                const GameResult result = entry.result();
+                                const ReverseMove rmove = entry.reverseMove(pos);
+
+                                if (rmove.isNull())
+                                {
+                                    continue;
+                                }
+
+                                retractionsStats[rmove][level][result].combine(entry);
+                            }
                         }
                     }
                 }
