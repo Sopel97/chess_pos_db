@@ -181,12 +181,12 @@ namespace persistence
         >
         struct OrderedEntrySetPositionDatabase final : persistence::Database
         {
-            static_assert(std::is_trivially_copyable_v<EntryT>);
-
             static constexpr bool hasSmearedEntry = detail::HasSmearedEntry<EntryT>::value;
 
             using EntryType = EntryT;
             using PersistedEntryType = typename detail::GetPersistedEntryType<EntryT>::type;
+
+            static_assert(std::is_trivially_copyable_v<PersistedEntryType>);
 
             static constexpr bool hasEloDiff = detail::HasEloDiff<EntryType>::value;
             static constexpr bool hasFirstGameIndex = detail::HasFirstGameIndex<EntryType>::value;
@@ -710,19 +710,64 @@ namespace persistence
                     const auto end = buffer.end();
                     auto cmp = CompareEqualFull{};
 
-                    while (++read != end)
+                    if constexpr (hasSmearedEntry)
                     {
-                        if (cmp(*write, *read))
-                        {
-                            write->combine(*read);
-                        }
-                        else if (++write != read) // we don't want to copy onto itself
-                        {
-                            *write = *read;
-                        }
-                    }
+                        PersistedEntryType lastSmeared = *read++;
+                        EntryType accumulator(lastSmeared);
 
-                    buffer.erase(std::next(write), buffer.end());
+                        for (;;)
+                        {
+                            if (read == end)
+                            {
+                                break;
+                            }
+
+                            const auto& nextSmeared = *read;
+                            if (cmp(nextSmeared, lastSmeared))
+                            {
+                                // same
+                                accumulator.add(nextSmeared, 0);
+                            }
+                            else
+                            {
+                                // different
+                                // We never write more than we read.
+                                for (auto e : accumulator)
+                                {
+                                    *write++ = e;
+                                }
+
+                                ASSERT(write <= read);
+
+                                accumulator = EntryType(nextSmeared);
+                                lastSmeared = nextSmeared;
+                            }
+                        }
+
+                        // write the last entry
+                        for (auto e : accumulator)
+                        {
+                            *write++ = e;
+                        }
+
+                        buffer.erase(write, buffer.end());
+                    }
+                    else
+                    {
+                        while (++read != end)
+                        {
+                            if (cmp(*write, *read))
+                            {
+                                write->combine(*read);
+                            }
+                            else if (++write != read) // we don't want to copy onto itself
+                            {
+                                *write = *read;
+                            }
+                        }
+
+                        buffer.erase(std::next(write), buffer.end());
+                    }
                 }
 
                 void prepareData(std::vector<PersistedEntryType>& buffer)
@@ -960,25 +1005,74 @@ namespace persistence
                             const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<PersistedEntryType>(m_mergeWriterBufferSize.bytes(), 2);
                             ext::BackInserter<PersistedEntryType> out(outFile, util::DoubleBuffer<PersistedEntryType>(outBufferSize));
 
-                            auto cmp = CompareEqualFull{};
                             bool first = true;
-                            PersistedEntryType accumulator;
-                            auto append = [&](const PersistedEntryType& entry) {
-                                if (first)
+                            auto accumulator = []() {
+                                if constexpr (hasSmearedEntry) return EntryType{};
+                                else return PersistedEntryType{};
+                            }();
+                            auto append = [&]() {
+                                if constexpr (hasSmearedEntry)
                                 {
-                                    first = false;
-                                    accumulator = entry;
-                                }
-                                else if (cmp(accumulator, entry))
-                                {
-                                    accumulator.combine(entry);
+                                    return[
+                                        &out,
+                                        &accumulator,
+                                        &first,
+                                        lastSmeared = PersistedEntryType{}, 
+                                        nextPos = 0,
+                                        cmp = CompareEqualFull{}
+                                    ](const PersistedEntryType& nextSmeared) mutable {
+                                        if (nextSmeared.isFirst())
+                                        {
+                                            if (first)
+                                            {
+                                                // we have nothing to write yet
+                                                // accumulator is empty
+                                                first = false;
+                                            }
+                                            else
+                                            {
+                                                for (auto e : accumulator)
+                                                {
+                                                    out.emplace(e);
+                                                }
+                                            }
+                                            accumulator = EntryType(nextSmeared);
+                                            lastSmeared = nextSmeared;
+                                            nextPos = 1;
+                                        }
+                                        else /* if (cmp(lastSmeared, entry)) */ // we know that they are equal because an entry with isFirst() always starts a new key
+                                        {
+                                            ASSERT(nextPos != 0);
+
+                                            accumulator.add(nextSmeared, nextPos++);
+                                        }
+                                    };
                                 }
                                 else
                                 {
-                                    out.emplace(accumulator);
-                                    accumulator = entry;
+                                    return [
+                                        &out, 
+                                        &accumulator,
+                                        &first,
+                                        cmp = CompareEqualFull{}
+                                    ](const PersistedEntryType& entry) mutable {
+                                        if (first)
+                                        {
+                                            first = false;
+                                            accumulator = entry;
+                                        }
+                                        else if (cmp(accumulator, entry))
+                                        {
+                                            accumulator.combine(entry);
+                                        }
+                                        else
+                                        {
+                                            out.emplace(accumulator);
+                                            accumulator = entry;
+                                        }
+                                    };
                                 }
-                            };
+                            }();
 
                             const ext::MergePlan plan = makeMergePlan(spans, outFilePath, temporaryDirs);
                             // Now we have two options.
@@ -1085,7 +1179,17 @@ namespace persistence
 
                             if (!first) // if we did anything, ie. accumulator holds something from merge
                             {
-                                out.emplace(accumulator);
+                                if constexpr (hasSmearedEntry)
+                                {
+                                    for (auto e : accumulator)
+                                    {
+                                        out.emplace(e);
+                                    }
+                                }
+                                else
+                                {
+                                    out.emplace(accumulator);
+                                }
                             }
                         }
                     }

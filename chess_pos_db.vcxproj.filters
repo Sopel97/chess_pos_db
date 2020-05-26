@@ -359,5 +359,8 @@
     <ClCompile Include="src\persistence\pos_db\IndexedGameHeaderStorage.cpp">
       <Filter>Source Files\src\persistence\pos_db</Filter>
     </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonSmeared.cpp">
+      <Filter>Source Files\src\persistence\pos_db\epsilon</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -267,7 +267,7 @@ namespace persistence
             }
 
             SmearedEntry(const PositionWithZobrist& pos, const ReverseMove& reverseMove = ReverseMove{}) :
-                m_hashLevelResultCountFlags(isFirstMask | (1 << countShift))
+                m_hashLevelResultCountFlags(isFirstMask) /* | (0 << countShift) because 0 means one entry*/
             {
                 const auto zobrist = pos.zobrist();
                 m_hash0 = zobrist.high >> 32;
@@ -290,7 +290,7 @@ namespace persistence
             ) :
                 m_hashLevelResultCountFlags(
                     isFirstMask 
-                    | (1 << countShift)
+                    /* | (0 << countShift) because 0 means one entry*/
                     | (ordinal(level) << levelShift)
                     | (ordinal(result) << resultShift)
                 )
@@ -303,7 +303,7 @@ namespace persistence
                     (zobrist.low & lastHashPartMask)
                     | eloDiffSign;
 
-                const std::uint32_t absEloDiff = std::min<std::uint32_t>(std::abs(eloDiff), maxAbsEloDiff);
+                const std::uint32_t absEloDiff = std::min<std::uint32_t>(static_cast<std::uint32_t>(std::abs(eloDiff)), maxAbsEloDiff);
                 auto packedReverseMove = detail::packReverseMove(pos, reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
                 // We want entries ordered with reverse move to also be ordered by just hash
@@ -346,7 +346,7 @@ namespace persistence
                 return *this;
             }
 
-            [[nodiscard]] std::uint32_t count() const
+            [[nodiscard]] std::uint32_t countMinusOne() const
             {
                 return (m_hashLevelResultCountFlags & countMask) >> countShift;
             }
@@ -487,7 +487,7 @@ namespace persistence
                 std::uint32_t isFirst
                 ) :
                 m_hash0(zobrist.high >> 32),
-                m_hash1(zobrist.high),
+                m_hash1(static_cast<std::uint32_t>(zobrist.high)),
                 m_hashLevelResultCountFlags(
                     static_cast<std::uint32_t>(zobrist.low & lastHashPartMask)
                     | (isFirst << isFirstShift)
@@ -511,7 +511,7 @@ namespace persistence
                 GameResult result
             ) :
                 m_hash0(zobrist.high >> 32),
-                m_hash1(zobrist.high),
+                m_hash1(static_cast<std::uint32_t>(zobrist.high)),
                 m_hashLevelResultCountFlags(
                     static_cast<std::uint32_t>(zobrist.low& lastHashPartMask)
                     | (ordinal(level) << levelShift)
@@ -541,7 +541,7 @@ namespace persistence
                 Iterator(const UnsmearedEntry& unsmeared) :
                     m_zobrist(unsmeared.m_zobrist),
                     m_count(unsmeared.m_count - 1),
-                    m_absEloDiff(std::abs(unsmeared.eloDiff)),
+                    m_absEloDiff(std::abs(unsmeared.eloDiff())),
                     m_packedReverseMove(unsmeared.m_packedReverseMove),
                     m_level(unsmeared.m_level),
                     m_result(unsmeared.m_result),
@@ -602,7 +602,7 @@ namespace persistence
                 m_zobrist.high = (static_cast<std::uint64_t>(smeared.m_hash0) << 32) | smeared.m_hash1;
                 m_zobrist.low = smeared.m_hashLevelResultCountFlags & SmearedEntry::lastHashPartMask;
 
-                m_count = static_cast<std::uint64_t>(smeared.count()) + 1;
+                m_count = static_cast<std::uint64_t>(smeared.countMinusOne()) + 1;
 
                 m_eloDiff = smeared.absEloDiff();
                 if (smeared.isEloNegative())
@@ -624,7 +624,7 @@ namespace persistence
 
             void add(const SmearedEntry& smeared, std::uint32_t position)
             {
-                m_count += static_cast<std::uint64_t>(smeared.count()) << (position * SmearedEntry::countBits);
+                m_count += static_cast<std::uint64_t>(smeared.countMinusOne() + 1) << (position * SmearedEntry::countBits);
                 const auto absEloDiffChange = static_cast<std::int64_t>(smeared.absEloDiff()) << (position * SmearedEntry::absEloDiffBits);
                 if (m_eloDiff < 0)
                 {
@@ -684,5 +684,22 @@ namespace persistence
             GameLevel m_level;
             GameResult m_result;
         };
+
+        struct Traits
+        {
+            static constexpr const char* name = "db_epsilon_smeared_a";
+        };
+
+        using Database = persistence::pos_db::OrderedEntrySetPositionDatabase<
+            Key,
+            UnsmearedEntry,
+            Traits
+        >;
+
+        extern template struct persistence::pos_db::OrderedEntrySetPositionDatabase<
+            Key,
+            UnsmearedEntry,
+            Traits
+        >;
     }
 }

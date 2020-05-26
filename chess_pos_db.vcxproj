@@ -117,6 +117,7 @@
     <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp" />
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp" />
+    <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonSmeared.cpp" />
     <ClCompile Include="src\persistence\pos_db\IndexedGameHeaderStorage.cpp" />
     <ClCompile Include="src\persistence\pos_db\PackedGameHeader.cpp" />
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
