@@ -164,6 +164,13 @@ namespace cfg
         "merge_writer_buffer_size" : "4MiB",
         "pgn_parser_memory" : "4MiB",
         "bcgn_parser_memory" : "4MiB"
+    },
+
+    "db_epsilon_smeared_b" : {
+        "index_granularity" : 1024,
+        "merge_writer_buffer_size" : "4MiB",
+        "pgn_parser_memory" : "4MiB",
+        "bcgn_parser_memory" : "4MiB"
     }
 },
 

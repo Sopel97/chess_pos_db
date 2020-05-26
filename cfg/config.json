@@ -152,11 +152,13 @@
             */
             "index_granularity" : 1024,
 
+            "merge_writer_buffer_size" : "4MiB",
+
             "pgn_parser_memory" : "4MiB",
 
             "bcgn_parser_memory" : "4MiB",
 
-            "merge_writer_buffer_size" : "4MiB",
+            "index_writer_buffer_size" : "4MiB",
 
             "header_buffer_memory" : "4MiB"
         },
@@ -168,11 +170,13 @@
             */
             "index_granularity" : 1024,
 
+            "merge_writer_buffer_size" : "4MiB",
+
             "pgn_parser_memory" : "4MiB",
 
             "bcgn_parser_memory" : "4MiB",
 
-            "merge_writer_buffer_size" : "4MiB",
+            "index_writer_buffer_size" : "4MiB",
 
             "header_buffer_memory" : "4MiB"
         },
@@ -184,11 +188,31 @@
             */
             "index_granularity" : 1024,
 
+            "merge_writer_buffer_size" : "4MiB",
+
             "pgn_parser_memory" : "4MiB",
 
             "bcgn_parser_memory" : "4MiB",
 
+            "index_writer_buffer_size" : "4MiB",
+
+            "header_buffer_memory" : "4MiB"
+        },
+
+        "db_epsilon_smeared_a" : {
+            /*
+                In this case we always read at least index_granularity entries
+                for a single query. 1024 is a good tradeoff between speed and space.
+            */
+            "index_granularity" : 1024,
+
             "merge_writer_buffer_size" : "4MiB",
+
+            "pgn_parser_memory" : "4MiB",
+
+            "bcgn_parser_memory" : "4MiB",
+
+            "index_writer_buffer_size" : "4MiB",
 
             "header_buffer_memory" : "4MiB"
         }
@@ -206,7 +230,8 @@
         "dump" : {
             "import_memory" : "2GiB",
             "pgn_parser_memory" : "4MiB",
-            "bcgn_parser_memory" : "4MiB"
+            "bcgn_parser_memory" : "4MiB",
+            "max_merge_buffer_size" : "1GiB"
         }
     },
 
