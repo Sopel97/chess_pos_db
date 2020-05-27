@@ -15,7 +15,35 @@ Date::Date() :
 {
 }
 
-std::optional<Date> Date::tryParse(std::string_view sv)
+Date Date::min(const Date& lhs, const Date& rhs)
+{
+    // unknown dates are assumed to be before known
+
+    if (lhs.m_year < rhs.m_year) return lhs;
+    else if (lhs.m_year > rhs.m_year) return rhs;
+
+    if (lhs.m_month < rhs.m_month) return lhs;
+    else if (lhs.m_month > rhs.m_month) return rhs;
+
+    if (lhs.m_day < rhs.m_day) return lhs;
+    else return rhs;
+}
+
+Date Date::max(const Date& lhs, const Date& rhs)
+{
+    // unknown dates are assumed to be after known
+
+    if (lhs.m_year > rhs.m_year) return lhs;
+    else if (lhs.m_year < rhs.m_year) return rhs;
+
+    if (lhs.m_month > rhs.m_month) return lhs;
+    else if (lhs.m_month < rhs.m_month) return rhs;
+
+    if (lhs.m_day > rhs.m_day) return lhs;
+    else return rhs;
+}
+
+std::optional<Date> Date::tryParse(std::string_view sv, char sep)
 {
     std::uint16_t year = 0;
     std::uint8_t month = 0;
@@ -33,7 +61,7 @@ std::optional<Date> Date::tryParse(std::string_view sv)
 
     if (sv.size() >= 7)
     {
-        if (sv[4] != '.') return std::nullopt;
+        if (sv[4] != sep) return std::nullopt;
         if (!parser_bits::isDigit(sv[5])) return std::nullopt;
         if (!parser_bits::isDigit(sv[6])) return std::nullopt;
         month = (sv[5] - '0') * 10 + (sv[6] - '0');
@@ -42,7 +70,7 @@ std::optional<Date> Date::tryParse(std::string_view sv)
 
     if (sv.size() >= 10)
     {
-        if (sv[7] != '.') return std::nullopt;
+        if (sv[7] != sep) return std::nullopt;
         if (!parser_bits::isDigit(sv[8])) return std::nullopt;
         if (!parser_bits::isDigit(sv[9])) return std::nullopt;
         month = (sv[5] - '0') * 10 + (sv[6] - '0');
@@ -106,7 +134,7 @@ Date::Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :
         && lhs.m_day == rhs.m_day;
 }
 
-[[nodiscard]] std::string Date::toString() const
+[[nodiscard]] std::string Date::toString(char sep) const
 {
     char buf[10];
 
@@ -133,7 +161,7 @@ Date::Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :
         buf[6] = static_cast<char>(month % 10) + '0'; month /= 10;
         buf[5] = static_cast<char>(month % 10) + '0';
     }
-    buf[4] = '.';
+    buf[4] = sep;
 
     if (m_day == 0)
     {
@@ -145,7 +173,7 @@ Date::Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :
         buf[9] = static_cast<char>(day % 10) + '0'; day /= 10;
         buf[8] = static_cast<char>(day % 10) + '0';
     }
-    buf[7] = '.';
+    buf[7] = sep;
 
     return std::string(buf, 10);
 }

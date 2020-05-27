@@ -9,7 +9,10 @@ struct Date
 {
     Date();
 
-    static std::optional<Date> tryParse(std::string_view sv);
+    static Date min(const Date& lhs, const Date& rhs);
+    static Date max(const Date& lhs, const Date& rhs);
+
+    static std::optional<Date> tryParse(std::string_view sv, char sep = '.');
 
     Date(std::string_view sv);
 
@@ -18,7 +21,7 @@ struct Date
     friend bool operator<(const Date& lhs, const Date& rhs) noexcept;
     friend bool operator==(const Date& lhs, const Date& rhs) noexcept;
 
-    [[nodiscard]] std::string toString() const;
+    [[nodiscard]] std::string toString(char sep = '.') const;
 
     [[nodiscard]] std::uint16_t year() const;
     [[nodiscard]] std::uint8_t month() const;

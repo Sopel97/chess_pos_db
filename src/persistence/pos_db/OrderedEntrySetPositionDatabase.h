@@ -1728,7 +1728,7 @@ namespace persistence
                 );
 
                 Logger::instance().logInfo(": Importing files...");
-                ImportStats statsTotal = importImpl(
+                ImportStats stats = importImpl(
                     pipeline,
                     files,
                     [&progressCallback, &totalSize, &totalSizeProcessed](auto&& file) {
@@ -1759,11 +1759,12 @@ namespace persistence
 
                 Logger::instance().logInfo(": Completed.");
 
-                Logger::instance().logInfo(": Imported ", statsTotal.totalNumGames(), " games with ", statsTotal.totalNumPositions(), " positions. Skipped ", statsTotal.totalNumSkippedGames(), " games.");
+                const auto total = stats.total();
+                Logger::instance().logInfo(": Imported ", total.numGames, " games with ", total.numPositions, " positions. Skipped ", total.numSkippedGames, " games.");
 
-                BaseType::addStats(statsTotal);
+                BaseType::addStats(stats);
 
-                return statsTotal;
+                return stats;
             }
 
             [[nodiscard]] std::map<std::string, std::vector<MergableFile>> mergableFiles() const override
@@ -2221,7 +2222,7 @@ namespace persistence
                             const std::optional<GameResult> result = game.result();
                             if (!result.has_value())
                             {
-                                stats.statsByLevel[level].numSkippedGames += 1;
+                                stats[level].numSkippedGames += 1;
                                 continue;
                             }
 
@@ -2262,8 +2263,8 @@ namespace persistence
                                 m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).index;
                             }
 
-                            stats.statsByLevel[level].numGames += 1;
-                            stats.statsByLevel[level].numPositions += numPositionsInGame;
+                            stats[level].numGames += 1;
+                            stats[level].numPositions += numPositionsInGame;
                         }
                     }
                     else if (type == ImportableFileType::Bcgn)
@@ -2281,7 +2282,7 @@ namespace persistence
                             const std::optional<GameResult> result = game.result();
                             if (!result.has_value())
                             {
-                                stats.statsByLevel[level].numSkippedGames += 1;
+                                stats[level].numSkippedGames += 1;
                                 continue;
                             }
 
@@ -2318,8 +2319,8 @@ namespace persistence
                                 m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).index;
                             }
 
-                            stats.statsByLevel[level].numGames += 1;
-                            stats.statsByLevel[level].numPositions += numPositionsInGame;
+                            stats[level].numGames += 1;
+                            stats[level].numPositions += numPositionsInGame;
                         }
                     }
                     else

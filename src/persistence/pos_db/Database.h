@@ -19,44 +19,69 @@
 
 namespace persistence
 {
-    struct SingleGameLevelImportStats
-    {
-        std::size_t numGames = 0;
-        std::size_t numSkippedGames = 0; // We skip games with an unknown result.
-        std::size_t numPositions = 0;
-
-        SingleGameLevelImportStats& operator+=(const SingleGameLevelImportStats& rhs);
-    };
-
-    struct ImportStats
-    {
-        EnumArray<GameLevel, SingleGameLevelImportStats> statsByLevel;
-
-        ImportStats() = default;
-        ImportStats(SingleGameLevelImportStats stats, GameLevel level);
-
-        [[nodiscard]] std::size_t totalNumGames() const;
-        [[nodiscard]] std::size_t totalNumSkippedGames() const;
-        [[nodiscard]] std::size_t totalNumPositions() const;
-
-        void add(SingleGameLevelImportStats stats, GameLevel level);
-
-        ImportStats& operator+=(const ImportStats& rhs);
-    };
-
     struct SingleGameLevelDatabaseStats
     {
         std::size_t numGames = 0;
         std::size_t numPositions = 0;
+        std::size_t totalPlayerElo = 0;
+        std::size_t numGamesWithElo = 0;
+        std::size_t numGamesWithDate = 0;
+        std::uint16_t minElo = 0;
+        std::uint16_t maxElo = 0;
+        Date minDate{};
+        Date maxDate{};
 
-        SingleGameLevelDatabaseStats& operator+=(const SingleGameLevelImportStats& rhs);
+        SingleGameLevelDatabaseStats& operator+=(const SingleGameLevelDatabaseStats& rhs);
+
+        friend void to_json(nlohmann::json& j, const SingleGameLevelDatabaseStats& stats);
+        friend void from_json(const nlohmann::json& j, SingleGameLevelDatabaseStats& stats);
     };
 
     struct DatabaseStats
     {
-        EnumArray<GameLevel, SingleGameLevelDatabaseStats> statsByLevel;
+        [[nodiscard]] SingleGameLevelDatabaseStats total() const;
 
-        DatabaseStats& operator+=(const ImportStats& rhs);
+        const SingleGameLevelDatabaseStats& operator[](GameLevel level) const;
+        SingleGameLevelDatabaseStats& operator[](GameLevel level);
+
+        void add(SingleGameLevelDatabaseStats stats, GameLevel level);
+
+        friend void to_json(nlohmann::json& j, const DatabaseStats& stats);
+        friend void from_json(const nlohmann::json& j, DatabaseStats& stats);
+
+    private:
+        EnumArray<GameLevel, SingleGameLevelDatabaseStats> m_statsByLevel;
+    };
+
+    struct SingleGameLevelImportStats : SingleGameLevelDatabaseStats
+    {
+        std::size_t numSkippedGames = 0; // We skip games with an unknown result.
+
+        SingleGameLevelImportStats& operator+=(const SingleGameLevelImportStats& rhs);
+
+        friend void to_json(nlohmann::json& j, const SingleGameLevelImportStats& stats);
+        friend void from_json(const nlohmann::json& j, SingleGameLevelImportStats& stats);
+    };
+
+    struct ImportStats
+    {
+        ImportStats() = default;
+        ImportStats(SingleGameLevelImportStats stats, GameLevel level);
+
+        void add(SingleGameLevelImportStats stats, GameLevel level);
+
+        [[nodiscard]] SingleGameLevelImportStats total() const;
+
+        const SingleGameLevelImportStats& operator[](GameLevel level) const;
+        SingleGameLevelImportStats& operator[](GameLevel level);
+
+        ImportStats& operator+=(const ImportStats& rhs);
+
+        friend void to_json(nlohmann::json& j, const ImportStats& stats);
+        friend void from_json(const nlohmann::json& j, ImportStats& stats);
+
+    private:
+        EnumArray<GameLevel, SingleGameLevelImportStats> m_statsByLevel;
     };
 
     enum struct ImportableFileType

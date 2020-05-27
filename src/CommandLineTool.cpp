@@ -485,15 +485,6 @@ namespace command_line_app
         sendMessage(session, std::move(finisedResponseStr));
     }
 
-    static nlohmann::json statsToJson(persistence::ImportStats stats)
-    {
-        return nlohmann::json{
-            { "num_games", stats.totalNumGames() },
-            { "num_positions", stats.totalNumPositions() },
-            { "num_skipped_games", stats.totalNumSkippedGames() }
-        };
-    }
-
     static auto makeImportProgressReportHandler(const TcpConnection::Ptr& session, bool doReportProgress = true)
     {
         return [session, doReportProgress](const persistence::Database::ImportProgressReport& report) {
@@ -554,7 +545,7 @@ namespace command_line_app
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
             auto stats = db->import(pgns, importMemory.bytes(), callback);
-            sendProgressFinished(session, "import", statsToJson(stats));
+            sendProgressFinished(session, "import", nlohmann::json(stats.total()));
 
             if (doMerge)
             {
@@ -677,7 +668,7 @@ namespace command_line_app
         {
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
             auto stats = db->import(pgns, importMemory.bytes(), callback);
-            sendProgressFinished(session, "import", statsToJson(stats));
+            sendProgressFinished(session, "import", nlohmann::json(stats.total()));
 
             if (merge == AppendMergeType::All)
             {
@@ -872,20 +863,7 @@ namespace command_line_app
 
         auto stats = db->stats();
 
-        auto response = nlohmann::json{
-            { "human", nlohmann::json{
-                { "num_games", stats.statsByLevel[GameLevel::Human].numGames },
-                { "num_positions", stats.statsByLevel[GameLevel::Human].numPositions }
-            }},
-            { "engine", nlohmann::json{
-                { "num_games", stats.statsByLevel[GameLevel::Engine].numGames },
-                { "num_positions", stats.statsByLevel[GameLevel::Engine].numPositions }
-            }},
-            { "server", nlohmann::json{
-                { "num_games", stats.statsByLevel[GameLevel::Server].numGames },
-                { "num_positions", stats.statsByLevel[GameLevel::Server].numPositions }
-            }},
-        };
+        auto response = nlohmann::json(stats);
 
         auto responseStr = nlohmann::json(response).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
         sendMessage(session, responseStr);

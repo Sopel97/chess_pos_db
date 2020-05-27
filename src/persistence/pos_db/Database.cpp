@@ -13,20 +13,147 @@
 
 namespace persistence
 {
-    SingleGameLevelImportStats& SingleGameLevelImportStats::operator+=(const SingleGameLevelImportStats& rhs)
+    SingleGameLevelDatabaseStats& SingleGameLevelDatabaseStats::operator+=(const SingleGameLevelDatabaseStats& rhs)
     {
         numGames += rhs.numGames;
-        numSkippedGames += rhs.numSkippedGames;
         numPositions += rhs.numPositions;
+        totalPlayerElo += rhs.totalPlayerElo;
+
+        if (!numGamesWithElo)
+        {
+            minElo = rhs.minElo;
+            maxElo = rhs.maxElo;
+        }
+        else if (rhs.numGamesWithElo)
+        {
+            minElo = std::min(minElo, rhs.minElo);
+            maxElo = std::max(maxElo, rhs.maxElo);
+        }
+
+        if (!numGamesWithDate)
+        {
+            minDate = rhs.minDate;
+            maxDate = rhs.maxDate;
+        }
+        else if (rhs.numGamesWithDate)
+        {
+            Date::min(minDate, rhs.minDate);
+            Date::max(maxDate, rhs.maxDate);
+        }
+
+        numGamesWithElo += rhs.numGamesWithElo;
+        numGamesWithDate += rhs.numGamesWithDate;
 
         return *this;
+    }
+
+    void DatabaseStats::add(SingleGameLevelDatabaseStats stats, GameLevel level)
+    {
+        m_statsByLevel[level] += stats;
+    }
+
+    void to_json(nlohmann::json& j, const DatabaseStats& stats)
+    {
+        for (GameLevel level : values<GameLevel>())
+        {
+            j[std::string(toString(level))] = nlohmann::json(stats.m_statsByLevel[level]);
+        }
+    }
+
+    void from_json(const nlohmann::json& j, DatabaseStats& stats)
+    {
+        for (GameLevel level : values<GameLevel>())
+        {
+            stats.m_statsByLevel[level] = j[std::string(toString(level))];
+        }
+    }
+
+    [[nodiscard]] SingleGameLevelDatabaseStats DatabaseStats::total() const
+    {
+        SingleGameLevelDatabaseStats sum{};
+        for (GameLevel level : values<GameLevel>())
+        {
+            sum += m_statsByLevel[level];
+        }
+        return sum;
+    }
+
+    const SingleGameLevelDatabaseStats& DatabaseStats::operator[](GameLevel level) const
+    {
+        return m_statsByLevel[level];
+    }
+
+    SingleGameLevelDatabaseStats& DatabaseStats::operator[](GameLevel level)
+    {
+        return m_statsByLevel[level];
+    }
+
+    void to_json(nlohmann::json& j, const SingleGameLevelDatabaseStats& stats)
+    {
+        j["num_games"] = stats.numGames;
+        j["num_positions"] = stats.numPositions;
+        j["total_player_elo"] = stats.totalPlayerElo;
+        j["num_games_with_elo"] = stats.numGamesWithElo;
+        j["num_games_with_date"] = stats.numGamesWithDate;
+        if (stats.numGamesWithElo)
+        {
+            j["min_elo"] = stats.minElo;
+            j["max_elo"] = stats.maxElo;
+        }
+        if (stats.numGamesWithDate)
+        {
+            j["min_date"] = stats.minDate.toString('-');
+            j["max_date"] = stats.maxDate.toString('-');
+        }
+    }
+
+    void from_json(const nlohmann::json& j, SingleGameLevelDatabaseStats& stats)
+    {
+        stats.numGames = j["num_games"].get<std::size_t>();
+        stats.numPositions = j["num_positions"].get<std::size_t>();
+        stats.totalPlayerElo = j["total_player_elo"].get<std::size_t>();
+        stats.numGamesWithElo = j["num_games_with_elo"].get<std::size_t>();
+        stats.numGamesWithDate = j["num_games_with_date"].get<std::size_t>();
+        if (stats.numGamesWithElo)
+        {
+            stats.minElo = j["min_elo"].get<std::uint16_t>();
+            stats.maxElo = j["max_elo"].get<std::uint16_t>();
+        }
+        if (stats.numGamesWithDate)
+        {
+            stats.minDate = Date::tryParse(j["min_date"].get<std::string>(), '-').value();
+            stats.maxDate = Date::tryParse(j["max_date"].get<std::string>(), '-').value();
+        }
+    }
+
+    SingleGameLevelImportStats& SingleGameLevelImportStats::operator+=(const SingleGameLevelImportStats& rhs)
+    {
+        SingleGameLevelDatabaseStats::operator+=(rhs);
+
+        numSkippedGames += rhs.numSkippedGames;
+
+        return *this;
+    }
+
+    void to_json(nlohmann::json& j, const SingleGameLevelImportStats& stats)
+    {
+        to_json(j, static_cast<const SingleGameLevelDatabaseStats&>(stats));
+
+        j["num_skipped_games"] = stats.numSkippedGames;
+    }
+
+    void from_json(const nlohmann::json& j, SingleGameLevelImportStats& stats)
+    {
+        from_json(j, static_cast<SingleGameLevelDatabaseStats&>(stats));
+        
+        stats.numSkippedGames = j["num_skipped_games"].get<std::size_t>();
     }
 
     ImportStats& ImportStats::operator+=(const ImportStats& rhs)
     {
         for (GameLevel level : values<GameLevel>())
         {
-            statsByLevel[level] += rhs.statsByLevel[level];
+            m_statsByLevel[level] += rhs.m_statsByLevel[level];
         }
 
         return *this;
@@ -34,60 +161,48 @@ namespace persistence
 
     ImportStats::ImportStats(SingleGameLevelImportStats stats, GameLevel level)
     {
-        statsByLevel[level] = stats;
-    }
-
-    [[nodiscard]] std::size_t ImportStats::totalNumGames() const
-    {
-        std::size_t total = 0;
-        for (GameLevel level : values<GameLevel>())
-        {
-            total += statsByLevel[level].numGames;
-        }
-        return total;
-    }
-
-    [[nodiscard]] std::size_t ImportStats::totalNumSkippedGames() const
-    {
-        std::size_t total = 0;
-        for (GameLevel level : values<GameLevel>())
-        {
-            total += statsByLevel[level].numSkippedGames;
-        }
-        return total;
-    }
-
-    [[nodiscard]] std::size_t ImportStats::totalNumPositions() const
-    {
-        std::size_t total = 0;
-        for (GameLevel level : values<GameLevel>())
-        {
-            total += statsByLevel[level].numPositions;
-        }
-        return total;
+        m_statsByLevel[level] = stats;
     }
 
     void ImportStats::add(SingleGameLevelImportStats stats, GameLevel level)
     {
-        statsByLevel[level] += stats;
+        m_statsByLevel[level] += stats;
     }
 
-    SingleGameLevelDatabaseStats& SingleGameLevelDatabaseStats::operator+=(const SingleGameLevelImportStats& rhs)
+    [[nodiscard]] SingleGameLevelImportStats ImportStats::total() const
     {
-        numGames += rhs.numGames;
-        numPositions += rhs.numPositions;
-        
-        return *this;
+        SingleGameLevelImportStats sum{};
+        for (GameLevel level : values<GameLevel>())
+        {
+            sum += m_statsByLevel[level];
+        }
+        return sum;
     }
 
-    DatabaseStats& DatabaseStats::operator+=(const ImportStats& rhs)
+    const SingleGameLevelImportStats& ImportStats::operator[](GameLevel level) const
+    {
+        return m_statsByLevel[level];
+    }
+
+    SingleGameLevelImportStats& ImportStats::operator[](GameLevel level)
+    {
+        return m_statsByLevel[level];
+    }
+
+    void to_json(nlohmann::json& j, const ImportStats& stats)
     {
         for (GameLevel level : values<GameLevel>())
         {
-            statsByLevel[level] += rhs.statsByLevel[level];
+            j[std::string(toString(level))] = nlohmann::json(stats.m_statsByLevel[level]);
         }
+    }
 
-        return *this;
+    void from_json(const nlohmann::json& j, ImportStats& stats)
+    {
+        for (GameLevel level : values<GameLevel>())
+        {
+            stats.m_statsByLevel[level] = j[std::string(toString(level))];
+        }
     }
 
     [[nodiscard]] const std::string& importableFileTypeExtension(ImportableFileType type)
@@ -221,7 +336,10 @@ namespace persistence
 
     void Database::addStats(ImportStats stats)
     {
-        m_stats += stats;
+        for (GameLevel level : values<GameLevel>())
+        {
+            m_stats.add(stats[level], level);
+        }
         saveStats();
     }
 
@@ -230,11 +348,12 @@ namespace persistence
         std::ifstream file(statsPath());
         if (file.is_open())
         {
-            for (GameLevel level : values<GameLevel>())
-            {
-                file >> m_stats.statsByLevel[level].numGames;
-                file >> m_stats.statsByLevel[level].numPositions;
-            }
+            std::string str(
+                (std::istreambuf_iterator<char>(file)),
+                std::istreambuf_iterator<char>()
+            );
+            auto json = nlohmann::json::parse(str);
+            m_stats = json.get<DatabaseStats>();
         }
         else
         {
@@ -245,11 +364,7 @@ namespace persistence
     void Database::saveStats()
     {
         std::ofstream file(statsPath(), std::ios_base::out | std::ios_base::trunc);
-        for (GameLevel level : values<GameLevel>())
-        {
-            file << m_stats.statsByLevel[level].numGames << ' ';
-            file << m_stats.statsByLevel[level].numPositions << ' ';
-        }
+        file << nlohmann::json(m_stats);
     }
     
     void Database::createManifest() const
