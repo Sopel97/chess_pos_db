@@ -267,5 +267,15 @@ namespace persistence
             Entry,
             Traits
         >;
+
+        static_assert(Database::hasEloDiff);
+        static_assert(!Database::hasWhiteElo);
+        static_assert(!Database::hasBlackElo);
+        static_assert(Database::hasFirstGameIndex);
+        static_assert(Database::hasLastGameIndex);
+        static_assert(!Database::hasFirstGameOffset);
+        static_assert(!Database::hasLastGameOffset);
+        static_assert(Database::hasReverseMove);
+        static_assert(!Database::hasMonthSinceYear0);
     }
 }
