@@ -207,7 +207,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(bool{ std::declval<const C>().isInEloRange(std::declval<std::uint16_t>, std::declval<std::uint16_t>) }, Yes{});
+                    -> decltype(bool{ std::declval<const C>().isInEloRange(std::declval<std::uint16_t>(), std::declval<std::uint16_t>(), std::declval<bool>()) }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -223,7 +223,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(bool{ std::declval<const C>().isInMonthRange(std::declval<std::uint32_t>, std::declval<std::uint32_t>) }, Yes{});
+                    -> decltype(bool{ std::declval<const C>().isInMonthRange(std::declval<std::uint32_t>(), std::declval<std::uint32_t>(), std::declval<bool>()) }, Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -390,6 +390,52 @@ namespace persistence
                 return path.filename().string().find("index") != std::string::npos;
             }
 
+            [[nodiscard]] static auto makeFilter(const query::Request& query)
+            {
+                const auto filter = query.filters.value_or(query::QueryFilters{});
+
+                // We use a default filter just so we have simpler logic.
+                // The predicate still always returns true because the original
+                // query doesn't have any filters.
+                const std::uint16_t minElo = filter.minElo.value_or(0);
+                const std::uint16_t maxElo = filter.maxElo.value_or(std::numeric_limits<std::uint16_t>::max());
+                const bool includeUnknownElo = filter.includeUnknownElo;
+
+                const std::uint32_t minMonth = filter.minMonthSinceYear0.value_or(0);
+                const std::uint32_t maxMonth = filter.minMonthSinceYear0.value_or(std::numeric_limits<std::uint32_t>::max());
+                const bool includeUnknownMonth = filter.includeUnknownMonth;
+
+                return [
+                        hasFilters = query.filters.has_value(),
+                        minElo, maxElo, includeUnknownElo,
+                        minMonth, maxMonth, includeUnknownMonth
+                    ] (const PersistedEntryType& entry) {
+
+                    if (!hasFilters)
+                    {
+                        return true;
+                    }
+
+                    if constexpr (allowsFilteringByEloRange)
+                    {
+                        if (!entry.isInEloRange(minElo, maxElo, includeUnknownElo))
+                        {
+                            return false;
+                        }
+                    }
+
+                    if constexpr (allowsFilteringByMonthRange)
+                    {
+                        if (!entry.isInMonthRange(minMonth, maxMonth, includeUnknownMonth))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                };
+            }
+
             template <typename T>
             [[nodiscard]] static std::vector<std::vector<T>> createBuffers(std::size_t numBuffers, std::size_t size)
             {
@@ -540,6 +586,8 @@ namespace persistence
                     PositionStats& stats
                 )
                 {
+                    auto filter = makeFilter(query);
+
                     for (auto&& [select, fetch] : query.fetchingOptions)
                     {
                         auto&& statsForThisSelect = stats[select];
@@ -558,10 +606,13 @@ namespace persistence
                             for (auto&& entry : entries)
                             {
                                 if (
-                                    (select == query::Select::Continuations && CompareEqualWithReverseMove{}(entry, key))
-                                    || (select == query::Select::Transpositions && CompareEqualWithoutReverseMove{}(entry, key) && !CompareEqualWithReverseMove{}(entry, key))
-                                    || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
+                                    (
+                                        (select == query::Select::Continuations && CompareEqualWithReverseMove{}(entry, key))
+                                        || (select == query::Select::Transpositions && CompareEqualWithoutReverseMove{}(entry, key) && !CompareEqualWithReverseMove{}(entry, key))
+                                        || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
                                     )
+                                    && filter(entry)
+                                   )
                                 {
                                     if (entry.isFirst())
                                     {
@@ -602,10 +653,13 @@ namespace persistence
                                 const GameResult result = entry.result();
 
                                 if (
-                                    (select == query::Select::Continuations && CompareEqualWithReverseMove{}(entry, key))
-                                    || (select == query::Select::Transpositions && CompareEqualWithoutReverseMove{}(entry, key) && !CompareEqualWithReverseMove{}(entry, key))
-                                    || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
+                                    (
+                                        (select == query::Select::Continuations && CompareEqualWithReverseMove{}(entry, key))
+                                        || (select == query::Select::Transpositions && CompareEqualWithoutReverseMove{}(entry, key) && !CompareEqualWithReverseMove{}(entry, key))
+                                        || (select == query::Select::All && CompareEqualWithoutReverseMove{}(entry, key))
                                     )
+                                    && filter(entry)
+                                   )
                                 {
                                     statsForThisSelect[level][result].combine(entry);
                                 }
@@ -624,6 +678,7 @@ namespace persistence
                 {
                     if constexpr (hasReverseMove)
                     {
+                        auto filter = makeFilter(query);
 
                         if constexpr (hasSmearedEntry)
                         {
@@ -633,7 +688,10 @@ namespace persistence
 
                             for (auto&& entry : entries)
                             {
-                                if (!CompareEqualWithoutReverseMove{}(entry, key))
+                                if (
+                                    !CompareEqualWithoutReverseMove{}(entry, key)
+                                    || !filter(entry)
+                                    )
                                 {
                                     continue;
                                 }
@@ -680,7 +738,10 @@ namespace persistence
                         {
                             for (auto&& entry : entries)
                             {
-                                if (!CompareEqualWithoutReverseMove{}(entry, key))
+                                if (
+                                    !CompareEqualWithoutReverseMove{}(entry, key)
+                                    || !filter(entry)
+                                    )
                                 {
                                     continue;
                                 }

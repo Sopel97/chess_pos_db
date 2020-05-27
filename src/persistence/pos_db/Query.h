@@ -142,6 +142,9 @@ namespace query
         std::optional<std::uint32_t> minMonthSinceYear0;
         std::optional<std::uint32_t> maxMonthSinceYear0;
 
+        bool includeUnknownElo = false;
+        bool includeUnknownMonth = false;
+
         friend void to_json(nlohmann::json& j, const QueryFilters& filters);
 
         friend void from_json(const nlohmann::json& j, QueryFilters& filters);

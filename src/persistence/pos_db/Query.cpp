@@ -154,6 +154,9 @@ namespace query
         {
             j["max_month_since_year_0"] = *filters.maxMonthSinceYear0;
         }
+
+        j["include_unknown_elo"] = filters.includeUnknownElo;
+        j["include_unknown_month"] = filters.includeUnknownMonth;
     }
 
     void from_json(const nlohmann::json& j, QueryFilters& filters)
@@ -176,6 +179,16 @@ namespace query
         if (j.contains("max_month_since_year_0"))
         {
             filters.maxMonthSinceYear0 = j["max_month_since_year_0"].get<std::uint32_t>();
+        }
+
+        if (j.contains("include_unknown_elo"))
+        {
+            filters.includeUnknownElo = j["include_unknown_elo"].get<bool>();
+        }
+
+        if (j.contains("include_unknown_month"))
+        {
+            filters.includeUnknownMonth = j["include_unknown_month"].get<bool>();
         }
     }
 
