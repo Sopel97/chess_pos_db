@@ -4,15 +4,14 @@
 #include "chess/GameClassification.h"
 #include "chess/Position.h"
 
-namespace pos_db
+namespace persistence
 {
     struct EntryConstructionParameters
     {
         PositionWithZobrist position;
         ReverseMove reverseMove;
 
-        std::uint64_t firstGameIndexOrOffset;
-        std::uint64_t lastGameIndexOrOffset;
+        std::uint64_t gameIndexOrOffset;
 
         std::uint16_t whiteElo;
         std::uint16_t blackElo;
@@ -20,5 +19,10 @@ namespace pos_db
 
         GameLevel level;
         GameResult result;
+
+        [[nodiscard]] std::int32_t eloDiff() const
+        {
+            return static_cast<std::int32_t>(whiteElo) - static_cast<std::int32_t>(blackElo);
+        }
     };
 }

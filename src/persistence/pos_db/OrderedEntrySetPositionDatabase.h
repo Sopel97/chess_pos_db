@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Database.h"
+#include "EntryConstructionParameters.h"
 #include "IndexedGameHeaderStorage.h"
 #include "Query.h"
 
@@ -194,6 +195,10 @@ namespace persistence
             static constexpr bool hasFirstGameOffset = detail::HasFirstGameOffset<EntryType>::value;
             static constexpr bool hasLastGameOffset = detail::HasLastGameOffset<EntryType>::value;
             static constexpr bool hasReverseMove = detail::HasReverseMove<EntryType>::value;
+
+            static constexpr bool needsElo = hasEloDiff;
+
+            static constexpr bool needsDate = false;
 
             static constexpr bool usesGameIndex = hasFirstGameIndex || hasLastGameIndex;
             static constexpr bool usesGameOffset = hasFirstGameOffset || hasLastGameOffset;
@@ -2155,44 +2160,9 @@ namespace persistence
                 std::vector<PersistedEntryType> bucket = pipeline.getEmptyBuffer();
 
                 auto processPosition = [this, &bucket, &pipeline](
-                    const PositionWithZobrist& position,
-                    const ReverseMove& reverseMove,
-                    GameLevel level,
-                    GameResult result,
-                    auto gameIndexOrOffset,
-                    std::uint64_t eloDiff
+                    const EntryConstructionParameters& params
                     ) {
-                        // TODO: how to make this better? currently we have a lot of combinations
-                        if constexpr (hasEloDiff)
-                        {
-                            if constexpr (hasFirstGame + hasLastGame == 0)
-                            {
-                                bucket.emplace_back(position, reverseMove, level, result, eloDiff);
-                            }
-                            else if constexpr (hasFirstGame + hasLastGame == 1)
-                            {
-                                bucket.emplace_back(position, reverseMove, level, result, gameIndexOrOffset, eloDiff);
-                            }
-                            else if constexpr (hasFirstGame + hasLastGame == 2)
-                            {
-                                bucket.emplace_back(position, reverseMove, level, result, gameIndexOrOffset, gameIndexOrOffset, eloDiff);
-                            }
-                        }
-                        else
-                        {
-                            if constexpr (hasFirstGame + hasLastGame == 0)
-                            {
-                                bucket.emplace_back(position, reverseMove, level, result);
-                            }
-                            else if constexpr (hasFirstGame + hasLastGame == 1)
-                            {
-                                bucket.emplace_back(position, reverseMove, level, result, gameIndexOrOffset);
-                            }
-                            else if constexpr (hasFirstGame + hasLastGame == 2)
-                            {
-                                bucket.emplace_back(position, reverseMove, level, result, gameIndexOrOffset, gameIndexOrOffset);
-                            }
-                        }
+                        bucket.emplace_back(params);
 
                         if (bucket.size() == bucket.capacity())
                         {
@@ -2201,11 +2171,14 @@ namespace persistence
                 };
 
                 ImportStats stats{};
+                EntryConstructionParameters params;
                 for (auto& file : files)
                 {
                     const auto& path = file.path();
                     const auto level = file.level();
                     const auto type = file.type();
+
+                    params.level = level;
 
                     if (type == ImportableFileType::Pgn)
                     {
@@ -2226,32 +2199,46 @@ namespace persistence
                                 continue;
                             }
 
-                            const std::int64_t eloDiff = [&game]() {
-                                if constexpr (hasEloDiff) return game.eloDiff();
-                                else return 0;
-                            }();
+                            params.result = *result;
 
-                            const auto gameIndexOrOffset = [this, level]() {
-                                if constexpr (usesGameIndex) return static_cast<GameIndexType>(m_headers[level]->nextGameId());
-                                else if constexpr (usesGameOffset) return m_headers[level]->nextGameOffset();
-                                else return 0;
-                            }();
+                            if constexpr (needsElo)
+                            {
+                                params.whiteElo = game.whiteElo();
+                                params.blackElo = game.blackElo();
+                            }
 
-                            PositionWithZobrist position = PositionWithZobrist::startPosition();
-                            ReverseMove reverseMove{};
+                            if constexpr (hasGameHeaders)
+                            {
+                                if constexpr (usesGameIndex)
+                                {
+                                    params.gameIndexOrOffset = m_headers[level]->nextGameId();
+                                }
+                                else if constexpr (usesGameOffset)
+                                {
+                                    params.gameIndexOrOffset = m_headers[level]->nextGameOffset();
+                                }
+                            }
 
-                            processPosition(position, reverseMove, level, *result, gameIndexOrOffset, eloDiff);
+                            if constexpr (needsDate)
+                            {
+                                params.monthSinceYear0 = game.date().monthSinceYear0();
+                            }
+
+                            params.position = PositionWithZobrist::startPosition();
+                            params.reverseMove = {};
+
+                            processPosition(params);
                             std::size_t numPositionsInGame = 1;
                             for (auto& san : game.moves())
                             {
-                                const Move move = san::sanToMove(position, san);
+                                const Move move = san::sanToMove(params.position, san);
                                 if (move == Move::null())
                                 {
                                     break;
                                 }
 
-                                reverseMove = position.doMove(move);
-                                processPosition(position, reverseMove, level, *result, gameIndexOrOffset, eloDiff);
+                                params.reverseMove = params.position.doMove(move);
+                                processPosition(params);
 
                                 ++numPositionsInGame;
                             }
@@ -2260,7 +2247,7 @@ namespace persistence
 
                             if constexpr (hasGameHeaders)
                             {
-                                m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).index;
+                                m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u));
                             }
 
                             stats[level].numGames += 1;
@@ -2286,37 +2273,50 @@ namespace persistence
                                 continue;
                             }
 
-                            const std::int64_t eloDiff = [&game]() {
-                                if constexpr (hasEloDiff)
+                            params.result = *result;
+
+                            auto gameHeader = game.gameHeader();
+
+                            if constexpr (needsElo)
+                            {
+                                params.whiteElo = gameHeader.whiteElo();
+                                params.blackElo = gameHeader.blackElo();
+                            }
+
+                            if constexpr (hasGameHeaders)
+                            {
+                                if constexpr (usesGameIndex)
                                 {
-                                    auto gameHeader = game.gameHeader();
-                                    return (std::uint64_t)gameHeader.whiteElo() - (std::uint64_t)gameHeader.blackElo();
+                                    params.gameIndexOrOffset = m_headers[level]->nextGameId();
                                 }
-                                else return 0;
-                            }();
+                                else if constexpr (usesGameOffset)
+                                {
+                                    params.gameIndexOrOffset = m_headers[level]->nextGameOffset();
+                                }
+                            }
 
-                            const auto gameIndexOrOffset = [this, level]() {
-                                if constexpr (usesGameIndex) return static_cast<GameIndexType>(m_headers[level]->nextGameId());
-                                else if constexpr (usesGameOffset) return m_headers[level]->nextGameOffset();
-                                else return 0;
-                            }();
+                            if constexpr (needsDate)
+                            {
+                                params.monthSinceYear0 = gameHeader.date().monthSinceYear0();
+                            }
 
-                            PositionWithZobrist position = PositionWithZobrist::startPosition();
-                            ReverseMove reverseMove{};
-                            processPosition(position, reverseMove, level, *result, gameIndexOrOffset, eloDiff);
+                            params.position = PositionWithZobrist::startPosition();
+                            params.reverseMove = {};
+
+                            processPosition(params);
                             auto moves = game.moves();
                             while (moves.hasNext())
                             {
-                                const auto move = moves.next(position);
-                                reverseMove = position.doMove(move);
-                                processPosition(position, reverseMove, level, *result, gameIndexOrOffset, eloDiff);
+                                const auto move = moves.next(params.position);
+                                params.reverseMove = params.position.doMove(move);
+                                processPosition(params);
                             }
 
                             const auto numPositionsInGame = game.numPlies() + 1;
 
                             if constexpr (hasGameHeaders)
                             {
-                                m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u)).index;
+                                m_headers[level]->addGame(game, static_cast<std::uint16_t>(numPositionsInGame - 1u));
                             }
 
                             stats[level].numGames += 1;

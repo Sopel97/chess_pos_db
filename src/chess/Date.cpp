@@ -192,3 +192,10 @@ Date::Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :
 {
     return m_day;
 }
+
+[[nodiscard]] std::uint32_t Date::monthSinceYear0() const
+{
+    // 0 means unknown, month default to january if not present.
+    auto month = m_month == 0 ? 1 : m_month;
+    return m_year * month;
+}

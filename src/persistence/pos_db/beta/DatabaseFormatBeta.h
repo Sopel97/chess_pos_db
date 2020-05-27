@@ -3,6 +3,8 @@
 #include "chess/Chess.h"
 #include "chess/Position.h"
 
+#include "persistence/pos_db/EntryConstructionParameters.h"
+
 #include "persistence/pos_db/OrderedEntrySetPositionDatabase.h"
 
 #include "util/ArithmeticUtility.h"
@@ -388,9 +390,9 @@ namespace persistence
 
             Entry() = default;
 
-            Entry(const PositionWithZobrist& pos, const ReverseMove& reverseMove, GameLevel level, GameResult result, std::uint64_t gameOffset) :
-                m_key(pos, reverseMove, level, result),
-                m_countAndGameOffset(SingleGame{}, gameOffset)
+            Entry(const EntryConstructionParameters& params) :
+                m_key(params.position, params.reverseMove, params.level, params.result),
+                m_countAndGameOffset(SingleGame{}, params.gameIndexOrOffset)
             {
             }
 

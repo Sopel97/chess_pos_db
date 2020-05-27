@@ -3,6 +3,8 @@
 #include "chess/Chess.h"
 #include "chess/Position.h"
 
+#include "persistence/pos_db/EntryConstructionParameters.h"
+
 #include "persistence/pos_db/OrderedEntrySetPositionDatabase.h"
 
 #include "util/ArithmeticUtility.h"
@@ -68,33 +70,25 @@ namespace persistence
                 m_packedInfo = (packedReverseMove.packed() << reverseMoveShift);
             }
 
-            Entry(
-                const PositionWithZobrist & pos, 
-                const ReverseMove & reverseMove, 
-                GameLevel level, 
-                GameResult result, 
-                std::uint32_t firstGameIndex, 
-                std::uint32_t lastGameIndex, 
-                std::int64_t eloDiff
-            ) :
+            Entry(const EntryConstructionParameters& params) :
                 m_count(1),
-                m_firstGameIndex(firstGameIndex),
-                m_lastGameIndex(lastGameIndex)
+                m_firstGameIndex(static_cast<std::uint32_t>(params.gameIndexOrOffset)),
+                m_lastGameIndex(static_cast<std::uint32_t>(params.gameIndexOrOffset))
             {
-                const auto zobrist = pos.zobrist();
+                const auto zobrist = params.position.zobrist();
                 m_hashPart1 = zobrist.high;
                 m_eloDiffAndHashPart2 =
-                    (static_cast<std::uint64_t>(eloDiff) << additionalHashBits)
+                    (static_cast<std::uint64_t>(params.eloDiff()) << additionalHashBits)
                     | (zobrist.low & nbitmask<std::uint64_t>[additionalHashBits]);
 
-                auto packedReverseMove = PackedReverseMove(reverseMove);
+                auto packedReverseMove = PackedReverseMove(params.reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
                 // We want entries ordered with reverse move to also be ordered by just hash
                 // so we have to modify the lowest bits.
                 m_packedInfo =
                     (packedReverseMove.packed() << reverseMoveShift)
-                    | ((ordinal(level) & levelMask) << levelShift)
-                    | ((ordinal(result) & resultMask) << resultShift);
+                    | ((ordinal(params.level) & levelMask) << levelShift)
+                    | ((ordinal(params.result) & resultMask) << resultShift);
             }
 
             Entry(const Entry&) = default;

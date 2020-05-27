@@ -41,10 +41,10 @@ namespace persistence
         IndexedGameHeaderStorage& operator=(const IndexedGameHeaderStorage&) = delete;
         IndexedGameHeaderStorage& operator=(IndexedGameHeaderStorage&&) noexcept = default;
 
-        [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game);
-        [[nodiscard]] HeaderEntryLocation addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount);
-        [[nodiscard]] HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game);
-        [[nodiscard]] HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
+        HeaderEntryLocation addGame(const pgn::UnparsedGame& game);
+        HeaderEntryLocation addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount);
+        HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game);
+        HeaderEntryLocation addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
 
         [[nodiscard]] std::uint64_t nextGameId() const;
 
@@ -70,12 +70,12 @@ namespace persistence
         ext::Vector<char> m_header;
         ext::Vector<std::size_t> m_index;
 
-        [[nodiscard]] HeaderEntryLocation addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount);
-        [[nodiscard]] HeaderEntryLocation addHeader(const pgn::UnparsedGame& game);
-        [[nodiscard]] HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game);
-        [[nodiscard]] HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
+        HeaderEntryLocation addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount);
+        HeaderEntryLocation addHeader(const pgn::UnparsedGame& game);
+        HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game);
+        HeaderEntryLocation addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount);
 
-        [[nodiscard]] HeaderEntryLocation addHeader(const PackedGameHeaderType& entry);
+        HeaderEntryLocation addHeader(const PackedGameHeaderType& entry);
 
         [[nodiscard]] std::uint64_t nextId() const;
     };

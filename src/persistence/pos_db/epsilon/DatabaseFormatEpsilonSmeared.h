@@ -7,6 +7,8 @@
 #include "chess/Position.h"
 #include "chess/MoveIndex.h"
 
+#include "persistence/pos_db/EntryConstructionParameters.h"
+
 #include "persistence/pos_db/OrderedEntrySetPositionDatabase.h"
 
 #include "util/ArithmeticUtility.h"
@@ -269,29 +271,24 @@ namespace persistence
                 m_rest.init<PackedReverseMove>(packedReverseMove);
             }
 
-            SmearedEntry(
-                const PositionWithZobrist& pos,
-                const ReverseMove& reverseMove,
-                GameLevel level,
-                GameResult result,
-                std::int64_t eloDiff
-            ) :
+            SmearedEntry(const EntryConstructionParameters& params) :
                 m_rest(
                     util::meta::TypeList<IsFirst, Level, Result>{},
                     true,
                     /* | (0 << countShift) because 0 means one entry*/
-                    ordinal(level),
-                    ordinal(result)
+                    ordinal(params.level),
+                    ordinal(params.result)
                 )
             {
+                const auto eloDiff = params.eloDiff();
                 const std::uint32_t eloDiffSign = eloDiff < 0;
-                const auto zobrist = pos.zobrist();
+                const auto zobrist = params.position.zobrist();
                 m_hash = zobrist.high;
                 m_rest.init<HashLow>(zobrist.low);
                 m_rest.init<EloDiffSign>(eloDiffSign);
                 
                 const std::uint32_t absEloDiff = std::min<std::uint32_t>(static_cast<std::uint32_t>(std::abs(eloDiff)), maxAbsEloDiff);
-                auto packedReverseMove = detail::packReverseMove(pos, reverseMove);
+                auto packedReverseMove = detail::packReverseMove(params.position, params.reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
                 // We want entries ordered with reverse move to also be ordered by just hash
                 // so we have to modify the lowest bits.

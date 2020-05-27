@@ -18,25 +18,25 @@ namespace persistence
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const pgn::UnparsedGame& game)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const pgn::UnparsedGame& game)
     {
         return addHeader(game);
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
         return addHeader(game, plyCount);
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const bcgn::UnparsedBcgnGame& game)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const bcgn::UnparsedBcgnGame& game)
     {
         return addHeader(game);
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addGame(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
     {
         return addHeader(game, plyCount);
     }
@@ -123,31 +123,31 @@ namespace persistence
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const pgn::UnparsedGame& game)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const pgn::UnparsedGame& game)
     {
         return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId())));
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const pgn::UnparsedGame& game, std::uint16_t plyCount)
     {
         return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId()), plyCount));
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const bcgn::UnparsedBcgnGame& game)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const bcgn::UnparsedBcgnGame& game)
     {
         return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId())));
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const bcgn::UnparsedBcgnGame& game, std::uint16_t plyCount)
     {
         return addHeader(PackedGameHeaderT(game, static_cast<GameIndexType>(nextId()), plyCount));
     }
 
     template <typename PackedGameHeaderT>
-    [[nodiscard]] HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const PackedGameHeaderT& entry)
+    HeaderEntryLocation IndexedGameHeaderStorage<PackedGameHeaderT>::addHeader(const PackedGameHeaderT& entry)
     {
         const std::uint64_t gameIdx = entry.gameIdx();
         const std::uint64_t headerSizeBytes = m_header.size();
