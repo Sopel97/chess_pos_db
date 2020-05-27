@@ -155,6 +155,11 @@ namespace util
         {
         }
 
+        explicit constexpr PackedInts(UnderlyingType v) :
+            m_value(v)
+        {
+        }
+
         template <typename... LocalBitSpanTs, typename... ValueTs>
         constexpr PackedInts(meta::TypeList<LocalBitSpanTs...>, ValueTs... values) :
             m_value((LocalBitSpanTs::store(values) | ...))
@@ -177,14 +182,14 @@ namespace util
         constexpr PackedInts& operator=(PackedInts&&) = default;
 
         template <typename BitSpanT>
-        [[nodiscard]] constexpr auto get()
+        [[nodiscard]] constexpr auto get() const
         {
             static_assert(meta::IsContained<BitSpanT, BitSpanTs...>::value, "The bit span doesn't belong to this type.");
             return BitSpanT::template load(m_value);
         }
 
         template <typename... LocalBitSpanTs>
-        [[nodiscard]] constexpr auto getRaw()
+        [[nodiscard]] constexpr auto getRaw() const
         {
             static_assert((meta::IsContained<LocalBitSpanTs, BitSpanTs...>::value && ...), "The bit span doesn't belong to this type.");
             return m_value & (LocalBitSpanTs::mask | ...);

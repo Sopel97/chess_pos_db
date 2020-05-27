@@ -10,6 +10,7 @@
 #include "persistence/pos_db/OrderedEntrySetPositionDatabase.h"
 
 #include "util/ArithmeticUtility.h"
+#include "util/BitPacking.h"
 
 #include <cstdint>
 
@@ -212,73 +213,60 @@ namespace persistence
         struct SmearedEntry
         {
             /*
-                - 32 bits hash
-
-                - 32 bits hash
+                - 64 bits hash
 
                 - 24 bits hash
+                - 20 bits reverse move
                 - 2 bit result
                 - 2 bit level
                 - 2 bit count
+                - 12 bits abs elo diff
                 - 1 bit first
                 - 1 bit elo diff sign
-
-                - 20 bits reverse move
-                - 12 bits abs elo diff
             */
 
-            static constexpr std::uint32_t countBits = 2;
-            static constexpr std::uint32_t absEloDiffBits = 12;
+            using HashLow           = util::BitField<std::uint64_t, std::uint64_t, 0xFFFF'FF00'0000'0000ull>;
+            using PackedReverseMove = util::BitField<std::uint64_t, std::uint64_t, 0x0000'00FF'FFF0'0000ull>;
+            using Result            = util::BitField<std::uint64_t, std::uint64_t, 0x0000'0000'000C'0000ull>;
+            using Level             = util::BitField<std::uint64_t, std::uint64_t, 0x0000'0000'0003'0000ull>;
+            using Count             = util::BitField<std::uint64_t, std::uint64_t, 0x0000'0000'0000'C000ull>;
+            using AbsEloDiff        = util::BitField<std::uint64_t, std::uint64_t, 0x0000'0000'0000'3FFCull>;
+            using IsFirst           = util::BitField<std::uint64_t, std::uint64_t, 0x0000'0000'0000'0002ull>;
+            using EloDiffSign       = util::BitField<std::uint64_t, std::uint64_t, 0x0000'0000'0000'0001ull>;
 
-            static constexpr std::uint32_t countBitsMask = 0x3;
-            static constexpr std::uint32_t absEloDiffBitsMask = 0x3FF;
+            using Rest = util::PackedInts<
+                HashLow,
+                PackedReverseMove,
+                Result,
+                Level,
+                Count,
+                AbsEloDiff,
+                IsFirst,
+                EloDiffSign
+            >;
 
             static constexpr std::int64_t maxAbsEloDiff = 800;
-
-            static constexpr std::uint32_t lastHashPartMask = 0xFFFFFF00u;
-            static constexpr std::uint32_t resultMask = 0x0000000C0u;
-            static constexpr std::uint32_t levelMask = 0x000000030u;
-
-            static constexpr std::uint32_t lastHashPartShift = 8;
-            static constexpr std::uint32_t resultShift = 6;
-            static constexpr std::uint32_t levelShift = 4;
-
-            static constexpr std::uint32_t countMask = 0x0000000Cu;
-            static constexpr std::uint32_t isFirstMask = 0x00000002u;
-            static constexpr std::uint32_t eloDiffSignMask = 0x00000001u;
-
-            static constexpr std::uint32_t countShift = 2;
-            static constexpr std::uint32_t isFirstShift = 1;
-
-            static constexpr std::uint32_t reverseMoveMask = 0xFFFFF000u;
-
-            static constexpr std::uint32_t reverseMoveShift = 12;
-
-            static constexpr std::uint32_t absEloDiffMask = 0x00000FFFu;
 
             friend struct UnsmearedEntry;
 
             SmearedEntry() :
-                m_hash0{},
-                m_hash1{},
-                m_hashLevelResultCountFlags{isFirstMask},
-                m_reverseMoveAndAbsEloDiff{}
+                m_hash{},
+                m_rest(IsFirst::mask)
             {
             }
 
             SmearedEntry(const PositionWithZobrist& pos, const ReverseMove& reverseMove = ReverseMove{}) :
-                m_hashLevelResultCountFlags(isFirstMask) /* | (0 << countShift) because 0 means one entry*/
+                m_rest(IsFirst::mask) /* | (0 << countShift) because 0 means one entry*/
             {
                 const auto zobrist = pos.zobrist();
-                m_hash0 = zobrist.high >> 32;
-                m_hash1 = static_cast<std::uint32_t>(zobrist.high);
-                m_hashLevelResultCountFlags |= (zobrist.low & lastHashPartMask);
+                m_hash = zobrist.high;
+                m_rest.init<HashLow>(zobrist.low);
 
                 auto packedReverseMove = detail::packReverseMove(pos, reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
                 // We want entries ordered with reverse move to also be ordered by just hash
                 // so we have to modify the lowest bits.
-                m_reverseMoveAndAbsEloDiff = packedReverseMove << reverseMoveShift;
+                m_rest.init<PackedReverseMove>(packedReverseMove);
             }
 
             SmearedEntry(
@@ -288,29 +276,27 @@ namespace persistence
                 GameResult result,
                 std::int64_t eloDiff
             ) :
-                m_hashLevelResultCountFlags(
-                    isFirstMask 
+                m_rest(
+                    util::meta::TypeList<IsFirst, Level, Result>{},
+                    true,
                     /* | (0 << countShift) because 0 means one entry*/
-                    | (ordinal(level) << levelShift)
-                    | (ordinal(result) << resultShift)
+                    ordinal(level),
+                    ordinal(result)
                 )
             {
                 const std::uint32_t eloDiffSign = eloDiff < 0;
                 const auto zobrist = pos.zobrist();
-                m_hash0 = zobrist.high >> 32;
-                m_hash1 = static_cast<std::uint32_t>(zobrist.high);
-                m_hashLevelResultCountFlags |= 
-                    (zobrist.low & lastHashPartMask)
-                    | eloDiffSign;
-
+                m_hash = zobrist.high;
+                m_rest.init<HashLow>(zobrist.low);
+                m_rest.init<EloDiffSign>(eloDiffSign);
+                
                 const std::uint32_t absEloDiff = std::min<std::uint32_t>(static_cast<std::uint32_t>(std::abs(eloDiff)), maxAbsEloDiff);
                 auto packedReverseMove = detail::packReverseMove(pos, reverseMove);
                 // m_hash[0] is the most significant quad, m_hash[3] is the least significant
                 // We want entries ordered with reverse move to also be ordered by just hash
                 // so we have to modify the lowest bits.
-                m_reverseMoveAndAbsEloDiff = 
-                    (packedReverseMove << reverseMoveShift)
-                    | absEloDiff;
+                m_rest.init<AbsEloDiff>(absEloDiff);
+                m_rest.init<PackedReverseMove>(packedReverseMove);
             }
 
             SmearedEntry(const SmearedEntry&) = default;
@@ -320,24 +306,24 @@ namespace persistence
 
             [[nodiscard]] GameLevel level() const
             {
-                return fromOrdinal<GameLevel>((m_hashLevelResultCountFlags & levelMask) >> levelShift);
+                return fromOrdinal<GameLevel>(static_cast<int>(m_rest.get<Level>()));
             }
 
             [[nodiscard]] GameResult result() const
             {
-                return fromOrdinal<GameResult>((m_hashLevelResultCountFlags & resultMask) >> resultShift);
+                return fromOrdinal<GameResult>(static_cast<int>(m_rest.get<Result>()));
             }
 
             [[nodiscard]] std::uint32_t absEloDiff() const
             {
-                return m_reverseMoveAndAbsEloDiff & absEloDiffMask;
+                return static_cast<std::uint32_t>(m_rest.get<AbsEloDiff>());
             }
 
             [[nodiscard]] std::array<std::uint64_t, 2> hash() const
             {
                 return std::array<std::uint64_t, 2>{
-                    (static_cast<std::uint64_t>(m_hash0) << 32) | m_hash0,
-                        static_cast<std::uint64_t>(additionalHash())
+                    m_hash,
+                    m_rest.get<HashLow>()
                 };
             }
 
@@ -348,41 +334,35 @@ namespace persistence
 
             [[nodiscard]] std::uint32_t countMinusOne() const
             {
-                return (m_hashLevelResultCountFlags & countMask) >> countShift;
+                return static_cast<std::uint32_t>(m_rest.get<Count>());
             }
 
             [[nodiscard]] ReverseMove reverseMove(const Position& pos) const
             {
-                const std::uint32_t packedInt = (m_reverseMoveAndAbsEloDiff & reverseMoveMask) >> reverseMoveShift;
+                const std::uint32_t packedInt = static_cast<std::uint32_t>(m_rest.get<PackedReverseMove>());
                 return detail::unpackReverseMove(pos, packedInt);
             }
 
             [[nodiscard]] bool isFirst() const
             {
-                return m_hashLevelResultCountFlags & isFirstMask;
+                return m_rest.getRaw<IsFirst>();
             }
 
             [[nodiscard]] bool isEloNegative() const
             {
-                return m_hashLevelResultCountFlags & eloDiffSignMask;
+                return m_rest.getRaw<EloDiffSign>();
             }
 
             struct CompareLessWithReverseMove
             {
                 [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
                 {
-                    if (lhs.m_hash0 < rhs.m_hash0) return true;
-                    else if (lhs.m_hash0 > rhs.m_hash0) return false;
+                    if (lhs.m_hash < rhs.m_hash) return true;
+                    else if (lhs.m_hash > rhs.m_hash) return false;
 
-                    if (lhs.m_hash1 < rhs.m_hash1) return true;
-                    else if (lhs.m_hash1 > rhs.m_hash1) return false;
-
-                    const auto lhsAdditionalHash = lhs.additionalHash();
-                    const auto rhsAdditionalHash = rhs.additionalHash();
-                    if (lhsAdditionalHash < rhsAdditionalHash) return true;
-                    else if (lhsAdditionalHash > rhsAdditionalHash) return false;
-
-                    return ((lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask) < (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask));
+                    const auto lhsRest = lhs.m_rest.getRaw<HashLow, PackedReverseMove>();
+                    const auto rhsRest = rhs.m_rest.getRaw<HashLow, PackedReverseMove>();
+                    return lhsRest < rhsRest;
                 }
             };
 
@@ -390,15 +370,12 @@ namespace persistence
             {
                 [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
                 {
-                    if (lhs.m_hash0 < rhs.m_hash0) return true;
-                    else if (lhs.m_hash0 > rhs.m_hash0) return false;
+                    if (lhs.m_hash < rhs.m_hash) return true;
+                    else if (lhs.m_hash > rhs.m_hash) return false;
 
-                    if (lhs.m_hash1 < rhs.m_hash1) return true;
-                    else if (lhs.m_hash1 > rhs.m_hash1) return false;
-
-                    const auto lhsAdditionalHash = lhs.additionalHash();
-                    const auto rhsAdditionalHash = rhs.additionalHash();
-                    return lhsAdditionalHash < rhsAdditionalHash;
+                    const auto lhsRest = lhs.m_rest.getRaw<HashLow>();
+                    const auto rhsRest = rhs.m_rest.getRaw<HashLow>();
+                    return lhsRest < rhsRest;
                 }
             };
 
@@ -406,24 +383,14 @@ namespace persistence
             {
                 [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
                 {
-                    if (lhs.m_hash0 < rhs.m_hash0) return true;
-                    else if (lhs.m_hash0 > rhs.m_hash0) return false;
+                    if (lhs.m_hash < rhs.m_hash) return true;
+                    else if (lhs.m_hash > rhs.m_hash) return false;
 
-                    if (lhs.m_hash1 < rhs.m_hash1) return true;
-                    else if (lhs.m_hash1 > rhs.m_hash1) return false;
-
-                    const auto lhsAdditionalHash = lhs.additionalHash();
-                    const auto rhsAdditionalHash = rhs.additionalHash();
-                    if (lhsAdditionalHash < rhsAdditionalHash) return true;
-                    else if (lhsAdditionalHash > rhsAdditionalHash) return false;
-
-                    const auto lhsRev = (lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask);
-                    const auto rhsRev = (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask);
-                    if (lhsRev < rhsRev) return true;
-                    else if (lhsRev > rhsRev) return false;
-
-                    const auto lhsRest = lhs.m_hashLevelResultCountFlags & (levelMask | resultMask);
-                    const auto rhsRest = rhs.m_hashLevelResultCountFlags & (levelMask | resultMask);
+                    // Relative order of packed reverse move and level/result makes
+                    // the packed reverse move more significant as it should be.
+                    // Also hash is the most significant.
+                    const auto lhsRest = lhs.m_rest.getRaw<HashLow, PackedReverseMove, Level, Result>();
+                    const auto rhsRest = rhs.m_rest.getRaw<HashLow, PackedReverseMove, Level, Result>();
                     return lhsRest < rhsRest;
                 }
             };
@@ -433,10 +400,8 @@ namespace persistence
                 [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
                 {
                     return
-                        lhs.m_hash0 == rhs.m_hash0
-                        && lhs.m_hash1 == rhs.m_hash1
-                        && lhs.additionalHash() == rhs.additionalHash()
-                        && (lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask) == (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask);
+                        lhs.m_hash == rhs.m_hash
+                        && lhs.m_rest.getRaw<HashLow, PackedReverseMove>() == rhs.m_rest.getRaw<HashLow, PackedReverseMove>();
                 }
             };
 
@@ -445,9 +410,8 @@ namespace persistence
                 [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
                 {
                     return
-                        lhs.m_hash0 == rhs.m_hash0
-                        && lhs.m_hash1 == rhs.m_hash1
-                        && lhs.additionalHash() == rhs.additionalHash();
+                        lhs.m_hash == rhs.m_hash
+                        && lhs.m_rest.getRaw<HashLow>() == rhs.m_rest.getRaw<HashLow>();
                 }
             };
 
@@ -456,24 +420,14 @@ namespace persistence
                 [[nodiscard]] bool operator()(const SmearedEntry& lhs, const SmearedEntry& rhs) const noexcept
                 {
                     return
-                        lhs.m_hash0 == rhs.m_hash0
-                        && lhs.m_hash1 == rhs.m_hash1
-                        && lhs.additionalHash() == rhs.additionalHash()
-                        && (lhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask) == (rhs.m_reverseMoveAndAbsEloDiff & reverseMoveMask)
-                        && (lhs.m_hashLevelResultCountFlags & (levelMask | resultMask)) == (rhs.m_hashLevelResultCountFlags & (levelMask | resultMask));
+                        lhs.m_hash == rhs.m_hash
+                        && lhs.m_rest.getRaw<HashLow, PackedReverseMove, Level, Result>() == rhs.m_rest.getRaw<HashLow, PackedReverseMove, Level, Result>();
                 }
             };
 
         private:
-            std::uint32_t m_hash0;
-            std::uint32_t m_hash1;
-            std::uint32_t m_hashLevelResultCountFlags;
-            std::uint32_t m_reverseMoveAndAbsEloDiff;
-
-            [[nodiscard]] std::uint32_t additionalHash() const
-            {
-                return m_hashLevelResultCountFlags & lastHashPartMask;
-            }
+            std::uint64_t m_hash;
+            Rest m_rest;
 
             SmearedEntry(
                 const ZobristKey& zobrist,
@@ -485,19 +439,17 @@ namespace persistence
                 std::uint32_t eloSign,
                 std::uint32_t isFirst
                 ) :
-                m_hash0(zobrist.high >> 32),
-                m_hash1(static_cast<std::uint32_t>(zobrist.high)),
-                m_hashLevelResultCountFlags(
-                    static_cast<std::uint32_t>(zobrist.low & lastHashPartMask)
-                    | (isFirst << isFirstShift)
-                    | (countPart << countShift)
-                    | (ordinal(level) << levelShift)
-                    | (ordinal(result) << resultShift)
-                    | eloSign
-                ),
-                m_reverseMoveAndAbsEloDiff(
-                    (packedReverseMove << reverseMoveShift)
-                    | absEloDiffPart
+                m_hash(zobrist.high),
+                m_rest(
+                    util::meta::TypeList<HashLow, IsFirst, Count, Level, Result, EloDiffSign, PackedReverseMove, AbsEloDiff>{},
+                    zobrist.low,
+                    isFirst,
+                    countPart,
+                    ordinal(level),
+                    ordinal(result),
+                    eloSign,
+                    packedReverseMove,
+                    absEloDiffPart
                 )
             {
 
@@ -509,14 +461,14 @@ namespace persistence
                 GameLevel level,
                 GameResult result
             ) :
-                m_hash0(zobrist.high >> 32),
-                m_hash1(static_cast<std::uint32_t>(zobrist.high)),
-                m_hashLevelResultCountFlags(
-                    static_cast<std::uint32_t>(zobrist.low& lastHashPartMask)
-                    | (ordinal(level) << levelShift)
-                    | (ordinal(result) << resultShift)
-                ),
-                m_reverseMoveAndAbsEloDiff(packedReverseMove << reverseMoveShift)
+                m_hash(zobrist.high),
+                m_rest(
+                    util::meta::TypeList<HashLow, Level, Result, PackedReverseMove>{},
+                    zobrist.low,
+                    ordinal(level), 
+                    ordinal(result),
+                    packedReverseMove
+                )
             {
 
             }
@@ -556,8 +508,8 @@ namespace persistence
                         m_packedReverseMove,
                         m_level,
                         m_result,
-                        m_count & SmearedEntry::countBitsMask,
-                        m_absEloDiff & SmearedEntry::absEloDiffBitsMask,
+                        m_count & (SmearedEntry::Count::mask >> SmearedEntry::Count::shift),
+                        m_absEloDiff & (SmearedEntry::AbsEloDiff::mask >> SmearedEntry::AbsEloDiff::shift),
                         m_eloDiffSign,
                         m_isFirst
                         );
@@ -565,8 +517,8 @@ namespace persistence
 
                 Iterator& operator++()
                 {
-                    m_count >>= SmearedEntry::countBits;
-                    m_absEloDiff >>= SmearedEntry::absEloDiffBits;
+                    m_count >>= SmearedEntry::Count::size;
+                    m_absEloDiff >>= SmearedEntry::AbsEloDiff::size;
                     m_isFirst = false;
                     m_eloDiffSign = 0;
                     return *this;
@@ -608,8 +560,8 @@ namespace persistence
             {
                 ASSERT(smeared.isFirst());
 
-                m_zobrist.high = (static_cast<std::uint64_t>(smeared.m_hash0) << 32) | smeared.m_hash1;
-                m_zobrist.low = smeared.m_hashLevelResultCountFlags & SmearedEntry::lastHashPartMask;
+                m_zobrist.high = smeared.m_hash;
+                m_zobrist.low = smeared.m_rest.get<SmearedEntry::HashLow>();
 
                 m_count = static_cast<std::uint64_t>(smeared.countMinusOne()) + 1;
 
@@ -619,7 +571,7 @@ namespace persistence
                     m_eloDiff = -m_eloDiff;
                 }
 
-                m_packedReverseMove = smeared.m_reverseMoveAndAbsEloDiff >> SmearedEntry::reverseMoveShift;
+                m_packedReverseMove = static_cast<std::uint32_t>(smeared.m_rest.get<SmearedEntry::PackedReverseMove>());
 
                 m_level = smeared.level();
                 m_result = smeared.result();
@@ -636,8 +588,8 @@ namespace persistence
                 // for adding at position 0 use constructor
                 ASSERT(position != 0);
 
-                m_count += static_cast<std::uint64_t>(smeared.countMinusOne() + smeared.isFirst()) << (position * SmearedEntry::countBits);
-                const auto absEloDiffChange = static_cast<std::int64_t>(smeared.absEloDiff()) << (position * SmearedEntry::absEloDiffBits);
+                m_count += static_cast<std::uint64_t>(smeared.countMinusOne() + smeared.isFirst()) << (position * SmearedEntry::Count::size);
+                const auto absEloDiffChange = static_cast<std::int64_t>(smeared.absEloDiff()) << (position * SmearedEntry::AbsEloDiff::size);
                 if (m_eloDiff < 0)
                 {
                     m_eloDiff -= absEloDiffChange;
