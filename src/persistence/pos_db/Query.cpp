@@ -133,6 +133,52 @@ namespace query
         j["fetch_last_game_for_each"].get_to(opt.fetchLastGameForEach);
     }
 
+    void to_json(nlohmann::json& j, const QueryFilters& filters)
+    {
+        if (filters.minElo.has_value())
+        {
+            j["min_elo"] = *filters.minElo;
+        }
+
+        if (filters.maxElo.has_value())
+        {
+            j["max_elo"] = *filters.maxElo;
+        }
+
+        if (filters.minMonthSinceYear0.has_value())
+        {
+            j["min_month_since_year_0"] = *filters.minMonthSinceYear0;
+        }
+
+        if (filters.maxMonthSinceYear0.has_value())
+        {
+            j["max_month_since_year_0"] = *filters.maxMonthSinceYear0;
+        }
+    }
+
+    void from_json(const nlohmann::json& j, QueryFilters& filters)
+    {
+        if (j.contains("min_elo"))
+        {
+            filters.minElo = j["min_elo"].get<std::uint16_t>();
+        }
+
+        if (j.contains("max_elo"))
+        {
+            filters.maxElo = j["max_elo"].get<std::uint16_t>();
+        }
+
+        if (j.contains("min_month_since_year_0"))
+        {
+            filters.minMonthSinceYear0 = j["min_month_since_year_0"].get<std::uint32_t>();
+        }
+
+        if (j.contains("max_month_since_year_0"))
+        {
+            filters.maxMonthSinceYear0 = j["max_month_since_year_0"].get<std::uint32_t>();
+        }
+    }
+
     void to_json(nlohmann::json& j, const Request& query)
     {
         j = nlohmann::json{
@@ -161,6 +207,11 @@ namespace query
         if (query.retractionsFetchingOptions.has_value())
         {
             j["retractions"] = *query.retractionsFetchingOptions;
+        }
+
+        if (query.filters.has_value())
+        {
+            j["filters"] = *query.filters;
         }
     }
 
@@ -205,6 +256,11 @@ namespace query
         if (j.contains("retractions"))
         {
             query.retractionsFetchingOptions.emplace(j["retractions"].get<AdditionalRetractionsFetchingOptions>());
+        }
+
+        if (j.contains("filters"))
+        {
+            query.filters = j["filters"];
         }
     }
 

@@ -135,6 +135,18 @@ namespace query
         friend void from_json(const nlohmann::json& j, AdditionalRetractionsFetchingOptions& opt);
     };
 
+    struct QueryFilters
+    {
+        std::optional<std::uint16_t> minElo;
+        std::optional<std::uint16_t> maxElo;
+        std::optional<std::uint32_t> minMonthSinceYear0;
+        std::optional<std::uint32_t> maxMonthSinceYear0;
+
+        friend void to_json(nlohmann::json& j, const QueryFilters& filters);
+
+        friend void from_json(const nlohmann::json& j, QueryFilters& filters);
+    };
+
     struct Request
     {
         // token can be used to match queries to results by the client
@@ -146,6 +158,8 @@ namespace query
         std::vector<GameResult> results;
         std::map<Select, AdditionalFetchingOptions> fetchingOptions;
         std::optional<AdditionalRetractionsFetchingOptions> retractionsFetchingOptions;
+
+        std::optional<QueryFilters> filters;
 
         friend void to_json(nlohmann::json& j, const Request& query);
 
