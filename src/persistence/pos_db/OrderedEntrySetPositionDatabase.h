@@ -198,6 +198,38 @@ namespace persistence
             public:
                 static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
             };
+
+            template <typename T>
+            struct AllowsFilteringByEloRange
+            {
+            private:
+                using Yes = char;
+                using No = Yes[2];
+
+                template<typename C> static constexpr auto Test(void*)
+                    -> decltype(bool{ std::declval<const C>().isInEloRange(std::declval<std::uint16_t>, std::declval<std::uint16_t>) }, Yes{});
+
+                template<typename> static constexpr No& Test(...);
+
+            public:
+                static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
+            };
+
+            template <typename T>
+            struct AllowsFilteringByMonthRange
+            {
+            private:
+                using Yes = char;
+                using No = Yes[2];
+
+                template<typename C> static constexpr auto Test(void*)
+                    -> decltype(bool{ std::declval<const C>().isInMonthRange(std::declval<std::uint32_t>, std::declval<std::uint32_t>) }, Yes{});
+
+                template<typename> static constexpr No& Test(...);
+
+            public:
+                static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
+            };
             
             template<typename T>
             using void_t = void;
@@ -264,9 +296,12 @@ namespace persistence
             static constexpr bool hasReverseMove = detail::HasReverseMove<EntryType>::value;
             static constexpr bool hasMonthSinceYear0 = detail::HasMonthSinceYear0<EntryType>::value;
 
-            static constexpr bool needsElo = hasEloDiff || hasWhiteElo || hasBlackElo;
+            static constexpr bool allowsFilteringByEloRange = detail::AllowsFilteringByEloRange<EntryType>::value;
+            static constexpr bool allowsFilteringByMonthRange = detail::AllowsFilteringByMonthRange<EntryType>::value;
 
-            static constexpr bool needsDate = hasMonthSinceYear0;
+            static constexpr bool needsElo = hasEloDiff || hasWhiteElo || hasBlackElo || allowsFilteringByEloRange;
+
+            static constexpr bool needsDate = hasMonthSinceYear0 || allowsFilteringByMonthRange;
 
             static constexpr bool usesGameIndex = hasFirstGameIndex || hasLastGameIndex;
             static constexpr bool usesGameOffset = hasFirstGameOffset || hasLastGameOffset;

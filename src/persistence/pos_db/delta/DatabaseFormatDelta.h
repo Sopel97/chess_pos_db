@@ -278,5 +278,8 @@ namespace persistence
         static_assert(!Database::hasLastGameOffset);
         static_assert(Database::hasReverseMove);
         static_assert(!Database::hasMonthSinceYear0);
+
+        static_assert(!Database::allowsFilteringByEloRange);
+        static_assert(!Database::allowsFilteringByMonthRange);
     }
 }
