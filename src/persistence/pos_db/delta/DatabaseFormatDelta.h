@@ -271,6 +271,7 @@ namespace persistence
         static_assert(Database::hasEloDiff);
         static_assert(!Database::hasWhiteElo);
         static_assert(!Database::hasBlackElo);
+        static_assert(!Database::hasCountWithElo);
         static_assert(Database::hasFirstGameIndex);
         static_assert(Database::hasLastGameIndex);
         static_assert(!Database::hasFirstGameOffset);

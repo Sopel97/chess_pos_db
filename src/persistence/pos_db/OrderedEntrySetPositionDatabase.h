@@ -168,6 +168,22 @@ namespace persistence
             };
 
             template <typename T>
+            struct HasCountWithElo
+            {
+            private:
+                using Yes = char;
+                using No = Yes[2];
+
+                template<typename C> static constexpr auto Test(void*)
+                    -> decltype(std::declval<const C>().countWithElo(), Yes{});
+
+                template<typename> static constexpr No& Test(...);
+
+            public:
+                static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
+            };
+
+            template <typename T>
             struct HasMonthSinceYear0
             {
             private:
@@ -240,6 +256,7 @@ namespace persistence
             static constexpr bool hasEloDiff = detail::HasEloDiff<EntryType>::value;
             static constexpr bool hasWhiteElo = detail::HasWhiteElo<EntryType>::value;
             static constexpr bool hasBlackElo = detail::HasBlackElo<EntryType>::value;
+            static constexpr bool hasCountWithElo = detail::HasCountWithElo<EntryType>::value;
             static constexpr bool hasFirstGameIndex = detail::HasFirstGameIndex<EntryType>::value;
             static constexpr bool hasLastGameIndex = detail::HasLastGameIndex<EntryType>::value;
             static constexpr bool hasFirstGameOffset = detail::HasFirstGameOffset<EntryType>::value;
@@ -2041,10 +2058,11 @@ namespace persistence
                             {
                                 auto& entry = stat[select][level][result];
                                 auto& segregatedEntry = segregated[i][select].emplace(level, result, entry.count());
-                                if constexpr (hasEloDiff)
-                                {
-                                    segregatedEntry.second.eloDiff = entry.eloDiff();
-                                }
+
+                                if constexpr (hasEloDiff) segregatedEntry.second.eloDiff = entry.eloDiff();
+                                if constexpr (hasWhiteElo) segregatedEntry.second.whiteElo = entry.whiteElo();
+                                if constexpr (hasBlackElo) segregatedEntry.second.blackElo = entry.blackElo();
+                                if constexpr (hasCountWithElo) segregatedEntry.second.countWithElo = entry.countWithElo();
 
                                 if (entry.count() > 0)
                                 {
@@ -2128,10 +2146,11 @@ namespace persistence
                         {
                             auto& entry = stat[level][result];
                             auto& segregatedEntry = segregatedEntries.emplace(level, result, entry.count());
-                            if constexpr (hasEloDiff)
-                            {
-                                segregatedEntry.second.eloDiff = entry.eloDiff();
-                            }
+
+                            if constexpr (hasEloDiff) segregatedEntry.second.eloDiff = entry.eloDiff();
+                            if constexpr (hasWhiteElo) segregatedEntry.second.whiteElo = entry.whiteElo();
+                            if constexpr (hasBlackElo) segregatedEntry.second.blackElo = entry.blackElo();
+                            if constexpr (hasCountWithElo) segregatedEntry.second.countWithElo = entry.countWithElo();
 
                             if (entry.count() > 0)
                             {
