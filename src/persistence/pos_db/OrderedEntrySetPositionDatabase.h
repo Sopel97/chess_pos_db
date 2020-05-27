@@ -47,7 +47,39 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(std::int64_t{ std::declval<const C>().eloDiff() }, Yes{});
+                    -> decltype(std::declval<const C>().eloDiff(), Yes{});
+
+                template<typename> static constexpr No& Test(...);
+
+            public:
+                static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
+            };
+
+            template <typename T>
+            struct HasWhiteElo
+            {
+            private:
+                using Yes = char;
+                using No = Yes[2];
+
+                template<typename C> static constexpr auto Test(void*)
+                    -> decltype(std::declval<const C>().whiteElo(), Yes{});
+
+                template<typename> static constexpr No& Test(...);
+
+            public:
+                static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
+            };
+
+            template <typename T>
+            struct HasBlackElo
+            {
+            private:
+                using Yes = char;
+                using No = Yes[2];
+
+                template<typename C> static constexpr auto Test(void*)
+                    -> decltype(std::declval<const C>().blackElo(), Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -95,7 +127,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(std::uint64_t{ std::declval<const C>().firstGameOffset() }, Yes{});
+                    -> decltype(std::declval<const C>().firstGameOffset(), Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -111,7 +143,7 @@ namespace persistence
                 using No = Yes[2];
 
                 template<typename C> static constexpr auto Test(void*)
-                    -> decltype(std::uint64_t{ std::declval<const C>().lastGameOffset() }, Yes{});
+                    -> decltype(std::declval<const C>().lastGameOffset(), Yes{});
 
                 template<typename> static constexpr No& Test(...);
 
@@ -133,7 +165,23 @@ namespace persistence
 
             public:
                 static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
-            }; 
+            };
+
+            template <typename T>
+            struct HasMonthSinceYear0
+            {
+            private:
+                using Yes = char;
+                using No = Yes[2];
+
+                template<typename C> static constexpr auto Test(void*)
+                    -> decltype(std::declval<const C>().monthSinceYear0(), Yes{});
+
+                template<typename> static constexpr No& Test(...);
+
+            public:
+                static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
+            };
             
             template<typename T>
             using void_t = void;
@@ -190,15 +238,18 @@ namespace persistence
             static_assert(std::is_trivially_copyable_v<PersistedEntryType>);
 
             static constexpr bool hasEloDiff = detail::HasEloDiff<EntryType>::value;
+            static constexpr bool hasWhiteElo = detail::HasWhiteElo<EntryType>::value;
+            static constexpr bool hasBlackElo = detail::HasBlackElo<EntryType>::value;
             static constexpr bool hasFirstGameIndex = detail::HasFirstGameIndex<EntryType>::value;
             static constexpr bool hasLastGameIndex = detail::HasLastGameIndex<EntryType>::value;
             static constexpr bool hasFirstGameOffset = detail::HasFirstGameOffset<EntryType>::value;
             static constexpr bool hasLastGameOffset = detail::HasLastGameOffset<EntryType>::value;
             static constexpr bool hasReverseMove = detail::HasReverseMove<EntryType>::value;
+            static constexpr bool hasMonthSinceYear0 = detail::HasMonthSinceYear0<EntryType>::value;
 
-            static constexpr bool needsElo = hasEloDiff;
+            static constexpr bool needsElo = hasEloDiff || hasWhiteElo || hasBlackElo;
 
-            static constexpr bool needsDate = false;
+            static constexpr bool needsDate = hasMonthSinceYear0;
 
             static constexpr bool usesGameIndex = hasFirstGameIndex || hasLastGameIndex;
             static constexpr bool usesGameOffset = hasFirstGameOffset || hasLastGameOffset;
