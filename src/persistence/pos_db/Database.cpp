@@ -17,7 +17,8 @@ namespace persistence
     {
         numGames += rhs.numGames;
         numPositions += rhs.numPositions;
-        totalPlayerElo += rhs.totalPlayerElo;
+        totalWhiteElo += rhs.totalWhiteElo;
+        totalBlackElo += rhs.totalBlackElo;
 
         if (!numGamesWithElo)
         {
@@ -92,7 +93,8 @@ namespace persistence
     {
         j["num_games"] = stats.numGames;
         j["num_positions"] = stats.numPositions;
-        j["total_player_elo"] = stats.totalPlayerElo;
+        j["total_white_elo"] = stats.totalWhiteElo;
+        j["total_black_elo"] = stats.totalBlackElo;
         j["num_games_with_elo"] = stats.numGamesWithElo;
         j["num_games_with_date"] = stats.numGamesWithDate;
         if (stats.numGamesWithElo)
@@ -111,7 +113,8 @@ namespace persistence
     {
         stats.numGames = j["num_games"].get<std::size_t>();
         stats.numPositions = j["num_positions"].get<std::size_t>();
-        stats.totalPlayerElo = j["total_player_elo"].get<std::size_t>();
+        stats.totalWhiteElo = j["total_white_elo"].get<std::size_t>();
+        stats.totalBlackElo = j["total_black_elo"].get<std::size_t>();
         stats.numGamesWithElo = j["num_games_with_elo"].get<std::size_t>();
         stats.numGamesWithDate = j["num_games_with_date"].get<std::size_t>();
         if (stats.numGamesWithElo)

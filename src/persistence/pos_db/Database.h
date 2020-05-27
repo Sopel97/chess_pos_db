@@ -23,7 +23,8 @@ namespace persistence
     {
         std::size_t numGames = 0;
         std::size_t numPositions = 0;
-        std::size_t totalPlayerElo = 0;
+        std::size_t totalWhiteElo = 0;
+        std::size_t totalBlackElo = 0;
         std::size_t numGamesWithElo = 0;
         std::size_t numGamesWithDate = 0;
         std::uint16_t minElo = 0;
