@@ -251,6 +251,21 @@ namespace query
         {
             j["elo_diff"] = *entry.eloDiff;
         }
+
+        if (entry.countWithElo.has_value())
+        {
+            j["count_with_elo"] = *entry.countWithElo;
+        }
+
+        if (entry.whiteElo.has_value())
+        {
+            j["white_elo"] = *entry.whiteElo;
+        }
+
+        if (entry.blackElo.has_value())
+        {
+            j["black_elo"] = *entry.blackElo;
+        }
     }
 
     void from_json(const nlohmann::json& j, Entry& entry)
@@ -270,6 +285,21 @@ namespace query
         if (j.contains("elo_diff"))
         {
             entry.eloDiff = j["elo_diff"].get<std::int64_t>();
+        }
+
+        if (j.contains("count_with_elo"))
+        {
+            entry.countWithElo = j["count_with_elo"].get<std::int64_t>();
+        }
+
+        if (j.contains("white_elo"))
+        {
+            entry.whiteElo = j["white_elo"].get<std::int64_t>();
+        }
+
+        if (j.contains("black_elo"))
+        {
+            entry.blackElo = j["black_elo"].get<std::int64_t>();
         }
     }
 

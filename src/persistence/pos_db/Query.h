@@ -161,6 +161,12 @@ namespace query
         std::optional<persistence::GameHeader> lastGame;
         std::optional<std::int64_t> eloDiff;
 
+        // This determines how many games actually had elo specified.
+        // Having this value allows computing average elo precisely.
+        std::optional<std::uint64_t> countWithElo; 
+        std::optional<std::uint64_t> whiteElo;
+        std::optional<std::uint64_t> blackElo;
+
         Entry(std::size_t count);
 
         friend void to_json(nlohmann::json& j, const Entry& entry);
