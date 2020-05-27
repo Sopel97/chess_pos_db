@@ -39,8 +39,6 @@ void runCommand(const std::vector<std::string>& args)
     command_line_app::runCommand(args);
 }
 
-#include "util/BitPacking.h"
-
 int main(int argc, char* argv[])
 {
     if (argc == 1)
