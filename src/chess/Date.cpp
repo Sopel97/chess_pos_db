@@ -62,20 +62,32 @@ std::optional<Date> Date::tryParse(std::string_view sv, char sep)
     if (sv.size() >= 7)
     {
         if (sv[4] != sep) return std::nullopt;
-        if (!parser_bits::isDigit(sv[5])) return std::nullopt;
-        if (!parser_bits::isDigit(sv[6])) return std::nullopt;
-        month = (sv[5] - '0') * 10 + (sv[6] - '0');
+        if (sv[5] == '?' && sv[6] == '?')
+        {
+            month = 0;
+        }
+        else
+        {
+            if (!parser_bits::isDigit(sv[5])) return std::nullopt;
+            if (!parser_bits::isDigit(sv[6])) return std::nullopt;
+            month = (sv[5] - '0') * 10 + (sv[6] - '0');
+        }
     }
-    else if (sv.size() != 4) return std::nullopt;
 
     if (sv.size() >= 10)
     {
         if (sv[7] != sep) return std::nullopt;
-        if (!parser_bits::isDigit(sv[8])) return std::nullopt;
-        if (!parser_bits::isDigit(sv[9])) return std::nullopt;
-        month = (sv[5] - '0') * 10 + (sv[6] - '0');
+        if (sv[8] == '?' && sv[9] == '?')
+        {
+            day = 0;
+        }
+        else
+        {
+            if (!parser_bits::isDigit(sv[8])) return std::nullopt;
+            if (!parser_bits::isDigit(sv[9])) return std::nullopt;
+            day = (sv[8] - '0') * 10 + (sv[9] - '0');
+        }
     }
-    else if (sv.size() != 7) return std::nullopt;
 
     return Date(year, month, day);
 }
