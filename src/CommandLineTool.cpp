@@ -1326,21 +1326,6 @@ namespace command_line_app
         }
     }
 
-    [[nodiscard]] static std::string mergeModeToString(persistence::MergeMode m)
-    {
-        switch (m)
-        {
-        case persistence::MergeMode::None:
-            return "none";
-        case persistence::MergeMode::Consecutive:
-            return "consecutive";
-        case persistence::MergeMode::Any:
-            return "any";
-        default:
-            return "";
-        }
-    }
-
     static void handleTcpCommandSupport(
         std::unique_ptr<persistence::Database>& db,
         const TcpConnection::Ptr& session,
@@ -1351,16 +1336,7 @@ namespace command_line_app
         auto manifestsJson = nlohmann::json::object();
         for (auto&& [name, manifest] : manifests)
         {
-            auto supportedTypesJson = nlohmann::json::array();
-            for (auto type : manifest.importableFileTypes)
-            {
-                supportedTypesJson.emplace_back(persistence::importableFileTypeExtension(type));
-            }
-
-            manifestsJson[name] = nlohmann::json{
-                { "supported_file_types", supportedTypesJson },
-                { "merge_mode", mergeModeToString(manifest.mergeMode) }
-            };
+            manifestsJson[name] = manifest;
         }
 
         auto response = nlohmann::json{

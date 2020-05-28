@@ -13,6 +13,21 @@
 
 namespace persistence
 {
+    [[nodiscard]] static std::string mergeModeToString(MergeMode m)
+    {
+        switch (m)
+        {
+        case MergeMode::None:
+            return "none";
+        case MergeMode::Consecutive:
+            return "consecutive";
+        case MergeMode::Any:
+            return "any";
+        default:
+            return "";
+        }
+    }
+
     SingleGameLevelDatabaseStats& SingleGameLevelDatabaseStats::operator+=(const SingleGameLevelDatabaseStats& rhs)
     {
         numGames += rhs.numGames;
@@ -217,6 +232,66 @@ namespace persistence
         };
 
         return extensions[static_cast<int>(type)];
+    }
+
+    void to_json(nlohmann::json& j, const DatabaseSupportManifest& manifest)
+    {
+        auto supportedTypesJson = nlohmann::json::array();
+        for (auto type : manifest.importableFileTypes)
+        {
+            supportedTypesJson.emplace_back(importableFileTypeExtension(type));
+        }
+
+        j["supported_file_types"] = supportedTypesJson;
+        j["merge_mode"] = mergeModeToString(manifest.mergeMode);
+
+        j["max_games"] = manifest.maxGames;
+        j["max_positions"] = manifest.maxPositions;
+        j["max_instances_of_single_position"] = manifest.maxInstancesOfSinglePosition;
+
+        j["has_one_way_key"] = manifest.hasOneWayKey;
+        if (manifest.hasOneWayKey)
+        {
+            j["estimated_max_collisions"] = manifest.estimatedMaxCollisions;
+            j["estimated_max_positions_with_no_collisions"] = manifest.estimatedMaxPositionsWithNoCollisions;
+        }
+
+        j["has_count"] = manifest.hasCount;
+
+        j["has_elo_diff"] = manifest.hasEloDiff;
+        if (manifest.hasEloDiff)
+        {
+            j["max_abs_elo_diff"] = manifest.maxAbsEloDiff;
+            j["max_average_abs_elo_diff"] = manifest.maxAverageAbsEloDiff;
+        }
+
+        j["has_white_elo"] = manifest.hasWhiteElo;
+        j["has_black_elo"] = manifest.hasBlackElo;
+        if (manifest.hasWhiteElo || manifest.hasBlackElo)
+        {
+            j["min_elo"] = manifest.minElo;
+            j["max_elo"] = manifest.maxElo;
+            j["has_count_with_elo"] = manifest.hasCountWithElo;
+        }
+
+        j["has_first_game"] = manifest.hasFirstGame;
+        j["has_last_game"] = manifest.hasLastGame;
+
+        j["allows_filtering_transpositions"] = manifest.allowsFilteringTranspositions;
+        j["has_reverse_move"] = manifest.hasReverseMove;
+
+        j["allows_filtering_by_elo_range"] = manifest.allowsFilteringByEloRange;
+        j["elo_filter_granularity"] = manifest.eloFilterGranularity;
+
+        j["allows_filtering_by_month_range"] = manifest.allowsFilteringByMonthRange;
+        j["month_filter_granularity"] = manifest.monthFilterGranularity;
+
+        j["max_bytes_per_position"] = manifest.maxBytesPerPosition;
+
+        if (manifest.estimatedAverageBytesPerPosition.has_value())
+        {
+            j["estimated_average_bytes_per_position"] = *manifest.estimatedAverageBytesPerPosition;
+        }
     }
 
     [[nodiscard]] ImportableFileType importableFileTypeFromPath(const std::filesystem::path path)

@@ -176,6 +176,8 @@ namespace persistence
 
         std::uint64_t maxBytesPerPosition;
         std::optional<double> estimatedAverageBytesPerPosition;
+
+        friend void to_json(nlohmann::json& j, const DatabaseSupportManifest& manifest);
     };
 
     struct DatabaseManifest
