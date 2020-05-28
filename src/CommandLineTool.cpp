@@ -545,7 +545,9 @@ namespace command_line_app
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
             auto stats = db->import(pgns, importMemory.bytes(), callback);
-            sendProgressFinished(session, "import", nlohmann::json(stats.total()));
+            auto statsJson = nlohmann::json::object();
+            statsJson["stats"] = stats;
+            sendProgressFinished(session, "import", statsJson);
 
             if (doMerge)
             {
@@ -668,7 +670,9 @@ namespace command_line_app
         {
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
             auto stats = db->import(pgns, importMemory.bytes(), callback);
-            sendProgressFinished(session, "import", nlohmann::json(stats.total()));
+            auto statsJson = nlohmann::json::object();
+            statsJson["stats"] = stats;
+            sendProgressFinished(session, "import", statsJson);
 
             if (merge == AppendMergeType::All)
             {
