@@ -135,8 +135,46 @@ namespace persistence
 
     struct DatabaseSupportManifest
     {
+        // This structure is not optimized.
+        // It doesn't need to be.
+        // It also doesn't need to have future ABI compatibility.
+
         std::vector<ImportableFileType> importableFileTypes;
         MergeMode mergeMode;
+
+        std::uint64_t maxGames;
+        std::uint64_t maxPositions;
+        std::uint64_t maxInstancesOfSinglePosition;
+
+        bool hasOneWayKey;
+        std::uint64_t estimatedMaxCollisions;
+        std::uint64_t estimatedMaxPositionsWithNoCollisions; // the breaking point is 50% chance of having a collision.
+
+        bool hasCount;
+
+        bool hasEloDiff;
+        std::uint64_t maxAbsEloDiff;
+
+        bool hasWhiteElo;
+        bool hasBlackElo;
+        std::uint64_t minElo;
+        std::uint64_t maxElo;
+
+        bool hasCountWithElo;
+
+        bool hasFirstGame;
+        bool hasLastGame;
+
+        bool hasReverseMove;
+
+        bool allowsFilteringByEloRange;
+        std::uint64_t eloFilterGranularity;
+
+        bool allowsFilteringByMonthRange;
+        std::uint64_t monthFilterGranularity;
+
+        std::uint64_t maxBytesPerPosition;
+        std::optional<double> estimatedAverageBytesPerPosition;
     };
 
     struct DatabaseManifest
