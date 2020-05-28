@@ -184,22 +184,6 @@ namespace persistence
             };
 
             template <typename T>
-            struct HasMonthSinceYear0
-            {
-            private:
-                using Yes = char;
-                using No = Yes[2];
-
-                template<typename C> static constexpr auto Test(void*)
-                    -> decltype(std::declval<const C>().monthSinceYear0(), Yes{});
-
-                template<typename> static constexpr No& Test(...);
-
-            public:
-                static constexpr bool value = sizeof(Test<T>(0)) == sizeof(Yes);
-            };
-
-            template <typename T>
             struct AllowsFilteringByEloRange
             {
             private:
@@ -294,14 +278,13 @@ namespace persistence
             static constexpr bool hasFirstGameOffset = detail::HasFirstGameOffset<EntryType>::value;
             static constexpr bool hasLastGameOffset = detail::HasLastGameOffset<EntryType>::value;
             static constexpr bool hasReverseMove = detail::HasReverseMove<EntryType>::value;
-            static constexpr bool hasMonthSinceYear0 = detail::HasMonthSinceYear0<EntryType>::value;
 
             static constexpr bool allowsFilteringByEloRange = detail::AllowsFilteringByEloRange<EntryType>::value;
             static constexpr bool allowsFilteringByMonthRange = detail::AllowsFilteringByMonthRange<EntryType>::value;
 
             static constexpr bool needsElo = hasEloDiff || hasWhiteElo || hasBlackElo || allowsFilteringByEloRange;
 
-            static constexpr bool needsDate = hasMonthSinceYear0 || allowsFilteringByMonthRange;
+            static constexpr bool needsDate = allowsFilteringByMonthRange;
 
             static constexpr bool usesGameIndex = hasFirstGameIndex || hasLastGameIndex;
             static constexpr bool usesGameOffset = hasFirstGameOffset || hasLastGameOffset;
