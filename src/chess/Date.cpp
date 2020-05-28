@@ -199,3 +199,10 @@ Date::Date(std::uint16_t year, std::uint8_t month, std::uint8_t day) :
     auto month = m_month == 0 ? 1 : m_month;
     return m_year * month;
 }
+
+void Date::setUnknownToFirst()
+{
+    if (m_year == 0) m_year = 1;
+    if (m_month == 0) m_month = 1;
+    if (m_day == 0) m_day = 1;
+}

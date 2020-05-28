@@ -2338,6 +2338,81 @@ namespace persistence
 
                 ImportStats stats{};
                 EntryConstructionParameters params;
+
+                auto fillCommonStatsAndParamsForGame = [this, &stats, &params] (const auto& game, GameLevel level)
+                {
+                    auto& statsForLevel = stats[level];
+
+                    // we want either both or none to be known.
+                    // So if only one is known then assume the
+                    // other player has the same elo.
+                    params.whiteElo = game.whiteElo();
+                    params.blackElo = game.blackElo();
+
+                    if (params.whiteElo && !params.blackElo) params.blackElo = params.whiteElo;
+                    else if (params.blackElo && !params.whiteElo) params.whiteElo = params.blackElo;
+
+                    // we know either none or both are present
+                    if (params.whiteElo /* && params.blackElo */)
+                    {
+                        // Update stats because we know the elo.
+                        statsForLevel.totalWhiteElo += params.whiteElo;
+                        statsForLevel.totalBlackElo += params.blackElo;
+                        const auto min = std::min(params.whiteElo, params.blackElo);
+                        const auto max = std::max(params.whiteElo, params.blackElo);
+
+                        if (statsForLevel.numGamesWithElo)
+                        {
+                            statsForLevel.minElo = std::min(statsForLevel.minElo, min);
+                            statsForLevel.maxElo = std::max(statsForLevel.maxElo, max);
+                        }
+                        else
+                        {
+                            statsForLevel.minElo = min;
+                            statsForLevel.maxElo = max;
+                        }
+
+                        statsForLevel.numGamesWithElo += 1;
+                    }
+
+                    if constexpr (hasGameHeaders)
+                    {
+                        if constexpr (usesGameIndex)
+                        {
+                            params.gameIndexOrOffset = m_headers[level]->nextGameId();
+                        }
+                        else if constexpr (usesGameOffset)
+                        {
+                            params.gameIndexOrOffset = m_headers[level]->nextGameOffset();
+                        }
+                    }
+
+                    auto date = game.date();
+                    if constexpr (needsDate)
+                    {
+                        params.monthSinceYear0 = date.monthSinceYear0();
+                    }
+
+                    // check if date is known
+                    if (date.year() != 0)
+                    {
+                        date.setUnknownToFirst();
+
+                        if (statsForLevel.numGamesWithDate)
+                        {
+                            statsForLevel.minDate = Date::min(statsForLevel.minDate, date);
+                            statsForLevel.maxDate = Date::max(statsForLevel.maxDate, date);
+                        }
+                        else
+                        {
+                            statsForLevel.minDate = date;
+                            statsForLevel.maxDate = date;
+                        }
+
+                        statsForLevel.numGamesWithDate += 1;
+                    }
+                };
+
                 for (auto& file : files)
                 {
                     const auto& path = file.path();
@@ -2367,28 +2442,7 @@ namespace persistence
 
                             params.result = *result;
 
-                            if constexpr (needsElo)
-                            {
-                                params.whiteElo = game.whiteElo();
-                                params.blackElo = game.blackElo();
-                            }
-
-                            if constexpr (hasGameHeaders)
-                            {
-                                if constexpr (usesGameIndex)
-                                {
-                                    params.gameIndexOrOffset = m_headers[level]->nextGameId();
-                                }
-                                else if constexpr (usesGameOffset)
-                                {
-                                    params.gameIndexOrOffset = m_headers[level]->nextGameOffset();
-                                }
-                            }
-
-                            if constexpr (needsDate)
-                            {
-                                params.monthSinceYear0 = game.date().monthSinceYear0();
-                            }
+                            fillCommonStatsAndParamsForGame(game, level);
 
                             params.position = PositionWithZobrist::startPosition();
                             params.reverseMove = {};
@@ -2443,28 +2497,7 @@ namespace persistence
 
                             auto gameHeader = game.gameHeader();
 
-                            if constexpr (needsElo)
-                            {
-                                params.whiteElo = gameHeader.whiteElo();
-                                params.blackElo = gameHeader.blackElo();
-                            }
-
-                            if constexpr (hasGameHeaders)
-                            {
-                                if constexpr (usesGameIndex)
-                                {
-                                    params.gameIndexOrOffset = m_headers[level]->nextGameId();
-                                }
-                                else if constexpr (usesGameOffset)
-                                {
-                                    params.gameIndexOrOffset = m_headers[level]->nextGameOffset();
-                                }
-                            }
-
-                            if constexpr (needsDate)
-                            {
-                                params.monthSinceYear0 = gameHeader.date().monthSinceYear0();
-                            }
+                            fillCommonStatsAndParamsForGame(gameHeader, level);
 
                             params.position = PositionWithZobrist::startPosition();
                             params.reverseMove = {};

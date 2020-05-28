@@ -29,6 +29,8 @@ struct Date
 
     [[nodiscard]] std::uint32_t monthSinceYear0() const;
 
+    void setUnknownToFirst();
+
 private:
     // A value of 0 signifies an unknown
     std::uint16_t m_year;
