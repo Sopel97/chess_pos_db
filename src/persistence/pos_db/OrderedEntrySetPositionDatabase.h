@@ -1696,13 +1696,53 @@ namespace persistence
 
             [[nodiscard]] static const DatabaseSupportManifest& supportManifest()
             {
-                static const DatabaseSupportManifest manifest = {
-                    { 
-                        ImportableFileType::Pgn, 
-                        ImportableFileType::Bcgn 
-                    },
-                    MergeMode::Any
-                };
+                static const DatabaseSupportManifest manifest = [](){
+                    DatabaseSupportManifest manifest{};
+                    
+                    manifest.importableFileTypes = {
+                        ImportableFileType::Pgn,
+                        ImportableFileType::Bcgn
+                    };
+
+                    manifest.mergeMode = MergeMode::Any;
+
+                    manifest.maxGames = TraitsT::maxGames;
+                    manifest.maxPositions = TraitsT::maxPositions;
+                    manifest.maxInstancesOfSinglePosition = TraitsT::maxInstancesOfSinglePosition;
+
+                    manifest.hasOneWayKey = TraitsT::hasOneWayKey;
+                    manifest.estimatedMaxCollisions = TraitsT::estimatedMaxCollisions;
+                    manifest.estimatedMaxPositionsWithNoCollisions = TraitsT::estimatedMaxPositionsWithNoCollisions;
+
+                    manifest.hasCount = TraitsT::hasCount;
+
+                    manifest.hasEloDiff = TraitsT::hasEloDiff;
+                    manifest.maxAbsEloDiff = TraitsT::maxAbsEloDiff;
+                    manifest.maxAverageAbsEloDiff = TraitsT::maxAverageAbsEloDiff;
+
+                    manifest.hasWhiteElo = TraitsT::hasWhiteElo;
+                    manifest.hasBlackElo = TraitsT::hasBlackElo;
+                    manifest.minElo = TraitsT::minElo;
+                    manifest.maxElo = TraitsT::maxElo;
+                    manifest.hasCountWithElo = TraitsT::hasCountWithElo;
+
+                    manifest.hasFirstGame = TraitsT::hasFirstGame;
+                    manifest.hasLastGame = TraitsT::hasLastGame;
+
+                    manifest.allowsFilteringTranspositions = TraitsT::allowsFilteringTranspositions;
+                    manifest.hasReverseMove = TraitsT::hasReverseMove;
+
+                    manifest.allowsFilteringByEloRange = TraitsT::allowsFilteringByEloRange;
+                    manifest.eloFilterGranularity = TraitsT::eloFilterGranularity;
+
+                    manifest.allowsFilteringByMonthRange = TraitsT::allowsFilteringByMonthRange;
+                    manifest.monthFilterGranularity = TraitsT::monthFilterGranularity;
+
+                    manifest.maxBytesPerPosition = TraitsT::maxBytesPerPosition;
+                    manifest.estimatedAverageBytesPerPosition = TraitsT::estimatedAverageBytesPerPosition;
+
+                    return manifest;
+                }();
 
                 return manifest;
             }

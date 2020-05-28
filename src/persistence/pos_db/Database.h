@@ -154,17 +154,18 @@ namespace persistence
 
         bool hasEloDiff;
         std::uint64_t maxAbsEloDiff;
+        std::uint64_t maxAverageAbsEloDiff;
 
         bool hasWhiteElo;
         bool hasBlackElo;
         std::uint64_t minElo;
         std::uint64_t maxElo;
-
         bool hasCountWithElo;
 
         bool hasFirstGame;
         bool hasLastGame;
 
+        bool allowsFilteringTranspositions;
         bool hasReverseMove;
 
         bool allowsFilteringByEloRange;

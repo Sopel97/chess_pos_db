@@ -549,6 +549,41 @@ namespace persistence
         struct Traits
         {
             static constexpr const char* name = "db_epsilon";
+
+            static constexpr std::uint64_t maxGames = 1ull << 32ull;
+            static constexpr std::uint64_t maxPositions = 1ull << 40ull;
+            static constexpr std::uint64_t maxInstancesOfSinglePosition = 1ull << 32ull;
+
+            static constexpr bool hasOneWayKey = true;
+            static constexpr std::uint64_t estimatedMaxCollisions = 100;
+            static constexpr std::uint64_t estimatedMaxPositionsWithNoCollisions = 80'000'000'000ull;
+
+            static constexpr bool hasCount = true;
+
+            static constexpr bool hasEloDiff = false;
+            static constexpr std::uint64_t maxAbsEloDiff = 0;
+            static constexpr std::uint64_t maxAverageAbsEloDiff = 0;
+
+            static constexpr bool hasWhiteElo = false;
+            static constexpr bool hasBlackElo = false;
+            static constexpr std::uint64_t minElo = 0;
+            static constexpr std::uint64_t maxElo = 0;
+            static constexpr bool hasCountWithElo = false;
+
+            static constexpr bool hasFirstGame = false;
+            static constexpr bool hasLastGame = false;
+
+            static constexpr bool allowsFilteringTranspositions = true;
+            static constexpr bool hasReverseMove = true;
+
+            static constexpr bool allowsFilteringByEloRange = false;
+            static constexpr std::uint64_t eloFilterGranularity = 0;
+
+            static constexpr bool allowsFilteringByMonthRange = false;
+            static constexpr std::uint64_t monthFilterGranularity = 0;
+
+            static constexpr std::uint64_t maxBytesPerPosition = 16;
+            static constexpr std::optional<double> estimatedAverageBytesPerPosition = 12.0;
         };
 
         using Database = persistence::pos_db::OrderedEntrySetPositionDatabase<
