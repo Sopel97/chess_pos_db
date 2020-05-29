@@ -1666,7 +1666,7 @@ namespace persistence
 
             static inline const std::filesystem::path partitionDirectory = "data";
 
-            static inline const DatabaseManifest m_manifest = { name, true };
+            static inline const DatabaseManifest m_manifest = { name, true, TraitsT::version };
 
             static constexpr std::size_t m_totalNumDirectories = 1;
 
@@ -1682,7 +1682,7 @@ namespace persistence
 
         public:
             OrderedEntrySetPositionDatabase(std::filesystem::path path) :
-                BaseType(path, m_manifest),
+                BaseType(path, m_manifest, supportManifest()),
                 m_path(path),
                 m_headers(makeHeaders(path, m_headerBufferMemory)),
                 m_partition(path / partitionDirectory)
@@ -1740,6 +1740,9 @@ namespace persistence
 
                     manifest.maxBytesPerPosition = TraitsT::maxBytesPerPosition;
                     manifest.estimatedAverageBytesPerPosition = TraitsT::estimatedAverageBytesPerPosition;
+
+                    manifest.version = TraitsT::version;
+                    manifest.minimumSupportedVersion = TraitsT::minimumSupportedVersion;
 
                     return manifest;
                 }();

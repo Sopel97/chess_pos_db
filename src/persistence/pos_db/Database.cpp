@@ -28,6 +28,25 @@ namespace persistence
         }
     }
 
+    [[nodiscard]] static std::string manifestValidationResultToString(ManifestValidationResult r)
+    {
+        switch (r)
+        {
+            case ManifestValidationResult::Ok:
+                return "Ok";
+            case ManifestValidationResult::EndiannessMismatch:
+                return "Endianness mismatch.";
+            case ManifestValidationResult::KeyMismatch:
+                return "Key mismatch.";
+            case ManifestValidationResult::InvalidManifest:
+                return "Invalid Manifest.";
+            case ManifestValidationResult::InvalidVersion:
+                return "Invalid Version.";
+            case ManifestValidationResult::UnsupportedVersion:
+                return "Unsupported Version.";
+        }
+    }
+
     SingleGameLevelDatabaseStats& SingleGameLevelDatabaseStats::operator+=(const SingleGameLevelDatabaseStats& rhs)
     {
         numGames += rhs.numGames;
@@ -292,6 +311,9 @@ namespace persistence
         {
             j["estimated_average_bytes_per_position"] = *manifest.estimatedAverageBytesPerPosition;
         }
+
+        j["version"] = manifest.version.toString();
+        j["minimum_supported_version"] = manifest.minimumSupportedVersion.toString();
     }
 
     [[nodiscard]] ImportableFileType importableFileTypeFromPath(const std::filesystem::path path)
@@ -317,6 +339,7 @@ namespace persistence
     {
         j["name"] = manifest.key;
         j["requires_matching_endianness"] = manifest.requiresMatchingEndianness;
+        j["version"] = manifest.version.toString();
     }
 
     ImportableFile::ImportableFile(std::filesystem::path path, GameLevel level) :
@@ -346,11 +369,10 @@ namespace persistence
         return m_type;
     }
 
-    Database::Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel) :
-        m_baseDirPath(dirPath),
-        m_manifestModel(manifestModel)
+    Database::Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) :
+        m_baseDirPath(dirPath)
     {
-        initializeManifest();
+        initializeManifest(manifestModel, support);
         loadStats();
     }
 
@@ -383,30 +405,28 @@ namespace persistence
         return m_stats;
     }
 
-    [[nodiscard]] ManifestValidationResult Database::createOrValidateManifest() const
+    void Database::updateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
     {
-        if (std::filesystem::exists(manifestPath()))
+        createManifest(manifestModel, support);
+    }
+
+    void Database::initializeManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
+    {
+        const bool firstOpen = !std::filesystem::exists(manifestPath());
+
+        if (firstOpen)
         {
-            return validateManifest();
+            createManifest(manifestModel, support);
         }
         else
         {
-            createManifest();
-            return ManifestValidationResult::Ok;
-        }
-    }
+            const auto ec = validateManifest(manifestModel, support);
+            if (ec != ManifestValidationResult::Ok)
+            {
+                throw std::runtime_error("Cannot open database: " + manifestValidationResultToString(ec));
+            }
 
-    void Database::initializeManifest() const
-    {
-        auto res = createOrValidateManifest();
-        switch (res)
-        {
-        case ManifestValidationResult::EndiannessMismatch:
-            throw std::runtime_error("Cannot load database. Endianness mismatch.");
-        case ManifestValidationResult::KeyMismatch:
-            throw std::runtime_error("Cannot load database. Key mismatch.");
-        case ManifestValidationResult::InvalidManifest:
-            throw std::runtime_error("Cannot load database. Invalid manifest.");
+            updateManifest(manifestModel, support);
         }
     }
 
@@ -445,68 +465,107 @@ namespace persistence
         file << nlohmann::json(m_stats);
     }
     
-    void Database::createManifest() const
+    void Database::createManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
     {
-        const auto& manifestData = m_manifestModel;
-
         std::vector<std::byte> data;
-        const std::size_t keyLength = manifestData.key.size();
+        const std::size_t keyLength = manifestModel.key.size();
         if (keyLength > 255)
         {
             throw std::runtime_error("Manifest key must be at most 255 chars long.");
         }
 
-        const std::size_t endiannessSignatureLength = manifestData.requiresMatchingEndianness ? sizeof(EndiannessSignature) : 0;
-        const std::size_t totalLength = 1 + keyLength + endiannessSignatureLength;
+        const std::string versionString = manifestModel.version.toString();
+        const std::size_t versionStringLength = versionString.size();
+        if (versionStringLength > 255)
+        {
+            throw std::runtime_error("Manifest version string must be at most 255 chars long.");
+        }
+
+        const std::size_t endiannessSignatureLength = manifestModel.requiresMatchingEndianness ? sizeof(EndiannessSignature) : 0;
+        const std::size_t totalLength = 
+              1 + keyLength 
+            + 1 + versionStringLength 
+            + endiannessSignatureLength;
 
         data.resize(totalLength);
 
         const std::uint8_t keyLengthLow = static_cast<std::uint8_t>(keyLength);
-        std::memcpy(data.data(), &keyLengthLow, 1);
-        std::memcpy(data.data() + 1, manifestData.key.data(), keyLength);
+        const std::uint8_t versionStringLengthLow = static_cast<std::uint8_t>(versionStringLength);
+        auto writePtr = data.data();
+        std::memcpy(writePtr, &keyLengthLow, 1);
+        writePtr += 1;
+        std::memcpy(writePtr, manifestModel.key.data(), keyLength);
+        writePtr += keyLength;
+
+        std::memcpy(writePtr, &versionStringLengthLow, 1);
+        writePtr += 1;
+        std::memcpy(writePtr, versionString.data(), versionStringLength);
+        writePtr += versionStringLength;
 
         if (endiannessSignatureLength != 0)
         {
             const EndiannessSignature sig;
-            std::memcpy(data.data() + 1 + keyLength, &sig, endiannessSignatureLength);
+            std::memcpy(writePtr, &sig, endiannessSignatureLength);
+            writePtr += endiannessSignatureLength;
         }
 
         writeManifest(data);
     }
 
-    [[nodiscard]] ManifestValidationResult Database::validateManifest() const
+    [[nodiscard]] ManifestValidationResult Database::validateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
     {
-        const auto& dbManifestData = m_manifestModel;
-
         const auto& manifestData = readManifest();
         if (manifestData.size() == 0) return ManifestValidationResult::InvalidManifest;
 
-        const std::size_t keyLength = std::to_integer<std::size_t>(manifestData[0]);
-        if (manifestData.size() < 1 + keyLength) return ManifestValidationResult::InvalidManifest;
-        if (keyLength != dbManifestData.key.size()) return ManifestValidationResult::KeyMismatch;
+        auto readPtr = manifestData.data();
+        const std::size_t keyLength = std::to_integer<std::size_t>(*readPtr);
+        readPtr += 1;
+        if (manifestData.size() < (readPtr - manifestData.data()) + keyLength) return ManifestValidationResult::InvalidManifest;
+        if (keyLength != manifestModel.key.size()) return ManifestValidationResult::KeyMismatch;
 
         std::string key;
         key.resize(keyLength);
-        std::memcpy(key.data(), manifestData.data() + 1, keyLength);
-        if (dbManifestData.key != key) return ManifestValidationResult::KeyMismatch;
+        std::memcpy(key.data(), readPtr, keyLength);
+        readPtr += keyLength;
+        if (manifestModel.key != key) return ManifestValidationResult::KeyMismatch;
 
-        if (dbManifestData.requiresMatchingEndianness)
+        const std::size_t versionStringLength = std::to_integer<std::size_t>(*readPtr);
+        readPtr += 1;
+        if (manifestData.size() < (readPtr - manifestData.data()) + versionStringLength) return ManifestValidationResult::InvalidManifest;
+        std::string versionString;
+        versionString.resize(versionStringLength);
+        std::memcpy(versionString.data(), readPtr, versionStringLength);
+        readPtr += versionStringLength;
+
+        auto versionOpt = util::SemanticVersion::fromString(versionString);
+        if (!versionOpt.has_value())
         {
-            if (manifestData.size() != 1 + keyLength + sizeof(EndiannessSignature))
+            return ManifestValidationResult::InvalidVersion;
+        }
+
+        if (*versionOpt < support.minimumSupportedVersion)
+        {
+            return ManifestValidationResult::UnsupportedVersion;
+        }
+
+        if (manifestModel.requiresMatchingEndianness)
+        {
+            if (manifestData.size() != (readPtr - manifestData.data()) + sizeof(EndiannessSignature))
             {
                 return ManifestValidationResult::InvalidManifest;
             }
             else
             {
                 EndiannessSignature sig;
-                std::memcpy(&sig, manifestData.data() + 1 + keyLength, sizeof(EndiannessSignature));
+                std::memcpy(&sig, readPtr, sizeof(EndiannessSignature));
+                readPtr += sizeof(EndiannessSignature);
 
                 return sig == EndiannessSignature{}
                     ? ManifestValidationResult::Ok
                     : ManifestValidationResult::EndiannessMismatch;
             }
         }
-        else if (manifestData.size() == 1 + keyLength)
+        else if (readPtr == manifestData.data() + manifestData.size())
         {
             return ManifestValidationResult::Ok;
         }

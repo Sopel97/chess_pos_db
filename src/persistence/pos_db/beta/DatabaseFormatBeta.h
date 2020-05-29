@@ -8,6 +8,7 @@
 #include "persistence/pos_db/OrderedEntrySetPositionDatabase.h"
 
 #include "util/ArithmeticUtility.h"
+#include "util/SemanticVersion.h"
 
 #include <cstdint>
 
@@ -626,6 +627,9 @@ namespace persistence
             
             static constexpr std::uint64_t maxBytesPerPosition = 24;
             static constexpr std::optional<double> estimatedAverageBytesPerPosition = 19.0;
+
+            static constexpr util::SemanticVersion version{ 1, 0, 0 };
+            static constexpr util::SemanticVersion minimumSupportedVersion{ 1, 0, 0 };
         };
 
         using Database = persistence::pos_db::OrderedEntrySetPositionDatabase<

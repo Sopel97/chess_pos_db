@@ -93,6 +93,8 @@
     <ClInclude Include="src\util\LazyCached.h" />
     <ClInclude Include="src\util\MemoryAmount.h" />
     <ClInclude Include="src\util\Meta.h" />
+    <ClInclude Include="src\util\SemanticVersion.h" />
+    <ClInclude Include="src\util\StringUtil.h" />
     <ClInclude Include="src\util\UnsignedCharBufferView.h" />
   </ItemGroup>
   <ItemGroup>
@@ -125,6 +127,7 @@
     <ClCompile Include="src\persistence\pos_db\Query.cpp" />
     <ClCompile Include="src\persistence\pos_db\GameHeader.cpp" />
     <ClCompile Include="src\util\MemoryAmount.cpp" />
+    <ClCompile Include="src\util\StringUtil.cpp" />
     <ClCompile Include="test\chess\BcgnTest.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release-Clang|x64'">true</ExcludedFromBuild>
     </ClCompile>

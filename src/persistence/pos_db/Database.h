@@ -6,6 +6,8 @@
 
 #include "enum/EnumArray.h"
 
+#include "util/SemanticVersion.h"
+
 #include "json/json.hpp"
 
 #include <cstdint>
@@ -177,6 +179,9 @@ namespace persistence
         std::uint64_t maxBytesPerPosition;
         std::optional<double> estimatedAverageBytesPerPosition;
 
+        util::SemanticVersion version;
+        util::SemanticVersion minimumSupportedVersion;
+
         friend void to_json(nlohmann::json& j, const DatabaseSupportManifest& manifest);
     };
 
@@ -184,6 +189,7 @@ namespace persistence
     {
         std::string key;
         bool requiresMatchingEndianness;
+        util::SemanticVersion version;
 
         friend void to_json(nlohmann::json& j, const DatabaseManifest& manifest);
     };
@@ -193,7 +199,9 @@ namespace persistence
         Ok,
         KeyMismatch,
         EndiannessMismatch,
-        InvalidManifest
+        InvalidManifest,
+        InvalidVersion,
+        UnsupportedVersion
     };
 
     struct Database
@@ -224,7 +232,7 @@ namespace persistence
         using ImportProgressCallback = std::function<void(const ImportProgressReport&)>;
         using MergeProgressCallback = std::function<void(const MergeProgressReport&)>;
 
-        Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel);
+        Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support);
 
         [[nodiscard]] static std::filesystem::path manifestPath(const std::filesystem::path& dirPath);
 
@@ -279,18 +287,17 @@ namespace persistence
 
         std::filesystem::path m_baseDirPath;
         DatabaseStats m_stats;
-        DatabaseManifest m_manifestModel;
 
         void loadStats();
         void saveStats();
 
-        [[nodiscard]] ManifestValidationResult createOrValidateManifest() const;
+        void updateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
 
-        void initializeManifest() const;
+        void initializeManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
 
-        void createManifest() const;
+        void createManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
 
-        [[nodiscard]] ManifestValidationResult validateManifest() const;
+        [[nodiscard]] ManifestValidationResult validateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
 
         [[nodiscard]] std::filesystem::path manifestPath() const;
 
