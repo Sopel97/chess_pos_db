@@ -1241,10 +1241,6 @@ namespace persistence
                     };
                     ext::IndexBuilder<PersistedEntryType, CompareLessWithoutReverseMove, decltype(extractKey)> ib(m_indexGranularity, {}, extractKey);
                     {
-                        auto onWrite = [&ib](const std::byte* data, std::size_t elementSize, std::size_t count) {
-                            ib.append(reinterpret_cast<const PersistedEntryType*>(data), count);
-                        };
-
                         std::vector<ext::ImmutableSpan<PersistedEntryType>> spans;
                         spans.reserve(files.size());
                         for (auto&& file : files)
@@ -1254,7 +1250,7 @@ namespace persistence
 
                         const std::size_t totalFileSize = ext::bytesInSpans(spans);
 
-                        ext::ObservableBinaryOutputFile outFile(onWrite, outFilePath);
+                        ext::BinaryOutputFile outFile(outFilePath);
 
                         {
                             const std::size_t outBufferSize = ext::numObjectsPerBufferUnit<PersistedEntryType>(m_mergeWriterBufferSize.bytes(), 2);
@@ -1269,6 +1265,7 @@ namespace persistence
                                 if constexpr (hasSmearedEntry)
                                 {
                                     return[
+                                        &ib,
                                         &out,
                                         &accumulator,
                                         &first,
@@ -1289,6 +1286,7 @@ namespace persistence
                                                 for (auto e : accumulator)
                                                 {
                                                     out.emplace(e);
+                                                    ib.append(&e, 1);
                                                 }
                                             }
                                             accumulator = EntryType(nextSmeared);
@@ -1306,6 +1304,7 @@ namespace persistence
                                 else
                                 {
                                     return [
+                                        &ib,
                                         &out, 
                                         &accumulator,
                                         &first,
@@ -1323,6 +1322,7 @@ namespace persistence
                                         else
                                         {
                                             out.emplace(accumulator);
+                                            ib.append(&accumulator, 1);
                                             accumulator = entry;
                                         }
                                     };
@@ -1439,11 +1439,13 @@ namespace persistence
                                     for (auto e : accumulator)
                                     {
                                         out.emplace(e);
+                                        ib.append(&e, 1);
                                     }
                                 }
                                 else
                                 {
                                     out.emplace(accumulator);
+                                    ib.append(&accumulator, 1);
                                 }
                             }
                         }
