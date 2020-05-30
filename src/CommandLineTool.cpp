@@ -224,14 +224,14 @@ namespace command_line_app
 
         parser.Parse();
 
-        auto pgns = parsePgnListFile(input.Get());
-        if (temp.Get() != "")
+        auto pgns = parsePgnListFile(args::get(input));
+        if (args::get(temp) != "")
         {
-            createImpl(type.Get(), output.Get(), pgns, temp.Get());
+            createImpl(args::get(type), args::get(output), pgns, args::get(temp));
         }
         else
         {
-            createImpl(type.Get(), output.Get(), pgns);
+            createImpl(args::get(type), args::get(output), pgns);
         }
     }
 
@@ -248,7 +248,7 @@ namespace command_line_app
 
         parser.Parse();
 
-        mergeImpl(input.Get());
+        mergeImpl(args::get(input));
     }
 
     static std::uint32_t receiveLength(const char* str)
@@ -1553,15 +1553,16 @@ namespace command_line_app
         throw std::runtime_error("Problems with brynet with clang-cl. Not available right now.");
 #else
 
+        auto portValue = args::get(port);
         if (open.Get() != "")
         {
-            Logger::instance().logInfo(std::string("Running TCP with open database on port ") + std::to_string(port.Get()));
-            tcpImpl(open.Get(), port);
+            Logger::instance().logInfo(std::string("Running TCP with open database on port ") + std::to_string(portValue));
+            tcpImpl(args::get(open), portValue);
         }
         else
         {
-            Logger::instance().logInfo(std::string("Running TCP on port ") + std::to_string(port.Get()));
-            tcpImpl(port);
+            Logger::instance().logInfo(std::string("Running TCP on port ") + std::to_string(portValue));
+            tcpImpl(portValue);
         }
 #endif
     }
@@ -1658,15 +1659,15 @@ namespace command_line_app
 
         parser.Parse();
 
-        const std::filesystem::path from = input.Get();
-        const std::filesystem::path to = output.Get();
+        const std::filesystem::path from = args::get(input);
+        const std::filesystem::path to = args::get(output);
 
         if (from.extension() == ".pgn" && to.extension() == ".bcgn")
         {
             bcgn::BcgnFileHeader header{};
             auto mode = bcgn::BcgnFileWriter::FileOpenMode::Truncate;
 
-            switch (compressionLevel)
+            switch (args::get(compressionLevel))
             {
             case 0:
                 header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
@@ -1742,7 +1743,7 @@ namespace command_line_app
 
         parser.Parse();
 
-        const std::filesystem::path path = input.Get();
+        const std::filesystem::path path = args::get(input);
         if (path.extension() == ".pgn")
         {
             countPgnGames(path);
@@ -1812,7 +1813,7 @@ namespace command_line_app
 
         parser.Parse();
 
-        const std::filesystem::path path = input.Get();
+        const std::filesystem::path path = args::get(input);
         if (path.extension() == ".pgn")
         {
             benchPgn(path);
@@ -1888,7 +1889,7 @@ namespace command_line_app
 
         parser.Parse();
 
-        const std::filesystem::path path = input.Get();
+        const std::filesystem::path path = args::get(input);
         if (path.extension() == ".pgn")
         {
             statsPgn(path);
