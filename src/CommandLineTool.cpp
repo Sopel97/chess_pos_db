@@ -215,16 +215,17 @@ namespace command_line_app
     static void create(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::ValueFlag<std::string> temp(parser, "path", "The directory to use for merging", { "temp" });
+
         args::ValueFlag<std::string> type(requiredArgs, "name", "The type (format/scheme) of the database", { "type" });
         args::ValueFlag<std::string> output(requiredArgs, "path", "The output directory", { 'o', "output" });
-        args::ValueFlag<std::string> temp(requiredArgs, "path", "The directory to use for merging", { "temp" });
 
         args::Positional<std::string> input(requiredArgs, "input definition path", "The input is a file which consists of a list of paths to .pgn or .bcgn files. Each line should contain 'server'/'human'/'engine'; path");
 
         parser.Parse();
 
         auto pgns = parsePgnListFile(input.Get());
-        if (temp)
+        if (temp.Get() != "")
         {
             createImpl(type.Get(), output.Get(), pgns, temp.Get());
         }
@@ -1545,19 +1546,21 @@ namespace command_line_app
         args::ValueFlag<std::uint16_t> port(requiredArgs, "port", "The local port to use", { "port" });
 
         args::ValueFlag<std::string> open(parser, "path", "Optional database path. If specified it will only allow queries to be made.", { "open" });
-
+        
         parser.Parse();
 
 #if defined(__clang__)
         throw std::runtime_error("Problems with brynet with clang-cl. Not available right now.");
 #else
 
-        if (open)
+        if (open.Get() != "")
         {
+            Logger::instance().logInfo(std::string("Running TCP with open database on port ") + std::to_string(port.Get()));
             tcpImpl(open.Get(), port);
         }
         else
         {
+            Logger::instance().logInfo(std::string("Running TCP on port ") + std::to_string(port.Get()));
             tcpImpl(port);
         }
 #endif
