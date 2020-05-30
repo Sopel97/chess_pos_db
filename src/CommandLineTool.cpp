@@ -215,11 +215,11 @@ namespace command_line_app
     static void create(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::ValueFlag<std::string> type(requiredArgs, "name", "helptext", { "type" });
-        args::ValueFlag<std::string> output(requiredArgs, "path", "helptext", { 'o', "output" });
-        args::ValueFlag<std::string> temp(requiredArgs, "path", "helptext", { "temp" });
+        args::ValueFlag<std::string> type(requiredArgs, "name", "The type (format/scheme) of the database", { "type" });
+        args::ValueFlag<std::string> output(requiredArgs, "path", "The output directory", { 'o', "output" });
+        args::ValueFlag<std::string> temp(requiredArgs, "path", "The directory to use for merging", { "temp" });
 
-        args::Positional<std::string> input(requiredArgs, "path to input definitions", "helptext");
+        args::Positional<std::string> input(requiredArgs, "input definition path", "The input is a file which consists of a list of paths to .pgn or .bcgn files. Each line should contain 'server'/'human'/'engine'; path");
 
         parser.Parse();
 
@@ -243,7 +243,7 @@ namespace command_line_app
     static void merge(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::Positional<std::string> input(requiredArgs, "path", "helptext");
+        args::Positional<std::string> input(requiredArgs, "path", "The path to the database for which to merge files.");
 
         parser.Parse();
 
@@ -1542,9 +1542,9 @@ namespace command_line_app
     static void tcp(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::ValueFlag<std::uint16_t> port(requiredArgs, "port", "helptext", { "port" });
+        args::ValueFlag<std::uint16_t> port(requiredArgs, "port", "The local port to use", { "port" });
 
-        args::ValueFlag<std::string> open(parser, "path", "helptext", { "open" });
+        args::ValueFlag<std::string> open(parser, "path", "Optional database path. If specified it will only allow queries to be made.", { "open" });
 
         parser.Parse();
 
@@ -1645,13 +1645,13 @@ namespace command_line_app
 
     static void convert(args::Subparser& parser)
     {
-        args::Flag headerless(parser, "headerless", "helptext", { 'h', "headerless" });
-        args::Flag append(parser, "append", "helptext", { 'a', "append" });
-        args::ValueFlag<std::uint32_t> compressionLevel(parser, "compression", "helptext", { 'c', "compression" }, 0u);
+        args::Flag headerless(parser, "headerless", "Only store critical information in the game headers", { 'h', "headerless" });
+        args::Flag append(parser, "append", "Append to an already existing file.", { 'a', "append" });
+        args::ValueFlag<std::uint32_t> compressionLevel(parser, "compression", "The compression level to use for BCGN files. Currently supports 0 or 1. For further info see BCGN documentation.", { 'c', "compression" }, 0u);
 
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
-        args::Positional<std::string> output(requiredArgs, "output path", "helptext");
+        args::Positional<std::string> input(requiredArgs, "input path", "File to convert from.");
+        args::Positional<std::string> output(requiredArgs, "output path", "File to convert to.");
 
         parser.Parse();
 
@@ -1688,7 +1688,7 @@ namespace command_line_app
         }
         else
         {
-            throwInvalidArguments();
+            std::cout << "Only PGN -> BCGN is supported right now.\n";
         }
     }
 
@@ -1735,7 +1735,7 @@ namespace command_line_app
     static void countGames(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
+        args::Positional<std::string> input(requiredArgs, "input path", "The path to a PGN or BCGN file.");
 
         parser.Parse();
 
@@ -1805,7 +1805,7 @@ namespace command_line_app
     static void bench(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
+        args::Positional<std::string> input(requiredArgs, "input path", "The path to a PGN or BCGN file.");
 
         parser.Parse();
 
@@ -1881,7 +1881,7 @@ namespace command_line_app
     static void stats(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
+        args::Positional<std::string> input(requiredArgs, "input path", "The path to a PGN or BCGN file.");
 
         parser.Parse();
 
@@ -1916,14 +1916,14 @@ namespace command_line_app
         args::ArgumentParser parser("Command line application...");
         args::Group commands(parser, "commands"); 
 
-        args::Command commit(commands, "create", "helptext", &create);
-        args::Command merge(commands, "merge", "helptext", &merge);
-        args::Command tcp(commands, "tcp", "helptext", &tcp);
-        args::Command convert(commands, "convert", "helptext", &convert);
-        args::Command countGames(commands, "count_games", "helptext", &countGames);
-        args::Command stats(commands, "stats", "helptext", &stats);
-        args::Command bench(commands, "bench", "helptext", &bench);
-        args::Command interactive(commands, "interactive", "helptext", &interactive);
+        args::Command create(commands, "create", "Create a database from input files", &create);
+        args::Command merge(commands, "merge", "Merge (optimize) files of an already existing database", &merge);
+        args::Command tcp(commands, "tcp", "Run a local TCP server allowing other processes to execute commands", &tcp);
+        args::Command convert(commands, "convert", "Convert between PGN, BCGN file formats", &convert);
+        args::Command countGames(commands, "count_games", "Count games in a PGN/BCGN file", &countGames);
+        args::Command stats(commands, "stats", "Calculate statistics for a PGN/BCGN file", &stats);
+        args::Command bench(commands, "bench", "Benchmark processing speed of PGN/BCGN file", &bench);
+        args::Command interactive(commands, "interactive", "Launch an interactive, stateful command line for extended operation.", &interactive);
 
         args::GlobalOptions globals(parser, arguments);
 
