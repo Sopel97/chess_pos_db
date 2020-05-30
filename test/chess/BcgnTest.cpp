@@ -1,3 +1,6 @@
+#include "catch2/catch.hpp"
+// again, windows.h has to be included before json.hpp
+
 #include "chess/Bcgn.h"
 #include "chess/MoveGenerator.h"
 
@@ -76,29 +79,29 @@ void testBcgnReader(int seed, std::string filename, bcgn::BcgnFileHeader header,
         if (game.hasGameHeader())
         {
             const auto header = game.gameHeader();
-            TEST_ASSERT(header.blackElo() == rand() % 2000 + 1000);
-            TEST_ASSERT(header.whiteElo() == rand() % 2000 + 1000);
-            TEST_ASSERT(header.date() == Date(2020, 4, 17));
-            TEST_ASSERT(header.eco() == Eco('E', 1));
-            TEST_ASSERT(header.round() == i % 4000);
-            TEST_ASSERT(header.whitePlayer() == "whiteplayer");
-            TEST_ASSERT(header.blackPlayer() == "blackplayer");
-            TEST_ASSERT(header.event() == "eventname");
-            TEST_ASSERT(header.site() == "sitesitesite");
+            REQUIRE(header.blackElo() == rand() % 2000 + 1000);
+            REQUIRE(header.whiteElo() == rand() % 2000 + 1000);
+            REQUIRE(header.date() == Date(2020, 4, 17));
+            REQUIRE(header.eco() == Eco('E', 1));
+            REQUIRE(header.round() == i % 4000);
+            REQUIRE(header.whitePlayer() == "whiteplayer");
+            REQUIRE(header.blackPlayer() == "blackplayer");
+            REQUIRE(header.event() == "eventname");
+            REQUIRE(header.site() == "sitesitesite");
 
             if (rand() % 10 == 0 || true)
             {
                 for (auto&& [name, value] : header.additionalTags())
                 {
-                    if (name == "additionaltag1") TEST_ASSERT(value == "additionalvalue1");
-                    if (name == "additionaltag2") TEST_ASSERT(value == "additionalvalue2");
+                    if (name == "additionaltag1") REQUIRE(value == "additionalvalue1");
+                    if (name == "additionaltag2") REQUIRE(value == "additionalvalue2");
                 }
             }
         }
 
         if (rand() % 10 == 0)
         {
-            TEST_ASSERT(game.hasCustomStartPosition());
+            REQUIRE(game.hasCustomStartPosition());
         }
 
         auto pos = game.startPosition();
@@ -113,29 +116,29 @@ void testBcgnReader(int seed, std::string filename, bcgn::BcgnFileHeader header,
 
             ++movecountInThisGame;
             const auto move = moves[rand() % moves.size()];
-            TEST_ASSERT(moveProvider.hasNext());
+            REQUIRE(moveProvider.hasNext());
 
             const auto providedMove = moveProvider.next(pos);
-            TEST_ASSERT(move == providedMove);
+            REQUIRE(move == providedMove);
 
             pos.doMove(move);
         }
 
         const auto readNumPlies = game.numPlies();
-        TEST_ASSERT(movecountInThisGame == readNumPlies);
+        REQUIRE(movecountInThisGame == readNumPlies);
 
         const auto randomResult = static_cast<GameResult>(rand() % 3);
         const auto readResult = game.result();
-        TEST_ASSERT(readResult.has_value());
-        TEST_ASSERT(*readResult == randomResult);
+        REQUIRE(readResult.has_value());
+        REQUIRE(*readResult == randomResult);
 
         ++i;
     }
 
-    TEST_ASSERT(i == numGames);
+    REQUIRE(i == numGames);
 }
 
-void testBcgnWriter()
+TEST_CASE("BCGN reader and writer", "[bcgn]") 
 {
     constexpr int numGames = 256 * 32;
     constexpr int seed = 12345;

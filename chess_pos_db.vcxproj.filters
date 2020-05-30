@@ -272,9 +272,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\chess_pos_db.cpp">
-      <Filter>Source Files\src</Filter>
-    </ClCompile>
     <ClCompile Include="test\chess\SanTest.cpp">
       <Filter>Source Files\test\chess</Filter>
     </ClCompile>
@@ -313,9 +310,6 @@
     </ClCompile>
     <ClCompile Include="src\external_storage\External.cpp">
       <Filter>Source Files\src\external_storage</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Configuration.cpp">
-      <Filter>Source Files\src</Filter>
     </ClCompile>
     <ClCompile Include="src\persistence\pos_db\Database.cpp">
       <Filter>Source Files\src\persistence\pos_db</Filter>
@@ -376,6 +370,15 @@
     </ClCompile>
     <ClCompile Include="src\util\StringUtil.cpp">
       <Filter>Source Files\src\util</Filter>
+    </ClCompile>
+    <ClCompile Include="src\chess_pos_db.cpp">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Configuration.cpp">
+      <Filter>Source Files\src</Filter>
+    </ClCompile>
+    <ClCompile Include="test\TestMain.cpp">
+      <Filter>Source Files\test</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

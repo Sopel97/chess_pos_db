@@ -1,3 +1,5 @@
+#include "catch2/catch.hpp"
+
 #include "chess/ReverseMoveGenerator.h"
 #include "chess/Eran.h"
 
@@ -9,7 +11,7 @@ void assertMoveIncluded(std::string_view fen, std::string_view eran)
     movegen::forEachPseudoLegalReverseMove(pos, movegen::PieceSet::standardPieceSet(), [&rm, &ok](const ReverseMove& genrm) {
         if (rm == genrm) ok = true;
         });
-    TEST_ASSERT(ok);
+    REQUIRE(ok);
 }
 
 void assertMoveNotIncluded(std::string_view fen, std::string_view eran)
@@ -20,7 +22,7 @@ void assertMoveNotIncluded(std::string_view fen, std::string_view eran)
     movegen::forEachPseudoLegalReverseMove(pos, movegen::PieceSet::standardPieceSet(), [&rm, &ok](const ReverseMove& genrm) {
         if (rm == genrm) ok = false;
         });
-    TEST_ASSERT(ok);
+    REQUIRE(ok);
 }
 
 void assertMoveNotIncluded(std::string_view fen, ReverseMove rm)
@@ -30,7 +32,7 @@ void assertMoveNotIncluded(std::string_view fen, ReverseMove rm)
     movegen::forEachPseudoLegalReverseMove(pos, movegen::PieceSet::standardPieceSet(), [&rm, &ok](const ReverseMove& genrm) {
         if (rm == genrm) ok = false;
         });
-    TEST_ASSERT(ok);
+    REQUIRE(ok);
 }
 
 void assertMoveCount(std::string_view fen, int c)
@@ -39,10 +41,10 @@ void assertMoveCount(std::string_view fen, int c)
     movegen::forEachPseudoLegalReverseMove(pos, movegen::PieceSet::standardPieceSet(), [&c](const ReverseMove& genrm) {
         --c;
         });
-    TEST_ASSERT(c == 0);
+    REQUIRE(c == 0);
 }
 
-void test()
+TEST_CASE("Legal reverse move generation", "[reverse_movegen]")
 {
     assertMoveCount("rnbqkbnr/pp1ppppp/8/8/2pP4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1", 1);
     assertMoveCount("rnbqkbnr/p2p1p1p/8/1p2pPpP/2pP4/8/PPP1P1P1/RNBQKBNR b KQkq d3 0 1", 3);
