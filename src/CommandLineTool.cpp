@@ -2,7 +2,6 @@
 
 #include "CommandLineTool.h"
 
-
 #include "chess/GameClassification.h"
 
 // IMPORTANT: If brynet is included AFTER nlohmann::json then linker requires
@@ -38,6 +37,8 @@
 #include "Configuration.h"
 #include "Logger.h"
 
+#include "ConsoleApp.h"
+
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -50,6 +51,7 @@
 #include <string_view>
 #include <vector>
 
+#include "args/args.hxx"
 #include "json/json.hpp"
 
 namespace command_line_app
@@ -179,12 +181,6 @@ namespace command_line_app
         return pgns;
     }
 
-    static void help(const Args&)
-    {
-        std::cout << "create <type> <destination> <pgn_files> [<temp>]\n";
-        std::cout << "merge <path> [<destination>]\n";
-    }
-
     static void createImpl(
         const std::string& key,
         const std::filesystem::path& destination,
@@ -216,19 +212,25 @@ namespace command_line_app
         std::filesystem::remove_all(temp);
     }
 
-    static void create(const Args& args)
+    static void create(args::Subparser& parser)
     {
-        if (args.size() == 4)
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::ValueFlag<std::string> type(requiredArgs, "name", "helptext", { "type" });
+        args::ValueFlag<std::string> output(requiredArgs, "path", "helptext", { 'o', "output" });
+        args::ValueFlag<std::string> temp(requiredArgs, "path", "helptext", { "temp" });
+
+        args::Positional<std::string> input(requiredArgs, "path to input definitions", "helptext");
+
+        parser.Parse();
+
+        auto pgns = parsePgnListFile(input.Get());
+        if (temp)
         {
-            createImpl(args[1], args[2], parsePgnListFile(args[3]));
-        }
-        else if (args.size() == 5)
-        {
-            createImpl(args[1], args[2], parsePgnListFile(args[3]), args[4]);
+            createImpl(type.Get(), output.Get(), pgns, temp.Get());
         }
         else
         {
-            throwInvalidArguments();
+            createImpl(type.Get(), output.Get(), pgns);
         }
     }
 
@@ -238,12 +240,14 @@ namespace command_line_app
         db->mergeAll({}, std::nullopt);
     }
 
-    static void merge(const Args& args)
+    static void merge(args::Subparser& parser)
     {
-        if (args.size() == 2)
-        {
-            mergeImpl(args[1]);
-        }
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::Positional<std::string> input(requiredArgs, "path", "helptext");
+
+        parser.Parse();
+
+        mergeImpl(input.Get());
     }
 
     static std::uint32_t receiveLength(const char* str)
@@ -1535,34 +1539,26 @@ namespace command_line_app
         }
     }
 
-    static void tcp(const Args& args)
+    static void tcp(args::Subparser& parser)
     {
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::ValueFlag<std::uint16_t> port(requiredArgs, "port", "helptext", { "port" });
+
+        args::ValueFlag<std::string> open(parser, "path", "helptext", { "open" });
+
+        parser.Parse();
+
 #if defined(__clang__)
         throw std::runtime_error("Problems with brynet with clang-cl. Not available right now.");
 #else
-        if (args.size() == 3)
-        {
-            const int port = std::stoi(args[2]);
-            if (port <= 0 || port > std::numeric_limits<std::uint64_t>::max())
-            {
-                throwInvalidArguments();
-            }
 
-            tcpImpl(args[1], static_cast<std::uint16_t>(port));
-        }
-        else if (args.size() == 2)
+        if (open)
         {
-            const int port = std::stoi(args[1]);
-            if (port <= 0 || port > std::numeric_limits<std::uint64_t>::max())
-            {
-                throwInvalidArguments();
-            }
-
-            tcpImpl(static_cast<std::uint16_t>(port));
+            tcpImpl(open.Get(), port);
         }
         else
         {
-            throwInvalidArguments();
+            tcpImpl(port);
         }
 #endif
     }
@@ -1647,48 +1643,47 @@ namespace command_line_app
         std::cout << "Converted " << totalCount << " games...\n";
     }
 
-    static void convert(const Args& args)
+    static void convert(args::Subparser& parser)
     {
-        if (args.size() < 3)
-        {
-            throwInvalidArguments();
-        }
+        args::Flag headerless(parser, "headerless", "helptext", { 'h', "headerless" });
+        args::Flag append(parser, "append", "helptext", { 'a', "append" });
+        args::ValueFlag<std::uint32_t> compressionLevel(parser, "compression", "helptext", { 'c', "compression" }, 0u);
 
-        const std::filesystem::path from = args[1];
-        const std::filesystem::path to = args[2];
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
+        args::Positional<std::string> output(requiredArgs, "output path", "helptext");
+
+        parser.Parse();
+
+        const std::filesystem::path from = input.Get();
+        const std::filesystem::path to = output.Get();
 
         if (from.extension() == ".pgn" && to.extension() == ".bcgn")
         {
             bcgn::BcgnFileHeader header{};
             auto mode = bcgn::BcgnFileWriter::FileOpenMode::Truncate;
 
-            if (args.size() >= 4)
+            switch (compressionLevel)
             {
-                switch (std::stoi(args[3]))
-                {
-                case 0:
-                    header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
-                    break;
+            case 0:
+                header.compressionLevel = bcgn::BcgnCompressionLevel::Level_0;
+                break;
 
-                case 1:
-                    header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
-                    break;
-                }
+            case 1:
+                header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
+                break;
             }
 
-            if (args.size() >= 5)
+            if (headerless)
             {
-                if (args[4].find('a') != std::string::npos)
-                {
-                    mode = bcgn::BcgnFileWriter::FileOpenMode::Append;
-                }
-
-                if (args[4].find('h') != std::string::npos)
-                {
-                    header.isHeaderless = true;
-                }
+                header.isHeaderless = true;
             }
 
+            if (append)
+            {
+                mode = bcgn::BcgnFileWriter::FileOpenMode::Append;
+            }
+            
             convertPgnToBcgnImpl(from, to, header, mode);
         }
         else
@@ -1737,14 +1732,14 @@ namespace command_line_app
         std::cout << "Found " << totalCount << " games...\n";
     }
 
-    static void countGames(const Args& args)
+    static void countGames(args::Subparser& parser)
     {
-        if (args.size() < 2)
-        {
-            throwInvalidArguments();
-        }
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
 
-        const std::filesystem::path path = args[1];
+        parser.Parse();
+
+        const std::filesystem::path path = input.Get();
         if (path.extension() == ".pgn")
         {
             countPgnGames(path);
@@ -1807,14 +1802,14 @@ namespace command_line_app
         benchReader<bcgn::BcgnFileReader>(path, bcgnParserMemory.bytes());
     }
 
-    static void bench(const Args& args)
+    static void bench(args::Subparser& parser)
     {
-        if (args.size() < 2)
-        {
-            throwInvalidArguments();
-        }
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
 
-        const std::filesystem::path path = args[1];
+        parser.Parse();
+
+        const std::filesystem::path path = input.Get();
         if (path.extension() == ".pgn")
         {
             benchPgn(path);
@@ -1883,14 +1878,14 @@ namespace command_line_app
         statsImpl<bcgn::BcgnFileReader>(path, bcgnParserMemory.bytes());
     }
 
-    static void stats(const Args& args)
+    static void stats(args::Subparser& parser)
     {
-        if (args.size() < 2)
-        {
-            throwInvalidArguments();
-        }
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::Positional<std::string> input(requiredArgs, "input path", "helptext");
 
-        const std::filesystem::path path = args[1];
+        parser.Parse();
+
+        const std::filesystem::path path = input.Get();
         if (path.extension() == ".pgn")
         {
             statsPgn(path);
@@ -1905,27 +1900,53 @@ namespace command_line_app
         }
     }
 
-    void runCommand(const std::vector<std::string>& args)
+    void interactive(args::Subparser& parser)
     {
-        static const std::map<std::string, CommandHandler> s_commandHandlers = {
-            { "help", help },
-            { "create", create },
-            { "merge", merge },
-            { "tcp", tcp },
-            { "convert", convert },
-            { "count_games", countGames },
-            { "stats", stats },
-            { "bench", bench }
-        };
+        parser.Parse();
 
-        if (args.size() <= 0) return;
+        console_app::App console_app;
+        console_app.run();
+    }
 
-        auto handlerIt = s_commandHandlers.find(args[0]);
-        if (handlerIt == s_commandHandlers.end())
+    void run(int argc, char* argv[])
+    {
+        args::Group arguments("arguments");
+        args::HelpFlag help(arguments, "help", "help", { 'h', "help" });
+
+        args::ArgumentParser parser("Command line application...");
+        args::Group commands(parser, "commands"); 
+
+        args::Command commit(commands, "create", "helptext", &create);
+        args::Command merge(commands, "merge", "helptext", &merge);
+        args::Command tcp(commands, "tcp", "helptext", &tcp);
+        args::Command convert(commands, "convert", "helptext", &convert);
+        args::Command countGames(commands, "count_games", "helptext", &countGames);
+        args::Command stats(commands, "stats", "helptext", &stats);
+        args::Command bench(commands, "bench", "helptext", &bench);
+        args::Command interactive(commands, "interactive", "helptext", &interactive);
+
+        args::GlobalOptions globals(parser, arguments);
+
+        try
         {
-            throwInvalidCommand(args[0]);
+            parser.ParseCLI(argc, argv);
         }
-
-        handlerIt->second(args);
+        catch (args::Help)
+        {
+            std::cout << parser;
+        }
+        catch (args::Error& e)
+        {
+            Logger::instance().logError(e.what());
+            std::cerr << e.what() << std::endl << parser;
+        }
+        catch (std::runtime_error& e)
+        {
+            Logger::instance().logError(e.what());
+        }
+        catch (...)
+        {
+            Logger::instance().logError("Unknown error.");
+        }
     }
 }
