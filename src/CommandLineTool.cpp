@@ -156,8 +156,42 @@ namespace command_line_app
         return instantiateDatabase(key, path);
     }
 
+    [[nodiscard]] static persistence::ImportableFiles getPgnListFromPaths(
+        const std::vector<std::string>& human,
+        const std::vector<std::string>& engine,
+        const std::vector<std::string>& server
+    )
+    {
+        persistence::ImportableFiles pgns;
+        
+        for (auto&& path : human)
+        {
+            assertFileExists(path);
+
+            pgns.emplace_back(path, GameLevel::Human);
+        }
+
+        for (auto&& path : engine)
+        {
+            assertFileExists(path);
+
+            pgns.emplace_back(path, GameLevel::Engine);
+        }
+
+        for (auto&& path : server)
+        {
+            assertFileExists(path);
+
+            pgns.emplace_back(path, GameLevel::Server);
+        }
+
+        return pgns;
+    }
+
     [[nodiscard]] static persistence::ImportableFiles parsePgnListFile(const std::filesystem::path& path)
     {
+        assertFileExists(path);
+
         persistence::ImportableFiles pgns;
 
         std::ifstream file(path);
@@ -193,44 +227,44 @@ namespace command_line_app
         db->import(pgns, importMemory.bytes());
     }
 
-    static void createImpl(
-        const std::string& key,
-        const std::filesystem::path& destination,
-        const persistence::ImportableFiles& pgns,
-        const std::filesystem::path& temp
-    )
-    {
-        assertDirectoryEmpty(destination);
-        assertDirectoryEmpty(temp);
-
-        {
-            auto db = instantiateDatabase(key, destination);
-            db->import(pgns, importMemory.bytes());
-            db->mergeAll({ temp }, std::nullopt);
-        }
-
-        std::filesystem::remove_all(temp);
-    }
-
     static void create(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::ValueFlag<std::string> temp(parser, "path", "The directory to use for merging", { "temp" });
-
         args::ValueFlag<std::string> type(requiredArgs, "name", "The type (format/scheme) of the database", { "type" });
         args::ValueFlag<std::string> output(requiredArgs, "path", "The output directory", { 'o', "output" });
 
-        args::Positional<std::string> input(requiredArgs, "input definition path", "The input is a file which consists of a list of paths to .pgn or .bcgn files. Each line should contain 'server'/'human'/'engine'; path");
+        args::ValueFlagList<std::string> human(parser, "path", "Human files", { "human" });
+        args::ValueFlagList<std::string> engine(parser, "path", "Engine files", { "engine" });
+        args::ValueFlagList<std::string> server(parser, "path", "Server files", { "server" });
+        args::ValueFlag<std::string> listInput(parser, "input definition path", "The input is a file which consists of a list of paths to .pgn or .bcgn files. Each line should contain 'server'/'human'/'engine'; path", { "list" });
 
         parser.Parse();
 
-        auto pgns = parsePgnListFile(args::get(input));
-        if (args::get(temp) != "")
+        const bool anyList = listInput.Get() != "";
+
+        const bool anySeparate =
+            !args::get(human).empty()
+            || !args::get(engine).empty()
+            || !args::get(server).empty();
+
+        assertDirectoryEmpty(args::get(output));
+
+        if (anyList && anySeparate)
         {
-            createImpl(args::get(type), args::get(output), pgns, args::get(temp));
+            std::cout << "Either list or separate. Not both.\n";
+            return;
+        }
+        else if (!anyList && !anySeparate)
+        {
+            instantiateDatabase(args::get(type), args::get(output));
         }
         else
         {
+            auto pgns = 
+                anyList
+                ? parsePgnListFile(args::get(listInput))
+                : getPgnListFromPaths(args::get(human), args::get(engine), args::get(server));
+
             createImpl(args::get(type), args::get(output), pgns);
         }
     }
