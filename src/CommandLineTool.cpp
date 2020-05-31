@@ -269,10 +269,14 @@ namespace command_line_app
         }
     }
 
-    static void mergeImpl(const std::filesystem::path& path)
+    static void mergeImpl(
+        const std::filesystem::path& path, 
+        const std::vector<std::filesystem::path>& temps,
+        std::optional<MemoryAmount> maxSpace
+    )
     {
         auto db = loadDatabase(path);
-        db->mergeAll({}, std::nullopt);
+        db->mergeAll(temps, maxSpace);
     }
 
     static void merge(args::Subparser& parser)
@@ -280,9 +284,28 @@ namespace command_line_app
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
         args::Positional<std::string> input(requiredArgs, "path", "The path to the database for which to merge files.");
 
+        args::ValueFlag<std::string> maxSpace(parser, "memory", "The amount of space to use in temporary dirs. For example \"100GiB\"", { "memory" });
+        args::ValueFlagList<std::string> temp(parser, "path", "Temporary directories to use for merging", { "temp" });
+
         parser.Parse();
 
-        mergeImpl(args::get(input));
+        std::filesystem::path inputPath = args::get(input);
+        std::vector<std::filesystem::path> temps;
+        for (auto&& t : temp)
+        {
+            temps.emplace_back(t);
+        }
+        std::optional<MemoryAmount> maxSpaceOpt;
+        if (args::get(maxSpace) != "")
+        {
+            maxSpaceOpt = MemoryAmount(args::get(maxSpace));
+        }
+
+        mergeImpl(
+            inputPath,
+            temps,
+            maxSpaceOpt
+        );
     }
 
     static std::uint32_t receiveLength(const char* str)
