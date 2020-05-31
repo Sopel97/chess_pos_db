@@ -269,6 +269,56 @@ namespace command_line_app
         }
     }
 
+    static void appendImpl(
+        const std::filesystem::path& path,
+        const persistence::ImportableFiles& pgns
+    )
+    {
+        auto db = loadDatabase(path);
+
+        db->import(pgns, importMemory.bytes());
+    }
+
+
+    static void append(args::Subparser& parser)
+    {
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::Positional<std::string> input(requiredArgs, "path", "The path to the database for which to merge files.");
+
+        args::ValueFlagList<std::string> human(parser, "path", "Human files", { "human" });
+        args::ValueFlagList<std::string> engine(parser, "path", "Engine files", { "engine" });
+        args::ValueFlagList<std::string> server(parser, "path", "Server files", { "server" });
+        args::ValueFlag<std::string> listInput(parser, "input definition path", "The input is a file which consists of a list of paths to .pgn or .bcgn files. Each line should contain 'server'/'human'/'engine'; path", { "list" });
+
+        parser.Parse();
+
+        const bool anyList = listInput.Get() != "";
+
+        const bool anySeparate =
+            !args::get(human).empty()
+            || !args::get(engine).empty()
+            || !args::get(server).empty();
+
+        if (anyList && anySeparate)
+        {
+            std::cout << "Either list or separate. Not both.\n";
+            return;
+        }
+        else if (!anyList && !anySeparate)
+        {
+            std::cout << "Nothing to do.\n";
+        }
+        else
+        {
+            auto pgns =
+                anyList
+                ? parsePgnListFile(args::get(listInput))
+                : getPgnListFromPaths(args::get(human), args::get(engine), args::get(server));
+
+            appendImpl(args::get(input), pgns);
+        }
+    }
+
     static void mergeImpl(
         const std::filesystem::path& path, 
         const std::vector<std::filesystem::path>& temps,
@@ -1978,6 +2028,7 @@ namespace command_line_app
         args::Group commands(parser, "commands"); 
 
         args::Command create(commands, "create", "Create a database from input files", &create);
+        args::Command append(commands, "append", "Append files to an already existing database", &append);
         args::Command merge(commands, "merge", "Merge (optimize) files of an already existing database", &merge);
         args::Command tcp(commands, "tcp", "Run a local TCP server allowing other processes to execute commands", &tcp);
         args::Command convert(commands, "convert", "Convert between PGN, BCGN file formats", &convert);
