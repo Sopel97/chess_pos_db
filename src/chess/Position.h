@@ -814,6 +814,12 @@ private:
 
 struct CompressedPosition;
 
+struct PositionHash128
+{
+    std::uint64_t high;
+    std::uint64_t low;
+};
+
 struct Position : public Board
 {
     using BaseType = Board;
@@ -822,7 +828,8 @@ struct Position : public Board
         Board(),
         m_sideToMove(Color::White),
         m_epSquare(Square::none()),
-        m_castlingRights(CastlingRights::All)
+        m_castlingRights(CastlingRights::All),
+        m_padding{}
     {
     }
 
@@ -830,7 +837,8 @@ struct Position : public Board
         Board(board),
         m_sideToMove(sideToMove),
         m_epSquare(epSquare),
-        m_castlingRights(castlingRights)
+        m_castlingRights(castlingRights),
+        m_padding{}
     {
     }
 
@@ -942,7 +950,7 @@ struct Position : public Board
 
     [[nodiscard]] Position afterMove(Move move) const;
 
-    [[nodiscard]] std::array<std::uint32_t, 4> hash() const;
+    [[nodiscard]] PositionHash128 hash128() const;
 
     [[nodiscard]] constexpr bool isEpPossible() const
     {
@@ -955,6 +963,9 @@ protected:
     Color m_sideToMove;
     Square m_epSquare;
     CastlingRights m_castlingRights;
+    std::uint8_t m_padding;
+
+    static_assert(sizeof(Color) + sizeof(Square) + sizeof(CastlingRights) + sizeof(std::uint8_t) == 4);
 
     [[nodiscard]] FORCEINLINE bool isEpPossible(Square epSquare, Color sideToMove) const;
 

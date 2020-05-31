@@ -794,20 +794,16 @@ ReverseMove Position::doMove(const Move& move)
     return cpy;
 }
 
-[[nodiscard]] std::array<std::uint32_t, 4> Position::hash() const
+[[nodiscard]] PositionHash128 Position::hash128() const
 {
-    constexpr std::uint32_t epSquareShift = 1;
-    constexpr std::uint32_t castlingRightsShift = 1 + 7;
+    static_assert(offsetof(Position, m_sideToMove) + 1 == offsetof(Position, m_epSquare));
+    static_assert(offsetof(Position, m_epSquare) + 1 == offsetof(Position, m_castlingRights));
+    static_assert(offsetof(Position, m_castlingRights) + 1 == offsetof(Position, m_padding));
 
-    std::array<std::uint32_t, 4> arrh;
-    auto h = xxhash::XXH3_128bits(piecesRaw(), 64);
-    std::memcpy(arrh.data(), &h, sizeof(std::uint32_t) * 4);
-    const std::uint32_t mod =
-        ordinal(m_sideToMove)
-        | (ordinal(m_epSquare) << epSquareShift) // epSquare can be 64
-        | (ordinal(m_castlingRights) << castlingRightsShift);
-    arrh[0] ^= mod;
-    return arrh;
+    std::uint32_t seed;
+    std::memcpy(&seed, &m_sideToMove, 4);
+    auto h = xxhash::XXH128(piecesRaw(), 64, seed);
+    return { h.high64, h.low64 };
 }
 
 [[nodiscard]] FORCEINLINE bool Position::isEpPossible(Square epSquare, Color sideToMove) const
