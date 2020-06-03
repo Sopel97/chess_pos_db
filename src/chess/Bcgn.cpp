@@ -24,8 +24,6 @@
 #include <optional>
 #include <vector>
 
-#include <iostream>
-
 namespace bcgn
 {
     void BcgnFileHeader::readFrom(const unsigned char* str)
@@ -308,11 +306,10 @@ namespace bcgn
             
             if (m_bitsLeft == 0)
             {
-                m_movetext.emplace_back(0);
+                m_movetext.emplace_back(bits << (8 - count));
                 m_bitsLeft = 8;
             }
-
-            if (count <= m_bitsLeft)
+            else if (count <= m_bitsLeft)
             {
                 m_movetext.back() |= bits << (m_bitsLeft - count);
             }
@@ -649,9 +646,12 @@ namespace bcgn
 
         case BcgnCompressionLevel::Level_2:
         {
-            // TODO: we need to write bits, and just enough for the job
-            const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
-            const std::uint8_t pieceId = (pos.piecesBB(pos.sideToMove()) & bb::before(move.from)).count();
+            const Color sideToMove = pos.sideToMove();
+            const Bitboard ourPieces = pos.piecesBB(sideToMove);
+            const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+            const Bitboard occupied = ourPieces | theirPieces;
+
+            const std::uint8_t pieceId = (pos.piecesBB(sideToMove) & bb::before(move.from)).count();
             std::size_t numMoves = 0;
             std::uint8_t moveId = 0;
             const auto pt = pos.pieceAt(move.from).type();
@@ -659,16 +659,11 @@ namespace bcgn
             {
             case PieceType::Pawn:
             {
-                const Color sideToMove = pos.sideToMove();
-                const Square epSquare = pos.epSquare();
-                const Bitboard ourPieces = pos.piecesBB(sideToMove);
-                const Bitboard theirPieces = pos.piecesBB(!sideToMove);
-                const Bitboard occupied = ourPieces | theirPieces;
-
-                const Rank promotionRank = pos.sideToMove() == Color::White ? rank7 : rank2;
+                const Rank secondToLastRank = pos.sideToMove() == Color::White ? rank7 : rank2;
                 const Rank startRank = pos.sideToMove() == Color::White ? rank2 : rank7;
                 const auto forward = sideToMove == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
-                Bitboard destinations = Bitboard::none();
+
+                const Square epSquare = pos.epSquare();
 
                 Bitboard attackTargets = theirPieces;
                 if (epSquare != Square::none())
@@ -676,22 +671,29 @@ namespace bcgn
                     attackTargets |= epSquare;
                 }
 
-                destinations = bb::pawnAttacks(Bitboard::square(move.from), sideToMove) & attackTargets;
+                Bitboard destinations = bb::pawnAttacks(Bitboard::square(move.from), sideToMove) & attackTargets;
 
-                if (pos.pieceAt(move.from + forward) == Piece::none())
+                const Square sqForward = move.from + forward;
+                if (!occupied.isSet(sqForward))
                 {
-                    destinations |= move.from + forward;
-                    if (move.from.rank() == startRank && pos.pieceAt(move.from + forward + forward) == Piece::none())
+                    destinations |= sqForward;
+
+                    const Square sqForward2 = sqForward + forward;
+                    if (
+                        move.from.rank() == startRank 
+                        && !occupied.isSet(sqForward2)
+                        )
                     {
-                        destinations |= move.from + forward + forward;
+                        destinations |= sqForward2;
                     }
                 }
 
                 moveId = (destinations & bb::before(move.to)).count();
                 numMoves = destinations.count();
-                if (move.from.rank() == promotionRank)
+                if (move.from.rank() == secondToLastRank)
                 {
-                    moveId = moveId * 4 + (ordinal(move.promotedPiece.type()) - ordinal(PieceType::Knight));
+                    const auto promotionIndex = (ordinal(move.promotedPiece.type()) - ordinal(PieceType::Knight));
+                    moveId = moveId * 4 + promotionIndex;
                     numMoves *= 4;
                 }
 
@@ -699,19 +701,32 @@ namespace bcgn
             }
             case PieceType::King:
             {
-                const CastlingRights ourCastlingRightsMask = pos.sideToMove() == Color::White ? CastlingRights::White : CastlingRights::Black;
+                const CastlingRights ourCastlingRightsMask = 
+                    sideToMove == Color::White 
+                    ? CastlingRights::White 
+                    : CastlingRights::Black;
+
+                const CastlingRights castlingRights = pos.castlingRights();
+
                 const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(move.from) & ~ourPieces;
                 const auto attacksSize = attacks.count();
+                const auto numCastlingRights = intrin::popcount(ordinal(castlingRights & ourCastlingRightsMask));
+
                 numMoves += attacksSize;
-                numMoves += intrin::popcount(ordinal(pos.castlingRights() & ourCastlingRightsMask));
+                numMoves += numCastlingRights;
+
                 if (move.type == MoveType::Castle)
                 {
+                    const auto longCastlingRights = CastlingTraits::castlingRights[sideToMove][CastleType::Long];
+
                     moveId = attacksSize - 1;
-                    const auto longCastlingRights = CastlingTraits::castlingRights[pos.sideToMove()][CastleType::Long];
-                    if (contains(pos.castlingRights(), longCastlingRights))
+
+                    if (contains(castlingRights, longCastlingRights))
                     {
+                        // We have to add one no matter if it's the used one or not.
                         moveId += 1;
                     }
+
                     if (CastlingTraits::moveCastlingType(move) == CastleType::Short)
                     {
                         moveId += 1;
@@ -725,15 +740,18 @@ namespace bcgn
             }
             default:
             {
-                const Bitboard occupied = pos.piecesBB();
                 const Bitboard attacks = bb::attacks(pt, move.from, occupied) & ~ourPieces;
+
                 moveId = (attacks & bb::before(move.to)).count();
                 numMoves = attacks.count();
             }
             }
 
             const std::size_t numPieces = ourPieces.count();
-            m_game->addBitsLE8x2(pieceId, util::usedBits(numPieces - 1u), moveId, util::usedBits(numMoves - 1u));
+            m_game->addBitsLE8x2(
+                pieceId, util::usedBits(numPieces - 1u), 
+                moveId, util::usedBits(numMoves - 1u)
+            );
             break;
         }
         }
@@ -864,26 +882,24 @@ namespace bcgn
 
         case BcgnCompressionLevel::Level_2:
         {
-            const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
-            const auto pieceId = extractBitsLE8(util::usedBits(ourPieces.count() - 1u));
+            const Color sideToMove = pos.sideToMove();
+            const Bitboard ourPieces = pos.piecesBB(sideToMove);
+            const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+            const Bitboard occupied = ourPieces | theirPieces;
+
+            const auto pieceId = extractBitsLE8(util::usedBits(ourPieces.count() - 1ull));
             const auto from = Square(nthSetBitIndex(ourPieces.bits(), pieceId));
+
             const auto pt = pos.pieceAt(from).type();
             switch (pt)
             {
             case PieceType::Pawn:
             {
-                const Color sideToMove = pos.sideToMove();
-                const Square epSquare = pos.epSquare();
-                const Bitboard ourPieces = pos.piecesBB(sideToMove);
-                const Bitboard theirPieces = pos.piecesBB(!sideToMove);
-                const Bitboard occupied = ourPieces | theirPieces;
-
                 const Rank promotionRank = pos.sideToMove() == Color::White ? rank7 : rank2;
                 const Rank startRank = pos.sideToMove() == Color::White ? rank2 : rank7;
                 const auto forward = sideToMove == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
-                Bitboard destinations = Bitboard::none();
-                Piece promotedPiece = Piece::none();
-                MoveType moveType = MoveType::Normal;
+
+                const Square epSquare = pos.epSquare();
 
                 Bitboard attackTargets = theirPieces;
                 if (epSquare != Square::none())
@@ -891,52 +907,75 @@ namespace bcgn
                     attackTargets |= epSquare;
                 }
 
-                destinations = bb::pawnAttacks(Bitboard::square(from), sideToMove) & attackTargets;
+                Bitboard destinations = bb::pawnAttacks(Bitboard::square(from), sideToMove) & attackTargets;
 
-                if (pos.pieceAt(from + forward) == Piece::none())
+                const Square sqForward = from + forward;
+                if (!occupied.isSet(sqForward))
                 {
-                    destinations |= from + forward;
-                    if (from.rank() == startRank && pos.pieceAt(from + forward + forward) == Piece::none())
+                    destinations |= sqForward;
+
+                    const Square sqForward2 = sqForward + forward;
+                    if (
+                        from.rank() == startRank 
+                        && !occupied.isSet(sqForward2)
+                        )
                     {
-                        destinations |= from + forward + forward;
+                        destinations |= sqForward2;
                     }
                 }
 
-                auto destinationsCount = destinations.count();
+                const auto destinationsCount = destinations.count();
                 if (from.rank() == promotionRank)
                 {
-                    destinationsCount *= 4;
+                    const auto moveId = extractBitsLE8(util::usedBits(destinationsCount * 4ull - 1ull));
+                    const Piece promotedPiece = Piece(
+                        fromOrdinal<PieceType>(ordinal(PieceType::Knight) + (moveId % 4ull)), 
+                        sideToMove
+                    );
+                    const auto to = Square(nthSetBitIndex(destinations.bits(), moveId / 4ull));
+
+                    return Move::promotion(from, to, promotedPiece);
                 }
-
-                auto moveId = extractBitsLE8(util::usedBits(destinationsCount - 1u));
-
-                if (from.rank() == promotionRank)
+                else
                 {
-                    moveType = MoveType::Promotion;
-                    promotedPiece = Piece(fromOrdinal<PieceType>(ordinal(PieceType::Knight) + (moveId % 4)), pos.sideToMove());
-                    moveId /= 4;
+                    auto moveId = extractBitsLE8(util::usedBits(destinationsCount - 1ull));
+                    const auto to = Square(nthSetBitIndex(destinations.bits(), moveId));
+                    if (to == epSquare)
+                    {
+                        return Move::enPassant(from, to);
+                    }
+                    else
+                    {
+                        return Move::normal(from, to);
+                    }
                 }
-
-                auto to = Square(nthSetBitIndex(destinations.bits(), moveId));
-                if (to == epSquare) moveType = MoveType::EnPassant;
-
-                return Move{ from, to, moveType, promotedPiece };
             }
             case PieceType::King:
             {
-                const CastlingRights ourCastlingRightsMask = pos.sideToMove() == Color::White ? CastlingRights::White : CastlingRights::Black;
+                const CastlingRights ourCastlingRightsMask = 
+                    sideToMove == Color::White 
+                    ? CastlingRights::White 
+                    : CastlingRights::Black;
+
+                const CastlingRights castlingRights = pos.castlingRights();
+
                 const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(from) & ~ourPieces;
-                const auto attacksSize = attacks.count();
-                const auto numCastlings = intrin::popcount(ordinal(pos.castlingRights() & ourCastlingRightsMask));
-                const auto moveId = extractBitsLE8(util::usedBits(attacksSize + numCastlings - 1u));
+                const std::size_t attacksSize = attacks.count();
+                const std::size_t numCastlings = intrin::popcount(ordinal(castlingRights & ourCastlingRightsMask));
+
+                const auto moveId = extractBitsLE8(util::usedBits(attacksSize + numCastlings - 1ull));
+
                 if (moveId >= attacksSize)
                 {
-                    int idx = moveId - attacksSize;
-                    if (idx == 0 && contains(pos.castlingRights(), CastlingTraits::castlingRights[pos.sideToMove()][CastleType::Long]))
-                    {
-                        return Move::castle(CastleType::Long, pos.sideToMove());
-                    }
-                    return Move::castle(CastleType::Short, pos.sideToMove());
+                    const std::size_t idx = moveId - attacksSize;
+
+                    const CastleType castleType =
+                        idx == 0 
+                        && contains(castlingRights, CastlingTraits::castlingRights[sideToMove][CastleType::Long])
+                        ? CastleType::Long
+                        : CastleType::Short;
+                 
+                    return Move::castle(castleType, sideToMove);
                 }
                 else
                 {
@@ -947,9 +986,8 @@ namespace bcgn
             }
             default:
             {
-                const Bitboard occupied = pos.piecesBB();
                 const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
-                const auto moveId = extractBitsLE8(util::usedBits(attacks.count() - 1u));
+                const auto moveId = extractBitsLE8(util::usedBits(attacks.count() - 1ull));
                 auto to = Square(nthSetBitIndex(attacks.bits(), moveId));
                 return Move::normal(from, to);
             }
