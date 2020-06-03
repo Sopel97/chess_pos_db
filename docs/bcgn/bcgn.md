@@ -25,6 +25,7 @@ File header always has 32 bytes and has to be at the beginning of a BCGN file.
 - compression_scheme   : 1 byte
     - 0 = 2 bytes per move, use CompressedMove. See compressed_move.md for the encoding scheme.
     - 1 = 1-2 bytes per move (almost always 1), use move index. See move_index.md for the encoding scheme.
+    - 2 = variable amount of bits per move. See variable_length.md for details.
 - aux_compression      : 1 byte
     - 0 = none
 - flags                : 1 byte
