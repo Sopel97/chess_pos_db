@@ -1783,6 +1783,10 @@ namespace command_line_app
             case 1:
                 header.compressionLevel = bcgn::BcgnCompressionLevel::Level_1;
                 break;
+
+            case 2:
+                header.compressionLevel = bcgn::BcgnCompressionLevel::Level_2;
+                break;
             }
 
             if (headerless)

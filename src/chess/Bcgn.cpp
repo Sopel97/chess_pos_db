@@ -620,9 +620,43 @@ namespace bcgn
             switch (pt)
             {
             case PieceType::Pawn:
-                // TODO: pawns need a different encoding scheme
-                moveId = move_index::pawnDestinationIndex(move.from, move.to, pos.sideToMove(), move.promotedPiece.type());
+            {
+                const Color sideToMove = pos.sideToMove();
+                const Square epSquare = pos.epSquare();
+                const Bitboard ourPieces = pos.piecesBB(sideToMove);
+                const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+                const Bitboard occupied = ourPieces | theirPieces;
+
+                const Rank promotionRank = pos.sideToMove() == Color::White ? rank7 : rank2;
+                const Rank startRank = pos.sideToMove() == Color::White ? rank2 : rank7;
+                const auto forward = sideToMove == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
+                Bitboard destinations = Bitboard::none();
+
+                Bitboard attackTargets = theirPieces;
+                if (epSquare != Square::none())
+                {
+                    attackTargets |= epSquare;
+                }
+
+                destinations = bb::pawnAttacks(Bitboard::square(move.from), sideToMove) & attackTargets;
+
+                if (pos.pieceAt(move.from + forward) == Piece::none())
+                {
+                    destinations |= move.from + forward;
+                    if (move.from.rank() == startRank && pos.pieceAt(move.from + forward + forward) == Piece::none())
+                    {
+                        destinations |= move.from + forward + forward;
+                    }
+                }
+
+                moveId = (destinations & bb::before(move.to)).count();
+                if (move.from.rank() == promotionRank)
+                {
+                    moveId = moveId * 4 + (ordinal(move.promotedPiece.type()) - ordinal(PieceType::Knight));
+                }
+
                 break;
+            }
             case PieceType::King:
             {
                 const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(move.from) & ~ourPieces;
@@ -794,8 +828,49 @@ namespace bcgn
             switch (pt)
             {
             case PieceType::Pawn:
-                // TODO: pawns need a different encoding scheme
-                return move_index::destinationIndexToPawnMove(pos, moveId, from, pos.sideToMove());
+            {
+                const Color sideToMove = pos.sideToMove();
+                const Square epSquare = pos.epSquare();
+                const Bitboard ourPieces = pos.piecesBB(sideToMove);
+                const Bitboard theirPieces = pos.piecesBB(!sideToMove);
+                const Bitboard occupied = ourPieces | theirPieces;
+
+                const Rank promotionRank = pos.sideToMove() == Color::White ? rank7 : rank2;
+                const Rank startRank = pos.sideToMove() == Color::White ? rank2 : rank7;
+                const auto forward = sideToMove == Color::White ? FlatSquareOffset(0, 1) : FlatSquareOffset(0, -1);
+                Bitboard destinations = Bitboard::none();
+                Piece promotedPiece = Piece::none();
+                MoveType moveType = MoveType::Normal;
+                std::uint16_t i = moveId;
+                if (from.rank() == promotionRank)
+                {
+                    moveType = MoveType::Promotion;
+                    promotedPiece = Piece(fromOrdinal<PieceType>(ordinal(PieceType::Knight) + (i % 4)), pos.sideToMove());
+                    i /= 4;
+                }
+
+                Bitboard attackTargets = theirPieces;
+                if (epSquare != Square::none())
+                {
+                    attackTargets |= epSquare;
+                }
+
+                destinations = bb::pawnAttacks(Bitboard::square(from), sideToMove) & attackTargets;
+
+                if (pos.pieceAt(from + forward) == Piece::none())
+                {
+                    destinations |= from + forward;
+                    if (from.rank() == startRank && pos.pieceAt(from + forward + forward) == Piece::none())
+                    {
+                        destinations |= from + forward + forward;
+                    }
+                }
+
+                auto to = Square(nthSetBitIndex(destinations.bits(), i));
+                if (to == epSquare) moveType = MoveType::EnPassant;
+
+                return Move{ from, to, moveType, promotedPiece };
+            }
             case PieceType::King:
             {
                 const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(from) & ~ourPieces;
