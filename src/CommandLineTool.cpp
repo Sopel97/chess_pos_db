@@ -1758,7 +1758,7 @@ namespace command_line_app
     {
         args::Flag headerless(parser, "headerless", "Only store critical information in the game headers", { 'h', "headerless" });
         args::Flag append(parser, "append", "Append to an already existing file.", { 'a', "append" });
-        args::ValueFlag<std::uint32_t> compressionLevel(parser, "compression", "The compression level to use for BCGN files. Currently supports 0 or 1. For further info see BCGN documentation.", { 'c', "compression" }, 0u);
+        args::ValueFlag<std::uint32_t> compressionLevel(parser, "compression", "The compression level to use for BCGN files. Currently supports 0, 1, or 2. For further info see BCGN documentation.", { 'c', "compression" }, 0u);
 
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
         args::Positional<std::string> input(requiredArgs, "input path", "File to convert from.");
