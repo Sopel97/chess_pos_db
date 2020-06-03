@@ -10,6 +10,7 @@
 
 #include "enum/EnumArray.h"
 
+#include "util/ArithmeticUtility.h"
 #include "util/UnsignedCharBufferView.h"
 #include "util/Buffer.h"
 
@@ -22,6 +23,8 @@
 #include <memory>
 #include <optional>
 #include <vector>
+
+#include <iostream>
 
 namespace bcgn
 {
@@ -294,9 +297,34 @@ namespace bcgn
 
         void BcgnGameEntryBuffer::addBitsLE8x2(std::uint8_t bits0, std::size_t count0, std::uint8_t bits1, std::size_t count1)
         {
-            m_movetext.push_back(bits0);
-            m_movetext.push_back(bits1);
+            addBitsLE8(bits0, count0);
+            addBitsLE8(bits1, count1);
             ++m_numPlies;
+        }
+
+        void BcgnGameEntryBuffer::addBitsLE8(std::uint8_t bits, std::size_t count)
+        {
+            if (count == 0) return;
+            
+            if (m_bitsLeft == 0)
+            {
+                m_movetext.emplace_back(0);
+                m_bitsLeft = 8;
+            }
+
+            if (count <= m_bitsLeft)
+            {
+                m_movetext.back() |= bits << (m_bitsLeft - count);
+            }
+            else
+            {
+                const auto spillCount = count - m_bitsLeft;
+                m_movetext.back() |= bits >> spillCount;
+                m_movetext.emplace_back(bits << (8 - spillCount));
+                m_bitsLeft += 8;
+            }
+
+            m_bitsLeft -= count;
         }
 
         // returns number of bytes written
@@ -704,8 +732,8 @@ namespace bcgn
             }
             }
 
-            const auto numPieces = ourPieces.count();
-            m_game->addBitsLE8x2(pieceId, intrin::lsb(numPieces) - 1, moveId, intrin::lsb(numMoves) - 1);
+            const std::size_t numPieces = ourPieces.count();
+            m_game->addBitsLE8x2(pieceId, util::usedBits(numPieces - 1u), moveId, util::usedBits(numMoves - 1u));
             break;
         }
         }
@@ -786,21 +814,24 @@ namespace bcgn
 
     UnparsedBcgnGameMoves::UnparsedBcgnGameMoves(
         BcgnFileHeader header, 
-        util::UnsignedCharBufferView movetext
+        util::UnsignedCharBufferView movetext,
+        std::size_t numMovesLeft
         ) noexcept :
         m_header(header),
         m_encodedMovetext(movetext),
-        m_bitsLeft(0)
+        m_bitsLeft(8),
+        m_numMovesLeft(numMovesLeft)
     {
     }
 
     [[nodiscard]] bool UnparsedBcgnGameMoves::hasNext() const
     {
-        return !m_encodedMovetext.empty();
+        return m_numMovesLeft;
     }
 
     [[nodiscard]] Move UnparsedBcgnGameMoves::next(const Position& pos)
     {
+        --m_numMovesLeft;
         switch (m_header.compressionLevel)
         {
         case BcgnCompressionLevel::Level_0:
@@ -834,7 +865,7 @@ namespace bcgn
         case BcgnCompressionLevel::Level_2:
         {
             const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
-            const auto pieceId = extractBitsLE8(intrin::lsb(ourPieces.count()) - 1);
+            const auto pieceId = extractBitsLE8(util::usedBits(ourPieces.count() - 1u));
             const auto from = Square(nthSetBitIndex(ourPieces.bits(), pieceId));
             const auto pt = pos.pieceAt(from).type();
             switch (pt)
@@ -871,7 +902,13 @@ namespace bcgn
                     }
                 }
 
-                auto moveId = extractBitsLE8(intrin::lsb(destinations.count()) - 1);
+                auto destinationsCount = destinations.count();
+                if (from.rank() == promotionRank)
+                {
+                    destinationsCount *= 4;
+                }
+
+                auto moveId = extractBitsLE8(util::usedBits(destinationsCount - 1u));
 
                 if (from.rank() == promotionRank)
                 {
@@ -887,9 +924,11 @@ namespace bcgn
             }
             case PieceType::King:
             {
+                const CastlingRights ourCastlingRightsMask = pos.sideToMove() == Color::White ? CastlingRights::White : CastlingRights::Black;
                 const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(from) & ~ourPieces;
                 const auto attacksSize = attacks.count();
-                const auto moveId = extractBitsLE8(intrin::lsb(attacksSize) - 1);
+                const auto numCastlings = intrin::popcount(ordinal(pos.castlingRights() & ourCastlingRightsMask));
+                const auto moveId = extractBitsLE8(util::usedBits(attacksSize + numCastlings - 1u));
                 if (moveId >= attacksSize)
                 {
                     int idx = moveId - attacksSize;
@@ -910,7 +949,7 @@ namespace bcgn
             {
                 const Bitboard occupied = pos.piecesBB();
                 const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
-                const auto moveId = extractBitsLE8(intrin::lsb(attacks.count()) - 1);
+                const auto moveId = extractBitsLE8(util::usedBits(attacks.count() - 1u));
                 auto to = Square(nthSetBitIndex(attacks.bits(), moveId));
                 return Move::normal(from, to);
             }
@@ -925,17 +964,38 @@ namespace bcgn
 
     [[nodiscard]] std::uint8_t UnparsedBcgnGameMoves::extractBitsLE8(std::size_t count)
     {
-        auto bits = m_encodedMovetext[0];
-        m_encodedMovetext.remove_prefix(1);
+        if (count == 0) return 0;
+
+        if (m_bitsLeft == 0)
+        {
+            m_encodedMovetext.remove_prefix(1);
+            m_bitsLeft = 8;
+        }
+
+        const std::uint8_t byte = m_encodedMovetext[0] << (8 - m_bitsLeft);
+        std::uint8_t bits = byte >> (8 - count);
+
+        if (count > m_bitsLeft)
+        {
+            const auto spillCount = count - m_bitsLeft;
+            bits |= m_encodedMovetext[1] >> (8 - spillCount);
+
+            m_bitsLeft += 8;
+            m_encodedMovetext.remove_prefix(1);
+        }
+
+        m_bitsLeft -= count;
+
         return bits;
     }
 
     UnparsedBcgnGamePositions::iterator::iterator(
         BcgnFileHeader header, 
-        util::UnsignedCharBufferView movetext
+        util::UnsignedCharBufferView movetext,
+        std::size_t numMoves
         ) noexcept :
         m_position(Position::startPosition()),
-        m_moveProvider(header, movetext),
+        m_moveProvider(header, movetext, numMoves),
         m_isEnd(false)
     {
     }
@@ -943,10 +1003,11 @@ namespace bcgn
     UnparsedBcgnGamePositions::iterator::iterator(
         BcgnFileHeader header, 
         const Position& pos, 
-        util::UnsignedCharBufferView movetext
+        util::UnsignedCharBufferView movetext,
+        std::size_t numMoves
         ) noexcept :
         m_position(pos),
-        m_moveProvider(header, movetext),
+        m_moveProvider(header, movetext, numMoves),
         m_isEnd(false)
     {
     }
@@ -992,11 +1053,13 @@ namespace bcgn
 
     UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(
         BcgnFileHeader header, 
-        util::UnsignedCharBufferView movetext
+        util::UnsignedCharBufferView movetext,
+        std::size_t numMoves
         ) noexcept :
         m_header(header),
         m_startpos(Position::startPosition()),
-        m_encodedMovetext(movetext)
+        m_encodedMovetext(movetext),
+        m_numMoves(numMoves)
     {
 
     }
@@ -1004,11 +1067,13 @@ namespace bcgn
     UnparsedBcgnGamePositions::UnparsedBcgnGamePositions(
         BcgnFileHeader header, 
         const Position& startpos, 
-        util::UnsignedCharBufferView movetext
+        util::UnsignedCharBufferView movetext,
+        std::size_t numMoves
         ) noexcept :
         m_header(header),
         m_startpos(startpos),
-        m_encodedMovetext(movetext)
+        m_encodedMovetext(movetext),
+        m_numMoves(numMoves)
     {
 
     }
@@ -1016,7 +1081,7 @@ namespace bcgn
     [[nodiscard]] UnparsedBcgnGamePositions::iterator 
         UnparsedBcgnGamePositions::begin()
     {
-        return iterator(m_header, m_startpos, m_encodedMovetext);
+        return iterator(m_header, m_startpos, m_encodedMovetext, m_numMoves);
     }
 
     [[nodiscard]] UnparsedBcgnGamePositions::iterator::sentinel 
@@ -1339,12 +1404,12 @@ namespace bcgn
 
     [[nodiscard]] UnparsedBcgnGameMoves UnparsedBcgnGame::moves() const
     {
-        return UnparsedBcgnGameMoves(m_header, encodedMovetext());
+        return UnparsedBcgnGameMoves(m_header, encodedMovetext(), m_numPlies);
     }
 
     [[nodiscard]] UnparsedBcgnGamePositions UnparsedBcgnGame::positions() const
     {
-        return UnparsedBcgnGamePositions(m_header, encodedMovetext());
+        return UnparsedBcgnGamePositions(m_header, encodedMovetext(), m_numPlies);
     }
 
     [[nodiscard]] Position UnparsedBcgnGame::startPosition() const

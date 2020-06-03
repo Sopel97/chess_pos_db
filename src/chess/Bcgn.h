@@ -184,6 +184,8 @@ namespace bcgn
             FORCEINLINE void writeBigEndian(unsigned char*& buffer, std::uint16_t value);
 
             [[nodiscard]] std::size_t computeHeaderLength() const;
+
+            void addBitsLE8(std::uint8_t bits, std::size_t count);
         };
     }
 
@@ -267,7 +269,8 @@ namespace bcgn
     {
         UnparsedBcgnGameMoves(
             BcgnFileHeader header, 
-            util::UnsignedCharBufferView movetext
+            util::UnsignedCharBufferView movetext,
+            std::size_t numMovesLeft
             ) noexcept;
 
         [[nodiscard]] bool hasNext() const;
@@ -278,6 +281,7 @@ namespace bcgn
         BcgnFileHeader m_header;
         util::UnsignedCharBufferView m_encodedMovetext;
         std::size_t m_bitsLeft;
+        std::size_t m_numMovesLeft;
 
         [[nodiscard]] std::uint8_t extractBitsLE8(std::size_t count);
     };
@@ -296,13 +300,15 @@ namespace bcgn
 
             iterator(
                 BcgnFileHeader header, 
-                util::UnsignedCharBufferView movetext
+                util::UnsignedCharBufferView movetext,
+                std::size_t numMoves
                 ) noexcept;
 
             iterator(
                 BcgnFileHeader header, 
                 const Position& pos, 
-                util::UnsignedCharBufferView movetext
+                util::UnsignedCharBufferView movetext,
+                std::size_t numMoves
                 ) noexcept;
 
             const iterator& operator++();
@@ -325,13 +331,15 @@ namespace bcgn
 
         UnparsedBcgnGamePositions(
             BcgnFileHeader header, 
-            util::UnsignedCharBufferView movetext
+            util::UnsignedCharBufferView movetext,
+            std::size_t numMoves
             ) noexcept;
 
         UnparsedBcgnGamePositions(
             BcgnFileHeader header,
             const Position& startpos, 
-            util::UnsignedCharBufferView movetext
+            util::UnsignedCharBufferView movetext,
+            std::size_t numMoves
             ) noexcept;
 
         [[nodiscard]] iterator begin();
@@ -342,6 +350,7 @@ namespace bcgn
         BcgnFileHeader m_header;
         Position m_startpos;
         util::UnsignedCharBufferView m_encodedMovetext;
+        std::size_t m_numMoves;
     };
 
     // m_data starts at the count

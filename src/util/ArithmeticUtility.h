@@ -205,3 +205,12 @@ inline int nthSetBitIndex(std::uint64_t v, std::uint64_t n)
 
     return static_cast<int>(lookup::nthSetBitIndex[v & 0xFFull][n] + shift);
 }
+
+namespace util
+{
+    inline std::size_t usedBits(std::size_t value)
+    {
+        if (value == 0) return 0;
+        return intrin::msb(value) + 1;
+    }
+}
