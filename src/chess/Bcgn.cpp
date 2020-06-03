@@ -138,6 +138,7 @@ namespace bcgn
     {
         BcgnGameEntryBuffer::BcgnGameEntryBuffer(BcgnFileHeader header) :
             m_header(header),
+            m_bitsLeft{},
             m_date{},
             m_whiteElo{},
             m_blackElo{},
@@ -165,6 +166,7 @@ namespace bcgn
         void BcgnGameEntryBuffer::clear()
         {
             m_date = {};
+            m_bitsLeft = 0;
             m_whiteElo = 0;
             m_blackElo = 0;
             m_round = 0;
@@ -287,6 +289,13 @@ namespace bcgn
             move.writeToBigEndian(c);
             m_movetext.push_back(c[0]);
             m_movetext.push_back(c[1]);
+            ++m_numPlies;
+        }
+
+        void BcgnGameEntryBuffer::addBitsLE8x2(std::uint8_t bits0, std::size_t count0, std::uint8_t bits1, std::size_t count1)
+        {
+            m_movetext.push_back(bits0);
+            m_movetext.push_back(bits1);
             ++m_numPlies;
         }
 
@@ -615,6 +624,7 @@ namespace bcgn
             // TODO: we need to write bits, and just enough for the job
             const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
             const std::uint8_t pieceId = (pos.piecesBB(pos.sideToMove()) & bb::before(move.from)).count();
+            std::size_t numMoves = 0;
             std::uint8_t moveId = 0;
             const auto pt = pos.pieceAt(move.from).type();
             switch (pt)
@@ -650,19 +660,24 @@ namespace bcgn
                 }
 
                 moveId = (destinations & bb::before(move.to)).count();
+                numMoves = destinations.count();
                 if (move.from.rank() == promotionRank)
                 {
                     moveId = moveId * 4 + (ordinal(move.promotedPiece.type()) - ordinal(PieceType::Knight));
+                    numMoves *= 4;
                 }
 
                 break;
             }
             case PieceType::King:
             {
+                const CastlingRights ourCastlingRightsMask = pos.sideToMove() == Color::White ? CastlingRights::White : CastlingRights::Black;
                 const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(move.from) & ~ourPieces;
+                const auto attacksSize = attacks.count();
+                numMoves += attacksSize;
+                numMoves += intrin::popcount(ordinal(pos.castlingRights() & ourCastlingRightsMask));
                 if (move.type == MoveType::Castle)
                 {
-                    const auto attacksSize = attacks.count();
                     moveId = attacksSize - 1;
                     const auto longCastlingRights = CastlingTraits::castlingRights[pos.sideToMove()][CastleType::Long];
                     if (contains(pos.castlingRights(), longCastlingRights))
@@ -685,9 +700,12 @@ namespace bcgn
                 const Bitboard occupied = pos.piecesBB();
                 const Bitboard attacks = bb::attacks(pt, move.from, occupied) & ~ourPieces;
                 moveId = (attacks & bb::before(move.to)).count();
+                numMoves = attacks.count();
             }
             }
-            m_game->addLongMove((pieceId << 8) | moveId);
+
+            const auto numPieces = ourPieces.count();
+            m_game->addBitsLE8x2(pieceId, intrin::lsb(numPieces) - 1, moveId, intrin::lsb(numMoves) - 1);
             break;
         }
         }
@@ -771,7 +789,8 @@ namespace bcgn
         util::UnsignedCharBufferView movetext
         ) noexcept :
         m_header(header),
-        m_encodedMovetext(movetext)
+        m_encodedMovetext(movetext),
+        m_bitsLeft(0)
     {
     }
 
@@ -814,15 +833,8 @@ namespace bcgn
 
         case BcgnCompressionLevel::Level_2:
         {
-            // TODO: we need to read bits, and just enough for the job
-            const std::uint16_t index =
-                ((m_encodedMovetext[0]) << 8)
-                | m_encodedMovetext[1];
-            m_encodedMovetext.remove_prefix(2);
-            const auto moveId = index & 255;
-            const auto pieceId = static_cast<std::uint8_t>(index >> 8);
-
             const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
+            const auto pieceId = extractBitsLE8(intrin::lsb(ourPieces.count()) - 1);
             const auto from = Square(nthSetBitIndex(ourPieces.bits(), pieceId));
             const auto pt = pos.pieceAt(from).type();
             switch (pt)
@@ -841,13 +853,6 @@ namespace bcgn
                 Bitboard destinations = Bitboard::none();
                 Piece promotedPiece = Piece::none();
                 MoveType moveType = MoveType::Normal;
-                std::uint16_t i = moveId;
-                if (from.rank() == promotionRank)
-                {
-                    moveType = MoveType::Promotion;
-                    promotedPiece = Piece(fromOrdinal<PieceType>(ordinal(PieceType::Knight) + (i % 4)), pos.sideToMove());
-                    i /= 4;
-                }
 
                 Bitboard attackTargets = theirPieces;
                 if (epSquare != Square::none())
@@ -866,7 +871,16 @@ namespace bcgn
                     }
                 }
 
-                auto to = Square(nthSetBitIndex(destinations.bits(), i));
+                auto moveId = extractBitsLE8(intrin::lsb(destinations.count()) - 1);
+
+                if (from.rank() == promotionRank)
+                {
+                    moveType = MoveType::Promotion;
+                    promotedPiece = Piece(fromOrdinal<PieceType>(ordinal(PieceType::Knight) + (moveId % 4)), pos.sideToMove());
+                    moveId /= 4;
+                }
+
+                auto to = Square(nthSetBitIndex(destinations.bits(), moveId));
                 if (to == epSquare) moveType = MoveType::EnPassant;
 
                 return Move{ from, to, moveType, promotedPiece };
@@ -875,6 +889,7 @@ namespace bcgn
             {
                 const Bitboard attacks = bb::pseudoAttacks<PieceType::King>(from) & ~ourPieces;
                 const auto attacksSize = attacks.count();
+                const auto moveId = extractBitsLE8(intrin::lsb(attacksSize) - 1);
                 if (moveId >= attacksSize)
                 {
                     int idx = moveId - attacksSize;
@@ -895,6 +910,7 @@ namespace bcgn
             {
                 const Bitboard occupied = pos.piecesBB();
                 const Bitboard attacks = bb::attacks(pt, from, occupied) & ~ourPieces;
+                const auto moveId = extractBitsLE8(intrin::lsb(attacks.count()) - 1);
                 auto to = Square(nthSetBitIndex(attacks.bits(), moveId));
                 return Move::normal(from, to);
             }
@@ -905,6 +921,13 @@ namespace bcgn
 
         ASSERT(false);
         return Move::null();
+    }
+
+    [[nodiscard]] std::uint8_t UnparsedBcgnGameMoves::extractBitsLE8(std::size_t count)
+    {
+        auto bits = m_encodedMovetext[0];
+        m_encodedMovetext.remove_prefix(1);
+        return bits;
     }
 
     UnparsedBcgnGamePositions::iterator::iterator(

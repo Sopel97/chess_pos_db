@@ -145,11 +145,14 @@ namespace bcgn
 
             void addCompressedMove(const CompressedMove& move);
 
+            void addBitsLE8x2(std::uint8_t bits0, std::size_t count0, std::uint8_t bits1, std::size_t count1);
+
             // returns number of bytes written
             [[nodiscard]] std::size_t writeTo(unsigned char* buffer);
 
         private:
             BcgnFileHeader m_header;
+            std::size_t m_bitsLeft;
             Date m_date;
             std::uint16_t m_whiteElo;
             std::uint16_t m_blackElo;
@@ -274,6 +277,9 @@ namespace bcgn
     private:
         BcgnFileHeader m_header;
         util::UnsignedCharBufferView m_encodedMovetext;
+        std::size_t m_bitsLeft;
+
+        [[nodiscard]] std::uint8_t extractBitsLE8(std::size_t count);
     };
 
     struct UnparsedBcgnGamePositions
