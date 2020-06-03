@@ -41,6 +41,6 @@ Each move consists of these bit packed values:
         - The number of bits to use is just enough to encode the value (possible_destinations.count() - 1)
 ```
 
-For example for the first move 1. e4 there's 16 our pieces - requires 4 bits to encode. The moved pawn has index 12. The index of the move is 1 (0 is single push). Therefore the output byte after storing this move will be equal to `0xC4` (with 3 spare low bits).
+For example for the first move 1. e4 there's 16 our pieces - requires 4 bits to encode. The moved pawn has index 12. The index of the move is 1 (0 is single push). Therefore the output byte after storing this move will be equal to `0xC8` (with 3 spare low bits).
 
 The decoding process consists of finding the move with the corresponding move index, similarily to how it's done in the move_index.md case, but here the indices are more specialized.
