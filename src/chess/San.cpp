@@ -561,7 +561,6 @@ namespace san
             }
 
             const Bitboard occupied = pos.piecesBB();
-            const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
 
             // first consider all candidates with ray attacks to the toSq
             Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove()));

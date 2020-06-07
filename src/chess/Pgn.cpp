@@ -58,7 +58,7 @@ namespace pgn
             }
             else
             {
-                s.remove_prefix(shift);
+                s.remove_prefix(shift + 1);
             }
         }
 
