@@ -560,9 +560,12 @@ namespace san
                 return move;
             }
 
+            const Bitboard occupied = pos.piecesBB();
+            const Bitboard ourPieces = pos.piecesBB(pos.sideToMove());
+
             // first consider all candidates with ray attacks to the toSq
             Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove()));
-            candidates &= bb::pseudoAttacks<PieceTypeV>(toSq);
+            candidates &= bb::attacks<PieceTypeV>(toSq, occupied) & ~ourPieces;
 
             if (candidates.exactlyOne())
             {
@@ -589,22 +592,6 @@ namespace san
                     const Rank fromRank = parser_bits::parseRank(san[1]);
                     candidates &= bb::rank(fromRank);
                 }
-
-                if (candidates.exactlyOne())
-                {
-                    const Square fromSq = candidates.first();
-
-                    const Move move{ fromSq, toSq };
-                    if (!isValid(move)) return {};
-                    return move;
-                }
-            }
-
-            // if we have a knight then attacks==pseudoAttacks
-            if (PieceTypeV != PieceType::Knight)
-            {
-                auto occ = pos.piecesBB();
-                candidates &= bb::attacks<PieceTypeV>(toSq, occ);
 
                 if (candidates.exactlyOne())
                 {
