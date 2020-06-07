@@ -565,7 +565,7 @@ namespace san
 
             // first consider all candidates with ray attacks to the toSq
             Bitboard candidates = pos.piecesBB(Piece(PieceTypeV, pos.sideToMove()));
-            candidates &= bb::attacks<PieceTypeV>(toSq, occupied) & ~ourPieces;
+            candidates &= bb::attacks<PieceTypeV>(toSq, occupied);
 
             if (candidates.exactlyOne())
             {
