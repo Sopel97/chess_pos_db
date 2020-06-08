@@ -371,7 +371,7 @@ namespace console_app
 
     [[nodiscard]] static bool verifyPgnMoves(const pgn::UnparsedGame& game, std::size_t idx)
     {
-        Position pos = Position::startPosition();
+        Position pos = game.startPosition();
         std::size_t moveCount = 0;
         for (auto&& san : game.moves())
         {
