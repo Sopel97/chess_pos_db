@@ -336,6 +336,8 @@ namespace persistence
 
     void to_json(nlohmann::json& j, const DatabaseManifest& manifest)
     {
+        j["type"] = "pos_db";
+
         j["name"] = manifest.key;
         j["version"] = manifest.version.toString();
 
@@ -347,6 +349,11 @@ namespace persistence
 
     void from_json(const nlohmann::json& j, DatabaseManifest& manifest)
     {
+        if (j["type"].get<std::string>() != "pos_db")
+        {
+            throw std::runtime_error("Manifest is not a 'pos_db' manifest.");
+        }
+
         manifest.key = j["name"].get<std::string>();
         manifest.version = util::SemanticVersion::fromString(j["version"].get<std::string>()).value();
 
