@@ -2092,7 +2092,7 @@ namespace command_line_app
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
         args::Positional<std::string> input(requiredArgs, "input path", "The path to a PGN or BCGN file.");
 
-        args::Flag bail(requiredArgs, "bail", "Bail on first error.", { "bail" });
+        args::Flag bail(parser, "bail", "Bail on first error.", { "bail" });
 
         parser.Parse();
 
