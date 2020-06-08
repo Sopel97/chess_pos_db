@@ -140,7 +140,7 @@ void testBcgnReader(int seed, std::string filename, bcgn::BcgnFileHeader header,
 
 TEST_CASE("BCGN reader and writer", "[bcgn]") 
 {
-    constexpr int numGames = 256 * 32;
+    constexpr int numGames = 256 * 8;
     constexpr int seed = 12345;
 
     {

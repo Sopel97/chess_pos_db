@@ -2,6 +2,7 @@
 
 #include "chess/Chess.h"
 #include "chess/Bitboard.h"
+#include "chess/MoveGenerator.h"
 #include "chess/Position.h"
 
 TEST_CASE("General position stuff", "[position]") {
@@ -82,4 +83,40 @@ TEST_CASE("General position stuff", "[position]") {
     REQUIRE((!Position::fromFen("rnb2k1r/pp1Pbppp/2p5/q7/2B5/8/PPPQNnPP/RNB1K2R w KQ - 0 1").isOwnKingAttackedAfterMove(Move{ e1, h1, MoveType::Castle })));
 
     REQUIRE(Position::fromFen("rnbqkbnr/p1p1pppp/1p1p4/8/8/6P1/PPPPPPBP/RNBQK1NR w KQkq - 0 3").afterMove(Move{ g2, a8 }).castlingRights() == (CastlingRights::All & ~CastlingRights::BlackQueenSide));
+}
+
+static void testCompressedPosition(int seed, int numGames)
+{
+    srand(seed);
+
+    for (int i = 0; i < numGames; ++i)
+    {
+        auto pos = Position::startPosition();
+
+        int movecountInThisGame = 0;
+        for (;;)
+        {
+            const auto compressed = pos.compress();
+            const auto decompressed = compressed.decompress();
+
+            REQUIRE(pos == decompressed);
+
+            if (movecountInThisGame > 100) break;
+
+            const auto moves = movegen::generateLegalMoves(pos);
+            if (moves.empty()) break;
+
+            ++movecountInThisGame;
+            const auto move = moves[rand() % moves.size()];
+
+            pos.doMove(move);
+        }
+    }
+}
+
+TEST_CASE("Compressed position", "[position]") {
+    constexpr int numGames = 256 * 8;
+    constexpr int seed = 12345;
+
+    testCompressedPosition(seed, numGames);
 }
