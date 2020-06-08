@@ -180,7 +180,6 @@ namespace persistence
         std::uint64_t maxBytesPerPosition;
         std::optional<double> estimatedAverageBytesPerPosition;
 
-        util::SemanticVersion version;
         util::SemanticVersion minimumSupportedVersion;
 
         friend void to_json(nlohmann::json& j, const DatabaseSupportManifest& manifest);

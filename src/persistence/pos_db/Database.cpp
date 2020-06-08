@@ -312,7 +312,6 @@ namespace persistence
             j["estimated_average_bytes_per_position"] = *manifest.estimatedAverageBytesPerPosition;
         }
 
-        j["version"] = manifest.version.toString();
         j["minimum_supported_version"] = manifest.minimumSupportedVersion.toString();
     }
 

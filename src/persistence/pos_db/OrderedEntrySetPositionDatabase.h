@@ -1743,7 +1743,6 @@ namespace persistence
                     manifest.maxBytesPerPosition = TraitsT::maxBytesPerPosition;
                     manifest.estimatedAverageBytesPerPosition = TraitsT::estimatedAverageBytesPerPosition;
 
-                    manifest.version = TraitsT::version;
                     manifest.minimumSupportedVersion = TraitsT::minimumSupportedVersion;
 
                     return manifest;
