@@ -1691,9 +1691,9 @@ namespace persistence
             {
             }
 
-            [[nodiscard]] static const std::string& key()
+            [[nodiscard]] static const std::string& scheme()
             {
-                return m_manifest.key;
+                return m_manifest.scheme;
             }
 
             [[nodiscard]] static const DatabaseSupportManifest& supportManifest()

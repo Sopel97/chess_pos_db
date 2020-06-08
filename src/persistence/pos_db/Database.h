@@ -187,14 +187,14 @@ namespace persistence
 
     struct DatabaseManifestModel
     {
-        std::string key;
+        std::string scheme;
         util::SemanticVersion version;
         bool requiresMachingEndianness;
     };
 
     struct DatabaseManifest
     {
-        std::string key;
+        std::string scheme;
         util::SemanticVersion version;
         std::optional<EndiannessSignature> endiannessSignature;
 
@@ -205,7 +205,7 @@ namespace persistence
     enum struct ManifestValidationResult
     {
         Ok,
-        KeyMismatch,
+        SchemeMismatch,
         EndiannessMismatch,
         InvalidManifest,
         InvalidVersion,
@@ -244,7 +244,7 @@ namespace persistence
 
         [[nodiscard]] static std::filesystem::path manifestPath(const std::filesystem::path& dirPath);
 
-        [[nodiscard]] static std::optional<std::string> tryReadKey(const std::filesystem::path& dirPath);
+        [[nodiscard]] static std::optional<std::string> tryReadScheme(const std::filesystem::path& dirPath);
 
         [[nodiscard]] virtual const DatabaseManifestModel& manifestModel() const = 0;
 

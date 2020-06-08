@@ -122,17 +122,17 @@ namespace command_line_app
     static const persistence::DatabaseFactory g_factory = []() {
         persistence::DatabaseFactory g_factory;
 
-        g_factory.registerDatabaseType<persistence::db_beta::Database>();
-        g_factory.registerDatabaseType<persistence::db_delta::Database>();
-        g_factory.registerDatabaseType<persistence::db_epsilon::Database>();
-        g_factory.registerDatabaseType<persistence::db_epsilon_smeared::Database>();
+        g_factory.registerDatabaseScheme<persistence::db_beta::Database>();
+        g_factory.registerDatabaseScheme<persistence::db_delta::Database>();
+        g_factory.registerDatabaseScheme<persistence::db_epsilon::Database>();
+        g_factory.registerDatabaseScheme<persistence::db_epsilon_smeared::Database>();
 
         return g_factory;
     }();
 
-    static auto instantiateDatabase(const std::string& key, const std::filesystem::path& destination)
+    static auto instantiateDatabase(const std::string& scheme, const std::filesystem::path& destination)
     {
-        auto ptr = g_factory.tryInstantiateByKey(key, destination);
+        auto ptr = g_factory.tryInstantiateByScheme(scheme, destination);
         if (ptr == nullptr)
         {
             throw Exception("Invalid database type.");
@@ -140,20 +140,20 @@ namespace command_line_app
         return ptr;
     }
 
-    static auto readKeyOfDatabase(const std::filesystem::path& path)
+    static auto readSchemeOfDatabase(const std::filesystem::path& path)
     {
-        auto key = persistence::Database::tryReadKey(path);
-        if (!key.has_value())
+        auto scheme = persistence::Database::tryReadScheme(path);
+        if (!scheme.has_value())
         {
             throw Exception("Directory " + path.string() + " does not contain a valid database.");
         }
-        return *key;
+        return *scheme;
     }
 
     static auto loadDatabase(const std::filesystem::path& path)
     {
-        const auto key = readKeyOfDatabase(path);
-        return instantiateDatabase(key, path);
+        const auto scheme = readSchemeOfDatabase(path);
+        return instantiateDatabase(scheme, path);
     }
 
     [[nodiscard]] static persistence::ImportableFiles getPgnListFromPaths(
@@ -216,21 +216,21 @@ namespace command_line_app
     }
 
     static void createImpl(
-        const std::string& key,
+        const std::string& scheme,
         const std::filesystem::path& destination,
         const persistence::ImportableFiles& pgns
     )
     {
         assertDirectoryEmpty(destination);
 
-        auto db = instantiateDatabase(key, destination);
+        auto db = instantiateDatabase(scheme, destination);
         db->import(pgns, importMemory.bytes());
     }
 
     static void create(args::Subparser& parser)
     {
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
-        args::ValueFlag<std::string> type(requiredArgs, "name", "The type (format/scheme) of the database", { "type" });
+        args::ValueFlag<std::string> scheme(requiredArgs, "scheme", "The scheme (format/type) of the database", { "scheme" });
         args::ValueFlag<std::string> output(requiredArgs, "path", "The output directory", { 'o', "output" });
 
         args::ValueFlagList<std::string> human(parser, "path", "Human files", { "human" });
@@ -256,7 +256,7 @@ namespace command_line_app
         }
         else if (!anyList && !anySeparate)
         {
-            instantiateDatabase(args::get(type), args::get(output));
+            instantiateDatabase(args::get(scheme), args::get(output));
         }
         else
         {
@@ -265,7 +265,7 @@ namespace command_line_app
                 ? parsePgnListFile(args::get(listInput))
                 : getPgnListFromPaths(args::get(human), args::get(engine), args::get(server));
 
-            createImpl(args::get(type), args::get(output), pgns);
+            createImpl(args::get(scheme), args::get(output), pgns);
         }
     }
 
@@ -637,7 +637,7 @@ namespace command_line_app
     static void handleTcpCommandCreateImpl(
         std::unique_ptr<persistence::Database>&,
         const TcpConnection::Ptr& session,
-        const std::string& key,
+        const std::string& scheme,
         const std::filesystem::path& destination,
         const persistence::ImportableFiles& pgns,
         const std::vector<std::filesystem::path>& temporaryPaths,
@@ -653,7 +653,7 @@ namespace command_line_app
         }
 
         {
-            auto db = instantiateDatabase(key, destination);
+            auto db = instantiateDatabase(scheme, destination);
 
             auto callback = makeImportProgressReportHandler(session, doReportProgress);
             auto stats = db->import(pgns, importMemory.bytes(), callback);
@@ -687,7 +687,7 @@ namespace command_line_app
         for (auto& v : json["engine_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Engine);
         for (auto& v : json["server_pgns"]) pgns.emplace_back(v.get<std::string>(), GameLevel::Server);
 
-        const std::string databaseFormat = json["database_format"].get<std::string>();
+        const std::string scheme = json["scheme"].get<std::string>();
 
         const auto temporaryPathsStr =
             json.contains("temporary_paths")
@@ -712,7 +712,7 @@ namespace command_line_app
             temporarySpace = json["temporary_space"].get<MemoryAmount>();
         }
 
-        handleTcpCommandCreateImpl(db, session, databaseFormat, destination, pgns, temporaryPaths, temporarySpace, doMerge, doReportProgress);
+        handleTcpCommandCreateImpl(db, session, scheme, destination, pgns, temporaryPaths, temporarySpace, doMerge, doReportProgress);
     }
 
     enum struct AppendMergeType

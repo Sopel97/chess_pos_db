@@ -37,12 +37,12 @@ namespace persistence
         DatabaseFactory() = default;
 
         template <typename DatabaseT>
-        void registerDatabaseType()
+        void registerDatabaseScheme()
         {
-            m_factories[DatabaseT::key()] = std::make_unique<SpecificDatabaseFactory<DatabaseT>>();
+            m_factories[DatabaseT::scheme()] = std::make_unique<SpecificDatabaseFactory<DatabaseT>>();
         }
 
-        [[nodiscard]] std::unique_ptr<Database> tryInstantiateByKey(const std::string& key, const std::filesystem::path& path) const;
+        [[nodiscard]] std::unique_ptr<Database> tryInstantiateByScheme(const std::string& key, const std::filesystem::path& path) const;
 
         [[nodiscard]] const SpecificDatabaseFactoryBase& at(const std::string& key) const;
 
