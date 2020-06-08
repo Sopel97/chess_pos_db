@@ -1668,7 +1668,7 @@ namespace persistence
 
             static inline const std::filesystem::path partitionDirectory = "data";
 
-            static inline const DatabaseManifest m_manifest = { name, true, TraitsT::version };
+            static inline const DatabaseManifestModel m_manifest = { name, TraitsT::version, true };
 
             static constexpr std::size_t m_totalNumDirectories = 1;
 
@@ -1752,7 +1752,7 @@ namespace persistence
                 return manifest;
             }
 
-            [[nodiscard]] const DatabaseManifest& manifest() const override
+            [[nodiscard]] const DatabaseManifestModel& manifestModel() const override
             {
                 return m_manifest;
             }

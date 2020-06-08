@@ -338,8 +338,27 @@ namespace persistence
     void to_json(nlohmann::json& j, const DatabaseManifest& manifest)
     {
         j["name"] = manifest.key;
-        j["requires_matching_endianness"] = manifest.requiresMatchingEndianness;
         j["version"] = manifest.version.toString();
+
+        if (manifest.endiannessSignature.has_value())
+        {
+            j["endianness_signature"] = *manifest.endiannessSignature;
+        }
+    }
+
+    void from_json(const nlohmann::json& j, DatabaseManifest& manifest)
+    {
+        manifest.key = j["name"].get<std::string>();
+        manifest.version = util::SemanticVersion::fromString(j["version"].get<std::string>()).value();
+
+        if (j.contains("endianness_signature"))
+        {
+            manifest.endiannessSignature = j["endianness_signature"];
+        }
+        else
+        {
+            manifest.endiannessSignature = std::nullopt;
+        }
     }
 
     ImportableFile::ImportableFile(std::filesystem::path path, GameLevel level) :
@@ -369,7 +388,7 @@ namespace persistence
         return m_type;
     }
 
-    Database::Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) :
+    Database::Database(const std::filesystem::path& dirPath, const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support) :
         m_baseDirPath(dirPath)
     {
         initializeManifest(manifestModel, support);
@@ -383,40 +402,48 @@ namespace persistence
 
     [[nodiscard]] std::optional<std::string> Database::tryReadKey(const std::filesystem::path& dirPath)
     {
-        std::ifstream in(manifestPath(dirPath));
+        std::ifstream file(manifestPath(dirPath));
+        if (!file.is_open()) return std::nullopt;
 
-        if (!in.is_open()) return std::nullopt;
+        try
+        {
+            std::string str(
+                (std::istreambuf_iterator<char>(file)),
+                std::istreambuf_iterator<char>()
+            );
+            auto json = nlohmann::json::parse(str);
+            DatabaseManifest manifest = json.get<DatabaseManifest>();
 
-        std::vector<char> data(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>{});
-
-        if (data.size() == 0) return std::nullopt;
-
-        const std::size_t keyLength = static_cast<std::size_t>(data[0]);
-        if (data.size() < 1 + keyLength) return std::nullopt;
-
-        std::string key;
-        key.resize(keyLength);
-        std::memcpy(key.data(), data.data() + 1, keyLength);
-        return key;
+            return manifest.key;
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
     }
 
-    const DatabaseStats& Database::stats() const
+    [[nodiscard]] const DatabaseStats& Database::stats() const
     {
         return m_stats;
     }
 
-    void Database::updateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
+    [[nodiscard]] const DatabaseManifest& Database::manifest() const
     {
-        createManifest(manifestModel, support);
+        return m_manifest;
     }
 
-    void Database::initializeManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
+    DatabaseManifest Database::updateManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support)
+    {
+        return createManifest(manifestModel, support);
+    }
+
+    void Database::initializeManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support)
     {
         const bool firstOpen = !std::filesystem::exists(manifestPath());
 
         if (firstOpen)
         {
-            createManifest(manifestModel, support);
+            m_manifest = createManifest(manifestModel, support);
         }
         else
         {
@@ -426,7 +453,7 @@ namespace persistence
                 throw std::runtime_error("Cannot open database: " + manifestValidationResultToString(ec));
             }
 
-            updateManifest(manifestModel, support);
+            m_manifest = updateManifest(manifestModel, support);
         }
     }
 
@@ -465,111 +492,51 @@ namespace persistence
         file << nlohmann::json(m_stats);
     }
     
-    void Database::createManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
+    DatabaseManifest Database::createManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support)
     {
-        std::vector<std::byte> data;
-        const std::size_t keyLength = manifestModel.key.size();
-        if (keyLength > 255)
+        DatabaseManifest manifest{};
+        
+        manifest.key = manifestModel.key;
+        manifest.version = manifestModel.version;
+
+        if (manifestModel.requiresMachingEndianness)
         {
-            throw std::runtime_error("Manifest key must be at most 255 chars long.");
+            manifest.endiannessSignature = EndiannessSignature{};
         }
 
-        const std::string versionString = manifestModel.version.toString();
-        const std::size_t versionStringLength = versionString.size();
-        if (versionStringLength > 255)
-        {
-            throw std::runtime_error("Manifest version string must be at most 255 chars long.");
-        }
+        writeManifest(manifest);
 
-        const std::size_t endiannessSignatureLength = manifestModel.requiresMatchingEndianness ? sizeof(EndiannessSignature) : 0;
-        const std::size_t totalLength = 
-              1 + keyLength 
-            + 1 + versionStringLength 
-            + endiannessSignatureLength;
-
-        data.resize(totalLength);
-
-        const std::uint8_t keyLengthLow = static_cast<std::uint8_t>(keyLength);
-        const std::uint8_t versionStringLengthLow = static_cast<std::uint8_t>(versionStringLength);
-        auto writePtr = data.data();
-        std::memcpy(writePtr, &keyLengthLow, 1);
-        writePtr += 1;
-        std::memcpy(writePtr, manifestModel.key.data(), keyLength);
-        writePtr += keyLength;
-
-        std::memcpy(writePtr, &versionStringLengthLow, 1);
-        writePtr += 1;
-        std::memcpy(writePtr, versionString.data(), versionStringLength);
-        writePtr += versionStringLength;
-
-        if (endiannessSignatureLength != 0)
-        {
-            const EndiannessSignature sig;
-            std::memcpy(writePtr, &sig, endiannessSignatureLength);
-            writePtr += endiannessSignatureLength;
-        }
-
-        writeManifest(data);
+        return manifest;
     }
 
-    [[nodiscard]] ManifestValidationResult Database::validateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const
+    [[nodiscard]] ManifestValidationResult Database::validateManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support) const
     {
-        const auto& manifestData = readManifest();
-        if (manifestData.size() == 0) return ManifestValidationResult::InvalidManifest;
-
-        auto readPtr = manifestData.data();
-        const std::size_t keyLength = std::to_integer<std::size_t>(*readPtr);
-        readPtr += 1;
-        if (manifestData.size() < (readPtr - manifestData.data()) + keyLength) return ManifestValidationResult::InvalidManifest;
-        if (keyLength != manifestModel.key.size()) return ManifestValidationResult::KeyMismatch;
-
-        std::string key;
-        key.resize(keyLength);
-        std::memcpy(key.data(), readPtr, keyLength);
-        readPtr += keyLength;
-        if (manifestModel.key != key) return ManifestValidationResult::KeyMismatch;
-
-        const std::size_t versionStringLength = std::to_integer<std::size_t>(*readPtr);
-        readPtr += 1;
-        if (manifestData.size() < (readPtr - manifestData.data()) + versionStringLength) return ManifestValidationResult::InvalidManifest;
-        std::string versionString;
-        versionString.resize(versionStringLength);
-        std::memcpy(versionString.data(), readPtr, versionStringLength);
-        readPtr += versionStringLength;
-
-        auto versionOpt = util::SemanticVersion::fromString(versionString);
-        if (!versionOpt.has_value())
+        try
         {
-            return ManifestValidationResult::InvalidVersion;
-        }
+            DatabaseManifest manifest = readManifest();
 
-        if (*versionOpt < support.minimumSupportedVersion)
-        {
-            return ManifestValidationResult::UnsupportedVersion;
-        }
-
-        if (manifestModel.requiresMatchingEndianness)
-        {
-            if (manifestData.size() != (readPtr - manifestData.data()) + sizeof(EndiannessSignature))
+            if (manifest.key != manifestModel.key)
             {
-                return ManifestValidationResult::InvalidManifest;
+                return ManifestValidationResult::KeyMismatch;
             }
-            else
-            {
-                EndiannessSignature sig;
-                std::memcpy(&sig, readPtr, sizeof(EndiannessSignature));
-                readPtr += sizeof(EndiannessSignature);
 
-                return sig == EndiannessSignature{}
-                    ? ManifestValidationResult::Ok
-                    : ManifestValidationResult::EndiannessMismatch;
+            if (manifest.version < support.minimumSupportedVersion)
+            {
+                return ManifestValidationResult::UnsupportedVersion;
             }
-        }
-        else if (readPtr == manifestData.data() + manifestData.size())
-        {
+
+            if (manifestModel.requiresMachingEndianness)
+            {
+                if (!manifest.endiannessSignature.has_value() 
+                    || manifest.endiannessSignature != EndiannessSignature{})
+                {
+                    return ManifestValidationResult::EndiannessMismatch;
+                }
+            }
+
             return ManifestValidationResult::Ok;
         }
-        else
+        catch (...)
         {
             return ManifestValidationResult::InvalidManifest;
         }
@@ -590,20 +557,25 @@ namespace persistence
         return m_baseDirPath / m_manifestFilename;
     }
 
-    void Database::writeManifest(const std::vector<std::byte>& data) const
+    void Database::writeManifest(const DatabaseManifest& manifest)
     {
+        nlohmann::json json = manifest;
+        std::string jsonString = json.dump();
+
         const auto path = manifestPath();
         std::filesystem::create_directories(path.parent_path());
         std::ofstream out(path, std::ios::binary);
-        out.write(reinterpret_cast<const char*>(data.data()), data.size());
+        out.write(reinterpret_cast<const char*>(jsonString.data()), jsonString.size());
     }
 
-    std::vector<std::byte> Database::readManifest() const
+    DatabaseManifest Database::readManifest() const
     {
         std::ifstream in(manifestPath(), std::ios::binary);
-        std::vector<char> data(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>{});
-        std::vector<std::byte> bytes(data.size());
-        std::memcpy(bytes.data(), data.data(), data.size());
-        return bytes;
+        std::string str(
+            (std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>()
+        );
+        auto json = nlohmann::json::parse(str);
+        return json.get<DatabaseManifest>();
     }
 }

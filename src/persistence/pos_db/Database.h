@@ -6,6 +6,7 @@
 
 #include "enum/EnumArray.h"
 
+#include "util/Endian.h"
 #include "util/SemanticVersion.h"
 
 #include "json/json.hpp"
@@ -185,13 +186,21 @@ namespace persistence
         friend void to_json(nlohmann::json& j, const DatabaseSupportManifest& manifest);
     };
 
+    struct DatabaseManifestModel
+    {
+        std::string key;
+        util::SemanticVersion version;
+        bool requiresMachingEndianness;
+    };
+
     struct DatabaseManifest
     {
         std::string key;
-        bool requiresMatchingEndianness;
         util::SemanticVersion version;
+        std::optional<EndiannessSignature> endiannessSignature;
 
         friend void to_json(nlohmann::json& j, const DatabaseManifest& manifest);
+        friend void from_json(const nlohmann::json& j, DatabaseManifest& manifest);
     };
 
     enum struct ManifestValidationResult
@@ -232,17 +241,19 @@ namespace persistence
         using ImportProgressCallback = std::function<void(const ImportProgressReport&)>;
         using MergeProgressCallback = std::function<void(const MergeProgressReport&)>;
 
-        Database(const std::filesystem::path& dirPath, const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support);
+        Database(const std::filesystem::path& dirPath, const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support);
 
         [[nodiscard]] static std::filesystem::path manifestPath(const std::filesystem::path& dirPath);
 
         [[nodiscard]] static std::optional<std::string> tryReadKey(const std::filesystem::path& dirPath);
 
-        [[nodiscard]] virtual const DatabaseManifest& manifest() const = 0;
+        [[nodiscard]] virtual const DatabaseManifestModel& manifestModel() const = 0;
 
-        virtual const std::filesystem::path & path() const = 0;
+        [[nodiscard]] const DatabaseManifest& manifest() const;
 
-        const DatabaseStats& stats() const;
+        [[nodiscard]] virtual const std::filesystem::path & path() const = 0;
+
+        [[nodiscard]] const DatabaseStats& stats() const;
 
         [[nodiscard]] virtual query::Response executeQuery(query::Request query) = 0;
 
@@ -287,22 +298,23 @@ namespace persistence
 
         std::filesystem::path m_baseDirPath;
         DatabaseStats m_stats;
+        DatabaseManifest m_manifest;
 
         void loadStats();
         void saveStats();
 
-        void updateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
+        DatabaseManifest updateManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support);
 
-        void initializeManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
+        void initializeManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support);
 
-        void createManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
+        DatabaseManifest createManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support);
 
-        [[nodiscard]] ManifestValidationResult validateManifest(const DatabaseManifest& manifestModel, const DatabaseSupportManifest& support) const;
+        [[nodiscard]] ManifestValidationResult validateManifest(const DatabaseManifestModel& manifestModel, const DatabaseSupportManifest& support) const;
 
         [[nodiscard]] std::filesystem::path manifestPath() const;
 
-        void writeManifest(const std::vector<std::byte>& data) const;
+        void writeManifest(const DatabaseManifest& data);
 
-        std::vector<std::byte> readManifest() const;
+        DatabaseManifest readManifest() const;
     };
 }
