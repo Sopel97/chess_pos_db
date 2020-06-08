@@ -633,6 +633,23 @@ namespace pgn
         }
     }
 
+    [[nodiscard]] Position UnparsedGame::startPosition() const
+    {
+        const std::string_view fenTag = detail::findTagValue(m_tagSection, "FEN"sv);
+        if (fenTag.empty())
+        {
+            return Position::startPosition();
+        }
+
+        return Position::fromFen(fenTag.data());
+    }
+
+    [[nodiscard]] bool UnparsedGame::hasCustomStartPosition() const
+    {
+        const std::string_view fenTag = detail::findTagValue(m_tagSection, "FEN"sv);
+        return !fenTag.empty();
+    }
+
     [[nodiscard]] std::int16_t UnparsedGame::whiteElo() const
     {
         const std::string_view whiteEloTag = detail::findTagValue(m_tagSection, "WhiteElo"sv);

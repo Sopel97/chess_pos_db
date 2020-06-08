@@ -176,6 +176,10 @@ namespace pgn
             std::uint16_t& plyCount
         ) const;
 
+        [[nodiscard]] Position startPosition() const;
+
+        [[nodiscard]] bool hasCustomStartPosition() const;
+
         [[nodiscard]] std::int16_t whiteElo() const;
 
         [[nodiscard]] std::int16_t blackElo() const;

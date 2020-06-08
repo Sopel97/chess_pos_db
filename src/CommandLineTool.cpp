@@ -2015,12 +2015,86 @@ namespace command_line_app
         }
     }
 
-    void interactive(args::Subparser& parser)
+    static void interactive(args::Subparser& parser)
     {
         parser.Parse();
 
         console_app::App console_app;
         console_app.run();
+    }
+
+    [[nodiscard]] static bool verifyPgnTags(const pgn::UnparsedGame& game, std::size_t idx)
+    {
+        const auto result = game.result();
+        if (!result.has_value())
+        {
+            std::cerr << "Game " << idx << " has invalid result tag with value \"" << game.tag("Result"sv) << "\"\n";
+            return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] static bool verifyPgnMoves(const pgn::UnparsedGame& game, std::size_t idx)
+    {
+        Position pos = game.startPosition();
+        std::size_t moveCount = 0;
+        for (auto&& san : game.moves())
+        {
+            const std::optional<Move> move = san::trySanToMove(pos, san);
+            if (!move.has_value() || *move == Move::null())
+            {
+                std::cerr << "Game " << idx << " has an invalid move \"" << san << "\"\n";
+                return false;
+            }
+
+            pos.doMove(*move);
+
+            ++moveCount;
+        }
+        if (moveCount == 0)
+        {
+            std::cerr << "Game " << idx << " has no moves\n";
+        }
+        return true;
+    }
+
+    static void verifyPgn(const std::filesystem::path& path)
+    {
+        constexpr std::size_t progressEvery = 100000;
+
+        pgn::LazyPgnFileReader reader(path);
+        std::size_t gameId = 0;
+        for (auto&& game : reader)
+        {
+            ++gameId;
+
+            if (!verifyPgnTags(game, gameId)) continue;
+            if (!verifyPgnMoves(game, gameId)) continue;
+
+            if (gameId % progressEvery == 0)
+            {
+                std::cout << "So far verified " << gameId << " games...\n";
+            }
+        }
+        std::cerr << "Verified " << gameId << " games.\n";
+    }
+
+    static void verify(args::Subparser& parser)
+    {
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+        args::Positional<std::string> input(requiredArgs, "input path", "The path to a PGN or BCGN file.");
+
+        parser.Parse();
+
+        const std::filesystem::path path = args::get(input);
+        if (path.extension() == ".pgn")
+        {
+            verifyPgn(path);
+        }
+        else
+        {
+            std::cerr << "Only .pgn files are supported for now.\n";
+        }
     }
 
     void run(int argc, char* argv[])
@@ -2040,6 +2114,7 @@ namespace command_line_app
         args::Command stats(commands, "stats", "Calculate statistics for a PGN/BCGN file", &stats);
         args::Command bench(commands, "bench", "Benchmark processing speed of PGN/BCGN file", &bench);
         args::Command interactive(commands, "interactive", "Launch an interactive, stateful command line for extended operation.", &interactive);
+        args::Command verify(commands, "verify", "Very a PGN/BCGN file.", &verify);
 
         args::GlobalOptions globals(parser, arguments);
 
