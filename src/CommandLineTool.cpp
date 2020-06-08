@@ -2058,7 +2058,7 @@ namespace command_line_app
         return true;
     }
 
-    static void verifyPgn(const std::filesystem::path& path)
+    static void verifyPgn(const std::filesystem::path& path, bool bail)
     {
         constexpr std::size_t progressEvery = 100000;
 
@@ -2068,8 +2068,16 @@ namespace command_line_app
         {
             ++gameId;
 
-            if (!verifyPgnTags(game, gameId)) continue;
-            if (!verifyPgnMoves(game, gameId)) continue;
+            if (!verifyPgnTags(game, gameId))
+            {
+                if (bail) return;
+                else continue;
+            }
+            if (!verifyPgnMoves(game, gameId))
+            {
+                if (bail) return;
+                else continue;
+            }
 
             if (gameId % progressEvery == 0)
             {
@@ -2084,12 +2092,14 @@ namespace command_line_app
         args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
         args::Positional<std::string> input(requiredArgs, "input path", "The path to a PGN or BCGN file.");
 
+        args::Flag bail(requiredArgs, "bail", "Bail on first error.", { "bail" });
+
         parser.Parse();
 
         const std::filesystem::path path = args::get(input);
         if (path.extension() == ".pgn")
         {
-            verifyPgn(path);
+            verifyPgn(path, args::get(bail));
         }
         else
         {

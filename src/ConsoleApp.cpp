@@ -393,7 +393,7 @@ namespace console_app
         return true;
     }
 
-    static void verifyPgn(const std::filesystem::path& path)
+    static void verifyPgn(const std::filesystem::path& path, bool bail = false)
     {
         constexpr std::size_t progressEvery = 100000;
 
@@ -408,8 +408,16 @@ namespace console_app
 
             ++idx;
 
-            if (!verifyPgnTags(game, idx)) continue;
-            if (!verifyPgnMoves(game, idx)) continue;
+            if (!verifyPgnTags(game, idx))
+            {
+                if (bail) return;
+                else continue;
+            }
+            if (!verifyPgnMoves(game, idx))
+            {
+                if (bail) return;
+                else continue;
+            }
         }
         std::cerr << "Verified " << idx << " games.\n";
     }
