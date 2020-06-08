@@ -36,14 +36,16 @@ namespace persistence
                 return "Ok";
             case ManifestValidationResult::EndiannessMismatch:
                 return "Endianness mismatch.";
-            case ManifestValidationResult::SchemeMismatch:
-                return "Scheme mismatch.";
+            case ManifestValidationResult::SchemaMismatch:
+                return "Schema mismatch.";
             case ManifestValidationResult::InvalidManifest:
                 return "Invalid Manifest.";
             case ManifestValidationResult::InvalidVersion:
                 return "Invalid Version.";
             case ManifestValidationResult::UnsupportedVersion:
                 return "Unsupported Version.";
+            default:
+                return "Unknown error.";
         }
     }
 
@@ -338,7 +340,7 @@ namespace persistence
     {
         j["type"] = "pos_db";
 
-        j["scheme"] = manifest.scheme;
+        j["schema"] = manifest.schema;
         j["version"] = manifest.version.toString();
 
         if (manifest.endiannessSignature.has_value())
@@ -354,7 +356,7 @@ namespace persistence
             throw std::runtime_error("Manifest is not a 'pos_db' manifest.");
         }
 
-        manifest.scheme = j["scheme"].get<std::string>();
+        manifest.schema = j["schema"].get<std::string>();
         manifest.version = util::SemanticVersion::fromString(j["version"].get<std::string>()).value();
 
         if (j.contains("endianness_signature"))
@@ -406,7 +408,7 @@ namespace persistence
         return dirPath / m_manifestFilename;
     }
 
-    [[nodiscard]] std::optional<std::string> Database::tryReadScheme(const std::filesystem::path& dirPath)
+    [[nodiscard]] std::optional<std::string> Database::tryReadSchema(const std::filesystem::path& dirPath)
     {
         std::ifstream file(manifestPath(dirPath));
         if (!file.is_open()) return std::nullopt;
@@ -420,7 +422,7 @@ namespace persistence
             auto json = nlohmann::json::parse(str);
             DatabaseManifest manifest = json.get<DatabaseManifest>();
 
-            return manifest.scheme;
+            return manifest.schema;
         }
         catch (...)
         {
@@ -502,7 +504,7 @@ namespace persistence
     {
         DatabaseManifest manifest{};
         
-        manifest.scheme = manifestModel.scheme;
+        manifest.schema = manifestModel.schema;
         manifest.version = manifestModel.version;
 
         if (manifestModel.requiresMachingEndianness)
@@ -521,9 +523,9 @@ namespace persistence
         {
             DatabaseManifest manifest = readManifest();
 
-            if (manifest.scheme != manifestModel.scheme)
+            if (manifest.schema != manifestModel.schema)
             {
-                return ManifestValidationResult::SchemeMismatch;
+                return ManifestValidationResult::SchemaMismatch;
             }
 
             if (manifest.version < support.minimumSupportedVersion)
