@@ -626,7 +626,7 @@ namespace persistence
                 m_totalBlackElo{},
                 m_countWithElo{},
                 m_count{},
-                m_firstGameIndex{}
+                m_firstGameIndex{std::numeric_limits<std::uint32_t>::max()}
             {
 
             }
