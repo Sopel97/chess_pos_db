@@ -26,6 +26,7 @@
 
 #include "persistence/pos_db/beta/DatabaseFormatBeta.h"
 #include "persistence/pos_db/delta/DatabaseFormatDelta.h"
+#include "persistence/pos_db/delta/DatabaseFormatDeltaSmeared.h"
 #include "persistence/pos_db/epsilon/DatabaseFormatEpsilon.h"
 #include "persistence/pos_db/epsilon/DatabaseFormatEpsilonSmeared.h"
 #include "persistence/pos_db/Database.h"
@@ -124,6 +125,7 @@ namespace command_line_app
 
         g_factory.registerDatabaseSchema<persistence::db_beta::Database>();
         g_factory.registerDatabaseSchema<persistence::db_delta::Database>();
+        g_factory.registerDatabaseSchema<persistence::db_delta_smeared::Database>();
         g_factory.registerDatabaseSchema<persistence::db_epsilon::Database>();
         g_factory.registerDatabaseSchema<persistence::db_epsilon_smeared::Database>();
 

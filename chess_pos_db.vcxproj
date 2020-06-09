@@ -85,6 +85,7 @@
     <ClInclude Include="src\persistence\pos_db\Database.h" />
     <ClInclude Include="src\persistence\pos_db\DatabaseFactory.h" />
     <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDelta.h" />
+    <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDeltaSmeared.h" />
     <ClInclude Include="src\persistence\pos_db\EntryConstructionParameters.h" />
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.h" />
     <ClInclude Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonSmeared.h" />
@@ -136,6 +137,7 @@
     <ClCompile Include="src\persistence\pos_db\Database.cpp" />
     <ClCompile Include="src\persistence\pos_db\DatabaseFactory.cpp" />
     <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDelta.cpp" />
+    <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDeltaSmeared.cpp" />
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilon.cpp" />
     <ClCompile Include="src\persistence\pos_db\epsilon\DatabaseFormatEpsilonSmeared.cpp" />
     <ClCompile Include="src\persistence\pos_db\IndexedGameHeaderStorage.cpp" />

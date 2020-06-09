@@ -270,6 +270,9 @@
     <ClInclude Include="src\util\StringUtil.h">
       <Filter>Header Files\src\util</Filter>
     </ClInclude>
+    <ClInclude Include="src\persistence\pos_db\delta\DatabaseFormatDeltaSmeared.h">
+      <Filter>Header Files\src\persistence\pos_db\delta</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="test\chess\SanTest.cpp">
@@ -379,6 +382,9 @@
     </ClCompile>
     <ClCompile Include="test\TestMain.cpp">
       <Filter>Source Files\test</Filter>
+    </ClCompile>
+    <ClCompile Include="src\persistence\pos_db\delta\DatabaseFormatDeltaSmeared.cpp">
+      <Filter>Source Files\src\persistence\pos_db\delta</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
