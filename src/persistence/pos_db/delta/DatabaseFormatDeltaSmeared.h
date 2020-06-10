@@ -665,14 +665,13 @@ namespace persistence
 
             void add(const SmearedEntry& smeared, std::uint32_t position)
             {
-                // for adding at position 0 use constructor
-                ASSERT(position != 0);
-
                 m_totalWhiteElo += static_cast<std::uint64_t>(smeared.totalWhiteElo()) << (position * SmearedEntry::TotalWhiteElo::size);
                 m_totalBlackElo += static_cast<std::uint64_t>(smeared.totalBlackElo()) << (position * SmearedEntry::TotalBlackElo::size);
 
                 m_countWithElo += static_cast<std::uint64_t>(smeared.countWithElo()) << (position * SmearedEntry::CountWithElo::size);
                 m_count += static_cast<std::uint64_t>(smeared.count()) << (position * SmearedEntry::Count::size);
+
+                m_firstGameIndex = std::min(m_firstGameIndex, smeared.m_firstGameIndex);
             }
 
             [[nodiscard]] GameLevel level() const
