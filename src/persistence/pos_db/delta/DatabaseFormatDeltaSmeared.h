@@ -427,8 +427,8 @@ namespace persistence
                     else if (lhs.m_hash1 > rhs.m_hash1) return false;
 
                     {
-                        const auto lhsRest = lhs.m_packed0.getRaw<HashLast>();
-                        const auto rhsRest = rhs.m_packed0.getRaw<HashLast>();
+                        const auto lhsRest = lhs.m_packed0.getRaw<HashLast, PackedReverseMove>();
+                        const auto rhsRest = rhs.m_packed0.getRaw<HashLast, PackedReverseMove>();
                         if (lhsRest < rhsRest) return true;
                         else if (lhsRest > rhsRest) return false;
                     }
