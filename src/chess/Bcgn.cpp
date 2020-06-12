@@ -1447,7 +1447,7 @@ namespace bcgn
 
     [[nodiscard]] UnparsedBcgnGamePositions UnparsedBcgnGame::positions() const
     {
-        return UnparsedBcgnGamePositions(m_header, encodedMovetext(), m_numPlies);
+        return UnparsedBcgnGamePositions(m_header, startPosition(), encodedMovetext(), m_numPlies);
     }
 
     [[nodiscard]] Position UnparsedBcgnGame::startPosition() const

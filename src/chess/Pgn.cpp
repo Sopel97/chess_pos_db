@@ -352,8 +352,8 @@ namespace pgn
         }
     }
 
-    UnparsedGamePositions::UnparsedPositionsIterator::UnparsedPositionsIterator(std::string_view moveSection) noexcept :
-        m_position(Position::startPosition()),
+    UnparsedGamePositions::UnparsedPositionsIterator::UnparsedPositionsIterator(std::string_view moveSection, const Position& startpos) noexcept :
+        m_position(startpos),
         m_moveSection(moveSection)
     {
     }
@@ -404,8 +404,9 @@ namespace pgn
         return &m_position;
     }
 
-    UnparsedGamePositions::UnparsedGamePositions(std::string_view moveSection) noexcept :
-        m_moveSection(moveSection)
+    UnparsedGamePositions::UnparsedGamePositions(std::string_view moveSection, const Position& pos) noexcept :
+        m_moveSection(moveSection),
+        m_startpos(pos)
     {
         ASSERT(!m_moveSection.empty());
     }
@@ -756,7 +757,7 @@ namespace pgn
 
     [[nodiscard]] UnparsedGamePositions UnparsedGame::positions() const
     {
-        return UnparsedGamePositions(m_moveSection);
+        return UnparsedGamePositions(m_moveSection, startPosition());
     }
 
     [[nodiscard]] UnparsedGameMoves UnparsedGame::moves() const

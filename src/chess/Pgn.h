@@ -37,7 +37,7 @@ namespace pgn
             using iterator_category = std::input_iterator_tag;
             using pointer = const Position*;
 
-            UnparsedPositionsIterator(std::string_view moveSection) noexcept;
+            UnparsedPositionsIterator(std::string_view moveSection, const Position& pos) noexcept;
 
             const UnparsedPositionsIterator& operator++();
 
@@ -57,7 +57,7 @@ namespace pgn
         using iterator = UnparsedPositionsIterator;
         using const_iterator = UnparsedPositionsIterator;
 
-        UnparsedGamePositions(std::string_view moveSection) noexcept;
+        UnparsedGamePositions(std::string_view moveSection, const Position& pos) noexcept;
 
         [[nodiscard]] UnparsedPositionsIterator begin();
 
@@ -65,6 +65,7 @@ namespace pgn
 
     private:
         std::string_view m_moveSection;
+        Position m_startpos;
     };
 
     struct UnparsedGameMoves
