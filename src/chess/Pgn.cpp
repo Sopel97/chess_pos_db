@@ -413,7 +413,7 @@ namespace pgn
 
     [[nodiscard]] UnparsedGamePositions::UnparsedPositionsIterator UnparsedGamePositions::begin()
     {
-        return { m_moveSection };
+        return { m_moveSection, m_startpos };
     }
 
     [[nodiscard]] UnparsedGamePositions::UnparsedPositionsIterator::Sentinel UnparsedGamePositions::end() const
@@ -643,6 +643,17 @@ namespace pgn
         }
 
         return Position::fromFen(fenTag.data());
+    }
+
+    [[nodiscard]] PositionWithZobrist UnparsedGame::startPositionWithZobrist() const
+    {
+        const std::string_view fenTag = detail::findTagValue(m_tagSection, "FEN"sv);
+        if (fenTag.empty())
+        {
+            return PositionWithZobrist::startPosition();
+        }
+
+        return PositionWithZobrist::fromFen(fenTag.data());
     }
 
     [[nodiscard]] bool UnparsedGame::hasCustomStartPosition() const

@@ -431,6 +431,8 @@ namespace bcgn
 
         [[nodiscard]] Position startPosition() const;
 
+        [[nodiscard]] PositionWithZobrist startPositionWithZobrist() const;
+
         [[nodiscard]] UnparsedBcgnAdditionalTags additionalTags() const;
 
     private:
@@ -482,6 +484,8 @@ namespace bcgn
         [[nodiscard]] UnparsedBcgnGamePositions positions() const;
 
         [[nodiscard]] Position startPosition() const;
+
+        [[nodiscard]] PositionWithZobrist startPositionWithZobrist() const;
 
         [[nodiscard]] bool hasCustomStartPosition() const;
 

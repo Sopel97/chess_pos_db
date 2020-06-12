@@ -179,6 +179,8 @@ namespace pgn
 
         [[nodiscard]] Position startPosition() const;
 
+        [[nodiscard]] PositionWithZobrist startPositionWithZobrist() const;
+
         [[nodiscard]] bool hasCustomStartPosition() const;
 
         [[nodiscard]] std::int16_t whiteElo() const;

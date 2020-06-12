@@ -1319,6 +1319,18 @@ namespace bcgn
         }
     }
 
+    [[nodiscard]] PositionWithZobrist UnparsedBcgnGameHeader::startPositionWithZobrist() const
+    {
+        if (m_flags.hasCustomStartPos())
+        {
+            return PositionWithZobrist(getCustomStartPos());
+        }
+        else
+        {
+            return PositionWithZobrist::startPosition();
+        }
+    }
+
     [[nodiscard]] UnparsedBcgnAdditionalTags UnparsedBcgnGameHeader::additionalTags() const
     {
         return UnparsedBcgnAdditionalTags(
@@ -1459,6 +1471,18 @@ namespace bcgn
         else
         {
             return Position::startPosition();
+        }
+    }
+
+    [[nodiscard]] PositionWithZobrist UnparsedBcgnGame::startPositionWithZobrist() const
+    {
+        if (m_flags.hasCustomStartPos())
+        {
+            return PositionWithZobrist(getCustomStartPos());
+        }
+        else
+        {
+            return PositionWithZobrist::startPosition();
         }
     }
 

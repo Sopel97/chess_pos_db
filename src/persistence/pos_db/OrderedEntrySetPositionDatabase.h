@@ -2471,7 +2471,7 @@ namespace persistence
 
                             fillCommonStatsAndParamsForGame(game, level);
 
-                            params.position = PositionWithZobrist::startPosition();
+                            params.position = game.startPositionWithZobrist();
                             params.reverseMove = {};
 
                             processPosition(params);
@@ -2526,7 +2526,7 @@ namespace persistence
 
                             fillCommonStatsAndParamsForGame(gameHeader, level);
 
-                            params.position = PositionWithZobrist::startPosition();
+                            params.position = game.startPositionWithZobrist();
                             params.reverseMove = {};
 
                             processPosition(params);
