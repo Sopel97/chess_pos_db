@@ -1691,7 +1691,13 @@ namespace command_line_app
         std::size_t totalCount = 0;
         for (auto&& game : pgnReader)
         {
-            Position pos = Position::startPosition();
+            const std::string_view fenTag = game.tag("FEN");
+            const bool hasCustomStartpos = !fenTag.empty();
+
+            Position pos = 
+                hasCustomStartpos
+                ? Position::fromFen(fenTag.data())
+                : Position::startPosition();
 
             bcgnWriter.beginGame();
 
@@ -1734,6 +1740,8 @@ namespace command_line_app
                     bcgnWriter.setResult(*result);
                 }
             }
+
+            bcgnWriter.setCustomStartPos(pos);
 
             for (auto&& san : game.moves())
             {
