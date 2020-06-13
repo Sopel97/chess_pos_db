@@ -40,10 +40,12 @@
 
 #include "ConsoleApp.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <queue>
 #include <iomanip>
 #include <iostream>
@@ -2099,6 +2101,245 @@ namespace command_line_app
         }
     }
 
+    template <typename IterT>
+    struct SharedPtrIterator
+    {
+        SharedPtrIterator(IterT&& it) noexcept :
+            m_iter(std::make_shared<IterT>(std::move(it)))
+        {
+        }
+
+        SharedPtrIterator(const SharedPtrIterator&) = default;
+        SharedPtrIterator(SharedPtrIterator&&) noexcept = default;
+
+        SharedPtrIterator& operator=(const SharedPtrIterator&) = default;
+        SharedPtrIterator& operator=(SharedPtrIterator&&) noexcept = default;
+
+        SharedPtrIterator& operator=(IterT&& it) noexcept
+        {
+            m_iter = std::make_shared<IterT>(std::move(it));
+        }
+
+        template <typename T>
+        [[nodiscard]] bool operator==(const T& t) const noexcept
+        {
+            return *m_iter == t;
+        }
+
+        template <typename T>
+        [[nodiscard]] bool operator==(const SharedPtrIterator<T>& t) const noexcept
+        {
+            return *m_iter == *(t.m_iter);
+        }
+
+        template <typename T>
+        [[nodiscard]] bool operator!=(const T& t) const noexcept
+        {
+            return *m_iter != t;
+        }
+
+        template <typename T>
+        [[nodiscard]] bool operator!=(const SharedPtrIterator<T>& t) const noexcept
+        {
+            return *m_iter != *(t.m_iter);
+        }
+
+        [[nodiscard]] decltype(auto) operator*() const
+        {
+            return **m_iter;
+        }
+
+        decltype(auto) operator++() const
+        {
+            return ++*m_iter;
+        }
+
+    private:
+        std::shared_ptr<IterT> m_iter;
+    }; 
+
+    template <typename IterT>
+    SharedPtrIterator(IterT&&) -> SharedPtrIterator<std::remove_reference_t<IterT>>;
+
+    struct EpdDumpInputIterator
+    {
+        using value_type = CompressedPosition;
+        using reference = const CompressedPosition&;
+        using iterator_category = std::input_iterator_tag;
+        using pointer = const CompressedPosition*;
+
+        EpdDumpInputIterator() noexcept :
+            m_path{}
+        {
+        }
+
+        EpdDumpInputIterator(EpdDumpInputIterator&& other) noexcept :
+            m_path(std::move(other.m_path)),
+            m_file(std::move(other.m_file)),
+            m_pos(std::move(other.m_pos))
+        {
+
+        }
+
+        EpdDumpInputIterator(std::filesystem::path path) :
+            m_path(std::move(path))
+        {
+            if (!m_path.empty())
+            {
+                m_file = std::ifstream(m_path);
+            }
+
+            m_pos = nextPos();
+        }
+
+        [[nodiscard]] friend bool operator==(const EpdDumpInputIterator& lhs, const EpdDumpInputIterator& rhs) noexcept
+        {
+            if (rhs.m_path.empty())
+            {
+                return lhs.m_file.eof();
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        [[nodiscard]] friend bool operator!=(const EpdDumpInputIterator& lhs, const EpdDumpInputIterator& rhs) noexcept
+        {
+            return !(lhs == rhs);
+        }
+
+        EpdDumpInputIterator& operator++()
+        {
+            m_pos = nextPos();
+            return *this;
+        }
+
+        [[nodiscard]] const CompressedPosition& operator*() const
+        {
+            return m_pos;
+        }
+
+    private:
+        std::filesystem::path m_path;
+        std::ifstream m_file;
+        CompressedPosition m_pos;
+
+        [[nodiscard]] CompressedPosition nextPos()
+        {
+            constexpr std::size_t bufferSize = 256;
+            constexpr char lineDelimiter = ';';
+
+            char buffer[bufferSize];
+            m_file.getline(buffer, bufferSize, lineDelimiter);
+
+            return Position::fromFen(buffer).compress();
+        }
+    };
+
+    struct EpdDumpOutputIterator
+    {
+        using value_type = CompressedPosition;
+        using reference = const CompressedPosition&;
+        using iterator_category = std::output_iterator_tag;
+        using pointer = const CompressedPosition*;
+
+        struct AssignProxy
+        {
+            EpdDumpOutputIterator* parent;
+
+            void operator=(const CompressedPosition& pos)
+            {
+                parent->assign(pos);
+            }
+        };
+
+        EpdDumpOutputIterator(std::filesystem::path path) :
+            m_path(std::move(path)),
+            m_file(m_path)
+        {
+        }
+
+        EpdDumpOutputIterator(EpdDumpOutputIterator&& other) noexcept :
+            m_path(std::move(other.m_path)),
+            m_file(std::move(other.m_file)),
+            m_nextLine(std::move(other.m_nextLine))
+        {
+
+        }
+
+        EpdDumpOutputIterator& operator++()
+        {
+            writeback();
+            return *this;
+        }
+
+        [[nodiscard]] AssignProxy operator*()
+        {
+            return AssignProxy{ this };
+        }
+
+        ~EpdDumpOutputIterator()
+        {
+            writeback();
+        }
+
+    private:
+        std::filesystem::path m_path;
+        std::ofstream m_file;
+        std::string m_nextLine;
+
+        void assign(const CompressedPosition& pos)
+        {
+            m_nextLine = pos.decompress().fen() + ";\n";
+        }
+
+        void writeback()
+        {
+            if (!m_nextLine.empty())
+            {
+                m_file << m_nextLine;
+                m_nextLine.clear();
+            }
+        }
+    };
+
+    static void epdDumpUnionImpl(const std::string& outputPath, const std::vector<std::string>& inputPaths)
+    {
+        if (inputPaths.size() != 2)
+        {
+            throw std::runtime_error("Only two epd dumps can be merged at a time for now.");
+        }
+
+        std::set_union(
+            SharedPtrIterator(EpdDumpInputIterator(inputPaths[0])), SharedPtrIterator(EpdDumpInputIterator{}),
+            SharedPtrIterator(EpdDumpInputIterator(inputPaths[1])), SharedPtrIterator(EpdDumpInputIterator{}),
+            SharedPtrIterator(EpdDumpOutputIterator(outputPath)),
+            std::less<>{}
+        );
+    }
+
+    static void epdDump(args::Subparser& parser)
+    {
+        args::Group requiredArgs(parser, "required arguments", args::Group::Validators::All);
+
+        args::PositionalList<std::string> input(requiredArgs, "input paths", "Paths to EPD dumps.");
+
+        args::Flag unionFlag(parser, "union", "Union of EPD dumps.", { "union" });
+        args::ValueFlag<std::string> output(requiredArgs, "path", "Output path", { 'o', "output" });
+
+        parser.Parse();
+
+        if (unionFlag)
+        {
+            epdDumpUnionImpl(args::get(output), args::get(input));
+        }
+        else
+        {
+            throwInvalidArguments();
+        }
+    }
+
     void run(int argc, char* argv[])
     {
         args::Group arguments("arguments");
@@ -2117,6 +2358,7 @@ namespace command_line_app
         args::Command bench(commands, "bench", "Benchmark processing speed of PGN/BCGN file", &bench);
         args::Command interactive(commands, "interactive", "Launch an interactive, stateful command line for extended operation.", &interactive);
         args::Command verify(commands, "verify", "Very a PGN/BCGN file.", &verify);
+        args::Command epdDump(commands, "epd_dump", "Various stuff about EPD position files", &epdDump);
 
         args::GlobalOptions globals(parser, arguments);
 
