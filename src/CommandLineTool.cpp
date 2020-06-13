@@ -987,95 +987,6 @@ namespace command_line_app
         sendMessage(session, responseStr);
     }
 
-    static void handleTcpCommandDumpImpl(
-        const TcpConnection::Ptr& session,
-        const std::vector<std::filesystem::path>& pgns,
-        const std::filesystem::path& output,
-        std::size_t minN,
-        bool doReportProgress
-    )
-    {
-        std::vector<CompressedPosition> positions;
-
-        {
-            auto callback = makeImportProgressReportHandler(session, doReportProgress);
-            std::size_t i = 0;
-            for (auto&& pgn : pgns)
-            {
-                pgn::LazyPgnFileReader reader(pgn);
-                for (auto&& game : reader)
-                {
-                    for (auto&& position : game.positions())
-                    {
-                        positions.emplace_back(position.compress());
-                    }
-                }
-
-                ++i;
-                callback({
-                    i,
-                    pgns.size(),
-                    pgn
-                    });
-            }
-
-            sendProgressFinished(session, "import");
-        }
-
-        std::sort(positions.begin(), positions.end());
-
-        auto forEachWithCount = [&positions](auto&& func) {
-            const std::size_t size = positions.size();
-            std::size_t lastUnique = 0;
-            for (std::size_t i = 1; i < size; ++i)
-            {
-                if (!(positions[i - 1] == positions[i]))
-                {
-                    func(positions[i - 1], i - lastUnique);
-                    lastUnique = i;
-                }
-            }
-        };
-
-        {
-            constexpr std::size_t reportEvery = 10'000'000;
-
-            std::ofstream outEpdFile(output, std::ios_base::out | std::ios_base::app);
-            std::size_t nextReport = 0;
-            std::size_t totalCount = 0;
-            std::size_t passed = 0;
-            forEachWithCount([&](const CompressedPosition& pos, std::size_t count)
-                {
-                    if (count >= minN)
-                    {
-                        outEpdFile << pos.decompress().fen() << ";\n";
-                        ++passed;
-                    }
-                    totalCount += count;
-
-                    if (totalCount >= nextReport)
-                    {
-                        if (doReportProgress)
-                        {
-                            auto reportJson = nlohmann::json{
-                                { "operation", "dump" },
-                                { "overall_progress", static_cast<double>(totalCount) / positions.size() },
-                                { "finished", false }
-                            };
-
-                            auto reportStr = reportJson.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
-                            sendMessage(session, reportStr);
-                        }
-
-                        nextReport += reportEvery;
-                    }
-                }
-            );
-
-            sendProgressFinished(session, "dump");
-        }
-    }
-
     namespace detail
     {
         struct AsyncStorePipeline
@@ -1262,22 +1173,32 @@ namespace command_line_app
         const TcpConnection::Ptr& session,
         const std::vector<std::filesystem::path>& pgns,
         const std::filesystem::path& output,
-        const std::filesystem::path& temp,
+        const std::vector<std::filesystem::path>& temps,
         std::size_t minN,
+        std::size_t maxPly,
         bool doReportProgress
     )
     {
         static const MemoryAmount pgnParserMemory = cfg::g_config["command_line_app"]["dump"]["pgn_parser_memory"].get<MemoryAmount>();
+        static const MemoryAmount bcgnParserMemory = cfg::g_config["command_line_app"]["dump"]["bcgn_parser_memory"].get<MemoryAmount>();
         static const MemoryAmount importMemory = cfg::g_config["command_line_app"]["dump"]["import_memory"].get<MemoryAmount>();
 
-        assertDirectoryEmpty(temp);
+        if (temps.empty())
+        {
+            throw std::runtime_error("No temp folders specified");
+        }
+
+        for (auto& temp : temps)
+        {
+            assertDirectoryEmpty(temp);
+        }
 
         std::size_t numPosOut = 0;
         std::size_t numPosIn = 0;
         std::size_t numGamesIn = 0;
 
         // this has to be destroyed last
-        ext::TemporaryPaths tempPaths(temp);
+        ext::TemporaryPaths tempPaths(temps[0]);
 
         auto makeBuffers = [](std::size_t numBuffers)
         {
@@ -1305,16 +1226,17 @@ namespace command_line_app
                 std::size_t i = 0;
                 auto positions = pipeline.getEmptyBuffer();
 
-                for (auto&& pgn : pgns)
+                auto processGame = [&](auto& reader)
                 {
-                    pgn::LazyPgnFileReader reader(pgn, pgnParserMemory.bytes());
                     for (auto&& game : reader)
                     {
                         ++numGamesIn;
 
+                        std::size_t numPly = 0;
                         for (auto&& position : game.positions())
                         {
                             ++numPosIn;
+                            ++numPly;
 
                             positions.emplace_back(position.compress());
 
@@ -1325,7 +1247,32 @@ namespace command_line_app
                                 positions = pipeline.getEmptyBuffer();
                                 Logger::instance().logInfo("Created temp file ", path);
                             }
+
+                            if (numPly >= maxPly)
+                            {
+                                break;
+                            }
                         }
+                    }
+                };
+
+                for (auto&& pgn : pgns)
+                {
+                    const auto extension = pgn.extension();
+
+                    if (extension == ".pgn")
+                    {
+                        pgn::LazyPgnFileReader reader(pgn, pgnParserMemory.bytes());
+                        processGame(reader);
+                    }
+                    else if (extension == ".bcgn")
+                    {
+                        bcgn::BcgnFileReader reader(pgn, bcgnParserMemory.bytes());
+                        processGame(reader);
+                    }
+                    else
+                    {
+                        Logger::instance().logError("Invalid input file type ", extension);
                     }
 
                     ++i;
@@ -1370,13 +1317,17 @@ namespace command_line_app
                     sendMessage(session, reportStr);
                 }; 
                 
+                bool first = true;
+                CompressedPosition pos{};
+                std::size_t count = 0;
+                auto outEpdFile = std::ofstream(output, std::ios_base::out | std::ios_base::app);
                 auto append = [
                         &numPosOut,
                         minN,
-                        outEpdFile = std::ofstream(output, std::ios_base::out | std::ios_base::app), 
-                        first = true, 
-                        pos = CompressedPosition{}, 
-                        count = 0
+                        &outEpdFile, 
+                        &first, 
+                        &pos, 
+                        &count
                     ](const CompressedPosition& position) mutable {
                     if (first)
                     {
@@ -1401,12 +1352,36 @@ namespace command_line_app
                     }
                 };
 
-                ext::MergePlan plan = ext::make_merge_plan(files, ".", ".");
+                const auto& temp1 = temps.front();
+                const auto& temp2 = temps.back();
+                ext::MergePlan plan = ext::make_merge_plan(files, temp1, temp2);
+
+                auto cleanup = [&files, &tempPaths]() {
+                    files.clear();
+                    tempPaths.clear();
+                };
+
                 ext::MergeCallbacks callbacks{
                     progressCallback,
-                    [](int passId) {}
+                    [&cleanup](int passId) {
+                        if (passId == 0)
+                        {
+                            cleanup();
+                        }
+                    }
                 };
                 ext::merge_for_each(plan, callbacks, files, append, std::less<>{});
+
+                if (!files.empty())
+                {
+                    cleanup();
+                }
+
+                if (!first && count >= minN) // if we did anything, ie. accumulator holds something from merge
+                {
+                    ++numPosOut;
+                    outEpdFile << pos.decompress().fen() << ";\n";
+                }
             }
 
             auto stats = nlohmann::json{
@@ -1430,18 +1405,25 @@ namespace command_line_app
         const std::filesystem::path epdOut = json["output_path"].get<std::string>();
         const bool reportProgress = json["report_progress"];
         const std::size_t minN = json["min_count"].get<std::size_t>();
+        const std::size_t maxPly = json["max_ply"].get<std::size_t>();
 
         if (minN == 0) throw Exception("Min count must be positive.");
 
-        if (json.contains("temporary_path"))
+        const std::vector<std::string> tempPathsStr =
+            json.contains("temporary_paths")
+            ? json["temporary_paths"].get<std::vector<std::string>>()
+            : std::vector<std::string>{};
+
+        std::vector<std::filesystem::path> tempPaths;
+        for (auto& pathstr : tempPathsStr)
         {
-            const std::filesystem::path temp = json["temporary_path"].get<std::string>();
-            handleTcpCommandDumpImpl(session, pgns, epdOut, temp, minN, reportProgress);
+            tempPaths.emplace_back(pathstr);
         }
-        else
+        if (tempPaths.empty())
         {
-            handleTcpCommandDumpImpl(session, pgns, epdOut, minN, reportProgress);
+            tempPaths.emplace_back(epdOut.parent_path());
         }
+        handleTcpCommandDumpImpl(session, pgns, epdOut, tempPaths, minN, maxPly, reportProgress);
     }
 
     static void handleTcpCommandSupport(
