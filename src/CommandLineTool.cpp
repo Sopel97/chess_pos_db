@@ -1421,7 +1421,7 @@ namespace command_line_app
         }
         if (tempPaths.empty())
         {
-            tempPaths.emplace_back(epdOut.parent_path());
+            tempPaths.emplace_back(epdOut.parent_path() / ".tmp");
         }
         handleTcpCommandDumpImpl(session, pgns, epdOut, tempPaths, minN, maxPly, reportProgress);
     }
