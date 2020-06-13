@@ -16,7 +16,7 @@
         */
         "thread_pools" : [
             { "threads" : 8, "paths" : ["C:"] },
-            { "threads" : 1, "paths" : ["D:", "F:"] },
+            { "threads" : 8, "paths" : ["D:", "F:"] },
             { "threads" : 8, "paths" : ["W:"] }
         ],
 
