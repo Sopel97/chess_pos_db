@@ -378,15 +378,16 @@ namespace detail::lookup
         {
             file = fileA;
             --rank;
-            if (rank < rank1)
-            {
-                break;
-            }
 
             if (emptyCounter != 0)
             {
                 fen.push_back(static_cast<char>(emptyCounter) + '0');
                 emptyCounter = 0;
+            }
+
+            if (rank < rank1)
+            {
+                break;
             }
             fen.push_back('/');
         }
