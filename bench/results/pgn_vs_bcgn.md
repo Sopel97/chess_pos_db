@@ -16,8 +16,9 @@ The file used is stripped lichess_db_standard_rated_2015-01 with <5 ply games re
 
 Tested on old i7-920 and DDR3-1066 DRAM.
 
-|Format|Size [MB]|Time [s]|Games/s|Positions/s|Throughput [MB/s]|Speedup|
-|-|-|-|-|-|-|-|
-|.pgn|1 157|13.159|109 178|7 543 642|86.621|1|
-|.bcgn c0|331|4.716|309 004|21 370 037|70.266|2.83|
-|.bcgn c1|232|8.171|178 352|12 332 553|28.396|1.63|
+|Format|Size [MB]|Size -h [MB]|Time [s]|Games/s|Positions/s|Throughput [MB/s]|Speedup|
+|-|-|-|-|-|-|-|-|
+|.pgn|1 157|--|13.159|109 178|7 543 642|86.621|1|
+|.bcgn c0|331|206|4.716|309 004|21 370 037|70.266|2.83|
+|.bcgn c1|232|106|8.171|178 352|12 332 553|28.396|1.63|
+|.bcgn c2|207|82|15.345|94 962|6 567 359|13.515|0.87|
