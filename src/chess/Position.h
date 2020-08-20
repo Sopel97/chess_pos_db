@@ -938,6 +938,11 @@ struct Position : public Board
             && static_cast<const Board&>(lhs) == static_cast<const Board&>(rhs);
     }
 
+    [[nodiscard]] constexpr bool friend operator!=(const Position& lhs, const Position& rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
     // these are supposed to be used only for testing
     // that's why there's this assert in afterMove
 

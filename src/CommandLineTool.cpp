@@ -1725,7 +1725,10 @@ namespace command_line_app
                 }
             }
 
-            bcgnWriter.setCustomStartPos(pos);
+            if (hasCustomStartpos && pos != Position::startPosition())
+            {
+                bcgnWriter.setCustomStartPos(pos);
+            }
 
             for (auto&& san : game.moves())
             {
