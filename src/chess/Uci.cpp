@@ -14,14 +14,14 @@ namespace uci
     [[nodiscard]] std::string moveToUci(const Position& pos, const Move& move)
     {
         std::string s;
-        
+
         parser_bits::appendSquareToString(move.from, s);
 
         if (move.type == MoveType::Castle)
         {
             const CastleType castleType = CastlingTraits::moveCastlingType(move);
 
-            const Square kingDestination = CastlingTraits::rookDestination[pos.sideToMove()][castleType];
+            const Square kingDestination = CastlingTraits::kingDestination[pos.sideToMove()][castleType];
             parser_bits::appendSquareToString(kingDestination, s);
         }
         else
