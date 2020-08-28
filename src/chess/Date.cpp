@@ -100,19 +100,39 @@ Date::Date(std::string_view sv)
     m_month = 0;
     m_day = 0;
 
-    if (sv.substr(0, 4) != std::string_view("????"))
+    // Lazily splits by '.'. Returns empty string views if at the end.
+    auto nextPart = [sv, start = std::size_t{ 0 }]() mutable {
+        std::size_t end = sv.find('.', start);
+        if (end == std::string::npos)
+        {
+            std::string_view substr = sv.substr(start);
+            start = sv.size();
+            return substr;
+        }
+        else
+        {
+            std::string_view substr = sv.substr(start, end - start);
+            start = end + 1; // to skip whitespace
+            return substr;
+        }
+    };
+
+    auto yearStr = nextPart();
+    if (!yearStr.empty() && yearStr[0] != '?')
     {
-        m_year = parser_bits::parseUInt16(sv.substr(0, 4));
+        m_year = parser_bits::parseUInt16(yearStr);
     }
 
-    if (sv.size() >= 7 && sv.substr(5, 2) != std::string_view("??"))
+    auto monthStr = nextPart();
+    if (!monthStr.empty() && monthStr[0] != '?')
     {
-        m_month = (sv[5] - '0') * 10 + (sv[6] - '0');
+        m_month = parser_bits::parseUInt16(monthStr);
     }
 
-    if (sv.size() >= 10 && sv.substr(8, 2) != std::string_view("??"))
+    auto dayStr = nextPart();
+    if (!dayStr.empty() && dayStr[0] != '?')
     {
-        m_day = (sv[8] - '0') * 10 + (sv[9] - '0');
+        m_day = parser_bits::parseUInt16(dayStr);
     }
 }
 
