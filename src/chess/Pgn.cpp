@@ -556,6 +556,9 @@ namespace pgn
         std::string_view& black
     ) const
     {
+        // Eco is not a mandatory tag so may not be present
+        eco = Eco('A', 0);
+
         for (auto&& tag : tags())
         {
             if (tag.key == "Event"sv)
@@ -595,6 +598,9 @@ namespace pgn
         std::uint16_t& plyCount
     ) const
     {
+        // Eco is not a mandatory tag so may not be present
+        eco = Eco('A', 0);
+
         for (auto&& tag : tags())
         {
             if (tag.key == "Event"sv)
