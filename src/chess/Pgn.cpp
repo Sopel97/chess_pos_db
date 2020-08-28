@@ -576,14 +576,7 @@ namespace pgn
             }
             else if (tag.key == "ECO"sv)
             {
-                if (tag.value.size() == 3)
-                {
-                    eco = Eco(tag.value);
-                }
-                else
-                {
-                    eco = Eco('A', 0);
-                }
+                eco = Eco(tag.value);
             }
             else if (tag.key == "Result"sv)
             {
@@ -622,14 +615,7 @@ namespace pgn
             }
             else if (tag.key == "ECO"sv)
             {
-                if (tag.value.size() == 3)
-                {
-                    eco = Eco(tag.value);
-                }
-                else
-                {
-                    eco = Eco('A', 0);
-                }
+                eco = Eco(tag.value);
             }
             else if (tag.key == "Result"sv)
             {

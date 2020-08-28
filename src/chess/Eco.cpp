@@ -26,9 +26,18 @@ Eco::Eco(char category, std::uint8_t index) :
     ASSERT(index <= 99);
 }
 
-Eco::Eco(std::string_view sv) :
-    Eco(sv[0], (sv[1] - '0') * 10 + (sv[2] - '0'))
+Eco::Eco(std::string_view sv)
 {
+    if (sv.size() == 3)
+    {
+        m_category = sv[0];
+        m_index = (sv[1] - '0') * 10 + (sv[2] - '0');
+    }
+    else
+    {
+        m_category = 'A';
+        m_index = 0;
+    }
 }
 
 [[nodiscard]] bool operator==(const Eco& lhs, const Eco& rhs) noexcept
