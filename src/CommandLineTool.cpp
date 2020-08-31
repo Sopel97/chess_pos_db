@@ -989,12 +989,67 @@ namespace command_line_app
         sendMessage(session, responseStr);
     }
 
+    struct EpdDumpEntryType
+    {
+        CompressedPosition pos;
+        std::uint32_t winCount;
+        std::uint32_t drawCount;
+        std::uint32_t lossCount;
+
+        std::uint32_t padding;
+
+        EpdDumpEntryType() :
+            pos{},
+            winCount{},
+            drawCount{},
+            lossCount{},
+            padding{}
+        {
+        }
+
+        EpdDumpEntryType(const CompressedPosition& pos, std::uint32_t w, std::uint32_t d, std::uint32_t l) :
+            pos(pos),
+            winCount(w),
+            drawCount(d),
+            lossCount(l),
+            padding(0)
+        {
+        }
+
+        [[nodiscard]] friend bool operator==(const EpdDumpEntryType& lhs, const EpdDumpEntryType& rhs) noexcept
+        {
+            return lhs.pos == rhs.pos;
+        }
+
+        [[nodiscard]] friend bool operator!=(const EpdDumpEntryType& lhs, const EpdDumpEntryType& rhs) noexcept
+        {
+            return !(lhs == rhs);
+        }
+
+        [[nodiscard]] friend bool operator<(const EpdDumpEntryType& lhs, const EpdDumpEntryType& rhs) noexcept
+        {
+            return lhs.pos < rhs.pos;
+        }
+
+        [[nodiscard]] std::uint32_t count() const
+        {
+            return winCount + drawCount + lossCount;
+        }
+
+        [[nodiscard]] float perf() const
+        {
+            return (winCount + drawCount / 2.0f) / count();
+        }
+    };
+    static_assert(sizeof(EpdDumpEntryType) == 40);
+    static_assert(std::is_trivially_copyable_v<EpdDumpEntryType>);
+
     namespace detail
     {
         struct AsyncStorePipeline
         {
         private:
-            using EntryType = CompressedPosition;
+            using EntryType = EpdDumpEntryType;
             using BufferType = std::vector<EntryType>;
             using PromiseType = std::promise<std::filesystem::path>;
             using FutureType = std::future<std::filesystem::path>;
@@ -1171,13 +1226,29 @@ namespace command_line_app
         };
     }
 
+    enum struct EpdDumpOutputElement
+    {
+        Fen,
+        WinCount,
+        DrawCount,
+        LossCount,
+        Perf
+    };
+
+    struct EpdDumpPositionFilterParams
+    {
+        std::size_t minN;
+        std::size_t maxPly;
+        std::size_t minPieces;
+    };
+
     static void handleTcpCommandDumpImpl(
         const TcpConnection::Ptr& session,
         const std::vector<std::filesystem::path>& pgns,
         const std::filesystem::path& output,
         const std::vector<std::filesystem::path>& temps,
-        std::size_t minN,
-        std::size_t maxPly,
+        const EpdDumpPositionFilterParams& filterParams,
+        std::vector<EpdDumpOutputElement> outputElementsSpec,
         bool doReportProgress
     )
     {
@@ -1206,9 +1277,9 @@ namespace command_line_app
         {
             ASSERT(numBuffers > 0);
 
-            const std::size_t size = ext::numObjectsPerBufferUnit<CompressedPosition>(importMemory.bytes(), numBuffers);
+            const std::size_t size = ext::numObjectsPerBufferUnit<EpdDumpEntryType>(importMemory.bytes(), numBuffers);
 
-            std::vector<std::vector<CompressedPosition>> buffers;
+            std::vector<std::vector<EpdDumpEntryType>> buffers;
             buffers.resize(numBuffers);
             for (auto& buffer : buffers)
             {
@@ -1235,12 +1306,24 @@ namespace command_line_app
                         ++numGamesIn;
 
                         std::size_t numPly = 0;
+                        auto result = game.result();
+
                         for (auto&& position : game.positions())
                         {
                             ++numPosIn;
                             ++numPly;
 
-                            positions.emplace_back(position.compress());
+                            if (position.piecesBB().count() < filterParams.minPieces)
+                            {
+                                break;
+                            }
+
+                            positions.emplace_back(
+                                position.compress(), 
+                                result == GameResult::WhiteWin,
+                                result == GameResult::Draw,
+                                result == GameResult::BlackWin
+                            );
 
                             if (positions.size() == positions.capacity())
                             {
@@ -1250,7 +1333,7 @@ namespace command_line_app
                                 Logger::instance().logInfo("Created temp file ", path);
                             }
 
-                            if (numPly >= maxPly)
+                            if (numPly >= filterParams.maxPly)
                             {
                                 break;
                             }
@@ -1298,7 +1381,7 @@ namespace command_line_app
             }
 
             {
-                std::vector<ext::ImmutableSpan<CompressedPosition>> files;
+                std::vector<ext::ImmutableSpan<EpdDumpEntryType>> files;
                 for (auto&& f : futureParts)
                 {
                     auto path = f.get();
@@ -1320,17 +1403,49 @@ namespace command_line_app
                 }; 
                 
                 bool first = true;
-                CompressedPosition pos{};
+                EpdDumpEntryType pos{};
                 std::size_t count = 0;
                 auto outEpdFile = std::ofstream(output, std::ios_base::out | std::ios_base::app);
-                auto append = [
-                        &numPosOut,
-                        minN,
-                        &outEpdFile, 
-                        &first, 
-                        &pos, 
-                        &count
-                    ](const CompressedPosition& position) mutable {
+
+                auto write = [&](const EpdDumpEntryType& entry)
+                {
+                    ++numPosOut;
+
+                    bool isFirst = true;
+                    for (auto elem : outputElementsSpec)
+                    {
+                        if (!isFirst)
+                        {
+                            outEpdFile << ' ';
+                        }
+
+                        switch (elem)
+                        {
+                        case EpdDumpOutputElement::Fen:
+                            outEpdFile << entry.pos.decompress().fen();
+                            break;
+
+                        case EpdDumpOutputElement::WinCount:
+                            outEpdFile << entry.winCount;
+                            break;
+
+                        case EpdDumpOutputElement::DrawCount:
+                            outEpdFile << entry.drawCount;
+                            break;
+
+                        case EpdDumpOutputElement::LossCount:
+                            outEpdFile << entry.lossCount;
+                            break;
+
+                        case EpdDumpOutputElement::Perf:
+                            outEpdFile << entry.perf();
+                            break;
+                        }
+                    }
+                    outEpdFile << ";\n";
+                };
+
+                auto append = [&](const EpdDumpEntryType& position) mutable {
                     if (first)
                     {
                         first = false;
@@ -1343,10 +1458,9 @@ namespace command_line_app
                     }
                     else
                     {
-                        if (count >= minN)
+                        if (count >= filterParams.minN)
                         {
-                            ++numPosOut;
-                            outEpdFile << pos.decompress().fen() << ";\n";
+                            write(pos);
                         }
 
                         pos = position;
@@ -1379,10 +1493,9 @@ namespace command_line_app
                     cleanup();
                 }
 
-                if (!first && count >= minN) // if we did anything, ie. accumulator holds something from merge
+                if (!first && count >= filterParams.minN) // if we did anything, ie. accumulator holds something from merge
                 {
-                    ++numPosOut;
-                    outEpdFile << pos.decompress().fen() << ";\n";
+                    write(pos);
                 }
             }
 
@@ -1408,6 +1521,7 @@ namespace command_line_app
         const bool reportProgress = json["report_progress"];
         const std::size_t minN = json["min_count"].get<std::size_t>();
         const std::size_t maxPly = json["max_ply"].get<std::size_t>();
+        const std::size_t minPieces = json["min_pieces"].get<std::size_t>();
 
         if (minN == 0) throw Exception("Min count must be positive.");
 
@@ -1425,7 +1539,40 @@ namespace command_line_app
         {
             tempPaths.emplace_back(epdOut.parent_path() / ".tmp");
         }
-        handleTcpCommandDumpImpl(session, pgns, epdOut, tempPaths, minN, maxPly, reportProgress);
+
+        EpdDumpPositionFilterParams filterParams{};
+        filterParams.minN = minN;
+        filterParams.maxPly = maxPly;
+        filterParams.minPieces = minPieces;
+
+        std::vector<EpdDumpOutputElement> outputElems;
+        for (const auto& elemJson : json["output"])
+        {
+            auto elemStr = elemJson.get<std::string>();
+
+            if (elemStr == "fen"sv)
+            {
+                outputElems.push_back(EpdDumpOutputElement::Fen);
+            }
+            else if (elemStr == "win_count"sv)
+            {
+                outputElems.push_back(EpdDumpOutputElement::WinCount);
+            }
+            else if (elemStr == "draw_count"sv)
+            {
+                outputElems.push_back(EpdDumpOutputElement::DrawCount);
+            }
+            else if (elemStr == "loss_count"sv)
+            {
+                outputElems.push_back(EpdDumpOutputElement::LossCount);
+            }
+            else if (elemStr == "perf"sv)
+            {
+                outputElems.push_back(EpdDumpOutputElement::Perf);
+            }
+        }
+
+        handleTcpCommandDumpImpl(session, pgns, epdOut, tempPaths, filterParams, outputElems, reportProgress);
     }
 
     static void handleTcpCommandSupport(
