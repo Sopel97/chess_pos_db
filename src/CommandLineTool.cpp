@@ -1426,6 +1426,8 @@ namespace command_line_app
                             outEpdFile << ' ';
                         }
 
+                        isFirst = false;
+
                         switch (elem)
                         {
                         case EpdDumpOutputElement::Fen:
