@@ -1016,6 +1016,13 @@ namespace command_line_app
         {
         }
 
+        void add(const EpdDumpEntryType& rhs)
+        {
+            winCount += rhs.winCount;
+            drawCount += rhs.drawCount;
+            lossCount += rhs.lossCount;
+        }
+
         [[nodiscard]] friend bool operator==(const EpdDumpEntryType& lhs, const EpdDumpEntryType& rhs) noexcept
         {
             return lhs.pos == rhs.pos;
@@ -1455,6 +1462,7 @@ namespace command_line_app
                     else if (pos == position)
                     {
                         ++count;
+                        pos.add(position);
                     }
                     else
                     {
