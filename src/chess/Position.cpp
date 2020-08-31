@@ -582,6 +582,9 @@ void Position::set(const char* fen)
     fen += ' ';
     parser_bits::appendEpSquareToString(m_epSquare, fen);
 
+    // add 50 move rule and halfmove just so that other parsers are happy.
+    fen += " 0 0";
+
     return fen;
 }
 
